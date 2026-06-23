@@ -1,0 +1,25 @@
+{
+  "name": "hit-panel",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HIT Cargo internal admin panel (shipments ops dashboard)",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/preact": "^5.1.2",
+    "@astrojs/tailwind": "^6.0.2",
+    "@insforge/sdk": "^1.0.0",
+    "astro": "^6.1.9",
+    "preact": "^10.29.1",
+    "tailwindcss": "^3.4.19"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "typescript": "^5.6.3"
+  }
+}
