@@ -1,15 +1,27 @@
+import { AlertTriangle, Loader2 } from 'lucide-preact'
 import type { ComponentChildren, JSX } from 'preact'
-import { STATUS_LABEL, STATUS_STYLE } from '../lib/format'
+import { STATUS_DOT, STATUS_LABEL, STATUS_SOFT } from '../lib/format'
 import type { ShipmentStatus } from '../lib/types'
 
-export function StatusPill({ s }: { s?: ShipmentStatus | null }) {
+/** Compact colored dot + label — for dense table rows, doesn't compete for attention. */
+export function StatusDot({ s, class: cls = '' }: { s?: ShipmentStatus | null; class?: string }) {
+  const key = (s ?? 'desconocido') as ShipmentStatus
+  return (
+    <span class={`inline-flex items-center gap-1.5 text-sm text-gray-700 ${cls}`}>
+      <span class={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[key] ?? STATUS_DOT.desconocido}`} />
+      {STATUS_LABEL[key] ?? key}
+    </span>
+  )
+}
+
+/** Prominent soft badge — for the detail header and single-status emphasis. */
+export function StatusPill({ s, class: cls = '' }: { s?: ShipmentStatus | null; class?: string }) {
   const key = (s ?? 'desconocido') as ShipmentStatus
   return (
     <span
-      class={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-        STATUS_STYLE[key] ?? STATUS_STYLE.desconocido
-      }`}
+      class={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${STATUS_SOFT[key] ?? STATUS_SOFT.desconocido} ${cls}`}
     >
+      <span class={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[key] ?? STATUS_DOT.desconocido}`} />
       {STATUS_LABEL[key] ?? key}
     </span>
   )
@@ -17,27 +29,65 @@ export function StatusPill({ s }: { s?: ShipmentStatus | null }) {
 
 export function Spinner({ label }: { label?: string }) {
   return (
-    <div class="flex items-center gap-2 text-sm text-slate-500">
-      <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-primary" />
+    <div class="flex items-center gap-2 text-sm text-gray-500">
+      <Loader2 class="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
       {label ?? 'Cargando…'}
     </div>
   )
 }
 
-export function Card({ children, class: cls = '' }: { children: ComponentChildren; class?: string }) {
-  return <div class={`rounded-xl border border-slate-200 bg-white shadow-sm ${cls}`}>{children}</div>
+export function Card({
+  children,
+  class: cls = '',
+  accent = false,
+}: {
+  children: ComponentChildren
+  class?: string
+  accent?: boolean
+}) {
+  return (
+    <div class={`rounded-xl bg-white shadow-sm ${accent ? 'border border-primary/10' : 'border border-gray-100'} ${cls}`}>
+      {children}
+    </div>
+  )
+}
+
+export function SectionTitle({ children, class: cls = '' }: { children: ComponentChildren; class?: string }) {
+  return (
+    <div class={`flex items-center gap-2 border-b border-gray-100 px-5 py-3 text-sm font-semibold text-secondary ${cls}`}>
+      {children}
+    </div>
+  )
 }
 
 type BtnProps = JSX.HTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' }
 export function Button({ variant = 'primary', class: cls = '', children, ...rest }: BtnProps) {
   const styles: Record<string, string> = {
-    primary: 'bg-primary text-white hover:bg-primary-dark',
-    ghost: 'bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50',
+    primary: 'bg-primary text-white shadow-sm hover:bg-primary-dark hover:shadow',
+    ghost: 'bg-white text-gray-600 ring-1 ring-inset ring-gray-200 hover:bg-gray-50 hover:text-gray-900',
     danger: 'bg-red-600 text-white hover:bg-red-700',
   }
   return (
     <button
-      class={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-50 ${styles[variant]} ${cls}`}
+      class={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 ${styles[variant]} ${cls}`}
+      {...rest}
+    >
+      {children}
+    </button>
+  )
+}
+
+export function IconButton({
+  label,
+  class: cls = '',
+  children,
+  ...rest
+}: JSX.HTMLAttributes<HTMLButtonElement> & { label: string }) {
+  return (
+    <button
+      aria-label={label}
+      title={label}
+      class={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cls}`}
       {...rest}
     >
       {children}
@@ -47,12 +97,26 @@ export function Button({ variant = 'primary', class: cls = '', children, ...rest
 
 export function Field({ label, children }: { label: string; children: ComponentChildren }) {
   return (
-    <label class="flex flex-col gap-1 text-xs font-medium text-slate-600">
+    <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
       {label}
       {children}
     </label>
   )
 }
 
+export function Chip({ children, class: cls = '' }: { children: ComponentChildren; class?: string }) {
+  return (
+    <span class={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>{children}</span>
+  )
+}
+
+export function StaleBadge({ days }: { days: number }) {
+  return (
+    <span class="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
+      <AlertTriangle class="h-3 w-3" aria-hidden="true" /> {days}d
+    </span>
+  )
+}
+
 export const inputCls =
-  'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary'
+  'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-primary focus:ring-1 focus:ring-primary'

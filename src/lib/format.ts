@@ -1,6 +1,6 @@
 import type { ShipmentStatus } from './types'
 
-// Customer-facing Spanish labels (same vocabulary as the public tracker and WhatsApp scripts).
+// Internal (staff-facing) Spanish labels — more precise than the public tracker's customer copy.
 export const STATUS_LABEL: Record<ShipmentStatus, string> = {
   en_almacen: 'En bodega Miami',
   parcial: 'Parcial',
@@ -11,15 +11,26 @@ export const STATUS_LABEL: Record<ShipmentStatus, string> = {
   desconocido: 'Desconocido',
 }
 
-// Pill styling per the official Cargotrack legend (green→orange pipeline).
-export const STATUS_STYLE: Record<ShipmentStatus, string> = {
-  en_almacen: 'bg-green-100 text-green-800 ring-green-600/20',
-  parcial: 'bg-yellow-100 text-yellow-900 ring-yellow-600/30',
-  en_transito: 'bg-red-100 text-red-800 ring-red-600/20',
-  en_destino: 'bg-purple-100 text-purple-800 ring-purple-600/20',
-  entregado: 'bg-orange-100 text-orange-800 ring-orange-600/20',
-  excepcion: 'bg-slate-200 text-slate-800 ring-slate-600/20',
-  desconocido: 'bg-slate-100 text-slate-600 ring-slate-500/20',
+// Solid dot — compact indicator for dense table rows.
+export const STATUS_DOT: Record<ShipmentStatus, string> = {
+  en_almacen: 'bg-green-500',
+  parcial: 'bg-yellow-500',
+  en_transito: 'bg-red-500',
+  en_destino: 'bg-purple-500',
+  entregado: 'bg-orange-500',
+  excepcion: 'bg-gray-500',
+  desconocido: 'bg-gray-300',
+}
+
+// Soft background+text — for the prominent badge (detail header, pipeline legend).
+export const STATUS_SOFT: Record<ShipmentStatus, string> = {
+  en_almacen: 'bg-green-50 text-green-700',
+  parcial: 'bg-yellow-50 text-yellow-800',
+  en_transito: 'bg-red-50 text-red-700',
+  en_destino: 'bg-purple-50 text-purple-700',
+  entregado: 'bg-orange-50 text-orange-700',
+  excepcion: 'bg-gray-100 text-gray-700',
+  desconocido: 'bg-gray-50 text-gray-500',
 }
 
 export const STATUS_ORDER: ShipmentStatus[] = [
@@ -31,6 +42,19 @@ export const STATUS_ORDER: ShipmentStatus[] = [
   'excepcion',
   'desconocido',
 ]
+
+// Same 4-stage pipeline as the public tracker (hit-ever2/src/types/tracking.ts STATUS_STEP) —
+// staff sees the identical progress logic customers do.
+export const PIPELINE_STEP: Record<ShipmentStatus, number> = {
+  en_almacen: 1,
+  parcial: 2,
+  en_transito: 2,
+  en_destino: 3,
+  entregado: 4,
+  excepcion: 0,
+  desconocido: 0,
+}
+export const PIPELINE_STAGES = ['Bodega Miami', 'En tránsito', 'Nicaragua', 'Entregado']
 
 export const SERVICE_LABEL: Record<string, string> = { aereo: 'Aéreo', maritimo: 'Marítimo' }
 export const PROVIDER_LABEL: Record<string, string> = {

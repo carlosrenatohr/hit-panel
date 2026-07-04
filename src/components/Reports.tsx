@@ -1,3 +1,4 @@
+import { Download } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import {
   downloadCSV,
@@ -9,7 +10,7 @@ import {
 } from '../lib/format'
 import { exportPackages } from '../lib/insforge'
 import type { Pkg, ShipmentStatus } from '../lib/types'
-import { Button, Card, inputCls, Spinner, StatusPill } from './ui'
+import { Button, Card, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
 export default function Reports() {
   const [from, setFrom] = useState('')
@@ -87,20 +88,24 @@ export default function Reports() {
     <div class="mx-auto max-w-6xl space-y-5">
       <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 class="text-2xl font-bold text-secondary">Reportes</h1>
-          <p class="text-sm text-slate-500">{rows.length} paquetes en el rango seleccionado.</p>
+          <h1 class="text-2xl font-bold tracking-tight text-secondary">Reportes</h1>
+          <p class="text-sm text-gray-500">{rows.length} paquetes en el rango seleccionado.</p>
         </div>
         <div class="flex flex-wrap items-end gap-2">
-          <label class="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
             Desde
             <input type="date" class={inputCls} value={from} onChange={(e) => setFrom((e.target as HTMLInputElement).value)} />
           </label>
-          <label class="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
             Hasta
             <input type="date" class={inputCls} value={to} onChange={(e) => setTo((e.target as HTMLInputElement).value)} />
           </label>
-          <Button variant="ghost" onClick={exportMatrix}>⬇︎ Estados</Button>
-          <Button variant="ghost" onClick={exportDetailed}>⬇︎ Detallado</Button>
+          <Button variant="ghost" onClick={exportMatrix}>
+            <Download class="h-4 w-4" aria-hidden="true" /> Estados
+          </Button>
+          <Button variant="ghost" onClick={exportDetailed}>
+            <Download class="h-4 w-4" aria-hidden="true" /> Detallado
+          </Button>
         </div>
       </div>
 
@@ -111,13 +116,11 @@ export default function Reports() {
         <>
           {/* Status x provider matrix */}
           <Card>
-            <div class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-secondary">
-              Estado × proveedor
-            </div>
+            <SectionTitle>Estado × proveedor</SectionTitle>
             <div class="scroll-thin overflow-x-auto">
               <table class="w-full min-w-[480px] text-sm">
                 <thead>
-                  <tr class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr class="bg-gray-50/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                     <th class="px-4 py-2">Estado</th>
                     {agg.providers.map((p) => (
                       <th key={p} class="px-4 py-2 text-right">
@@ -127,20 +130,20 @@ export default function Reports() {
                     <th class="px-4 py-2 text-right">Total</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody class="divide-y divide-gray-100">
                   {STATUS_ORDER.filter((s) => agg.matrix[s]).map((s) => {
                     const total = agg.providers.reduce((a, p) => a + (agg.matrix[s]?.[p] ?? 0), 0)
                     return (
-                      <tr key={s} class="border-t border-slate-100">
+                      <tr key={s}>
                         <td class="px-4 py-2">
-                          <StatusPill s={s as ShipmentStatus} />
+                          <StatusDot s={s as ShipmentStatus} />
                         </td>
                         {agg.providers.map((p) => (
-                          <td key={p} class="px-4 py-2 text-right text-slate-700">
+                          <td key={p} class="px-4 py-2 text-right tabular-nums text-gray-700">
                             {agg.matrix[s]?.[p] ?? 0}
                           </td>
                         ))}
-                        <td class="px-4 py-2 text-right font-semibold text-secondary">{total}</td>
+                        <td class="px-4 py-2 text-right font-semibold tabular-nums text-secondary">{total}</td>
                       </tr>
                     )
                   })}
@@ -151,25 +154,25 @@ export default function Reports() {
 
           <div class="grid gap-5 md:grid-cols-2">
             <Card>
-              <div class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-secondary">Por servicio</div>
+              <SectionTitle>Por servicio</SectionTitle>
               <div class="space-y-2 p-5 text-sm">
                 {Object.entries(agg.service).map(([k, n]) => (
                   <div key={k} class="flex justify-between">
-                    <span class="text-slate-600">{k === '—' ? 'Sin servicio' : SERVICE_LABEL[k] ?? k}</span>
-                    <span class="font-medium text-slate-800">{n}</span>
+                    <span class="text-gray-600">{k === '—' ? 'Sin servicio' : SERVICE_LABEL[k] ?? k}</span>
+                    <span class="font-medium tabular-nums text-gray-800">{n}</span>
                   </div>
                 ))}
               </div>
             </Card>
             <Card>
-              <div class="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-secondary">Recibidos por mes</div>
+              <SectionTitle>Recibidos por mes</SectionTitle>
               <div class="space-y-2 p-5 text-sm">
                 {Object.entries(agg.byMonth)
                   .sort((a, b) => (a[0] < b[0] ? 1 : -1))
                   .map(([m, n]) => (
                     <div key={m} class="flex justify-between">
-                      <span class="text-slate-600">{m}</span>
-                      <span class="font-medium text-slate-800">{n}</span>
+                      <span class="text-gray-600">{m}</span>
+                      <span class="font-medium tabular-nums text-gray-800">{n}</span>
                     </div>
                   ))}
               </div>

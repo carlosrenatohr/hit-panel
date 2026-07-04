@@ -20,6 +20,9 @@ importers:
       astro:
         specifier: ^6.1.9
         version: 6.4.8(jiti@1.21.7)(rollup@4.62.2)(yaml@2.9.0)
+      lucide-preact:
+        specifier: ^0.577.0
+        version: 0.577.0(preact@10.29.2)
       preact:
         specifier: ^10.29.1
         version: 10.29.2
@@ -1373,6 +1376,11 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
+
+  lucide-preact@0.577.0:
+    resolution: {integrity: sha512-fCY59YQ2OMYWqE1V7k8HwfXyiBMHAfTI1roCOasdc+Cekya7BIObSJ/cil+tVMSbU6siv4uZlaz5twAGmkYqIQ==}
+    peerDependencies:
+      preact: ^10.27.2
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -3718,6 +3726,10 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lucide-preact@0.577.0(preact@10.29.2):
+    dependencies:
+      preact: 10.29.2
 
   magic-string@0.30.21:
     dependencies:
