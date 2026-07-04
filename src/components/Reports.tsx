@@ -1,5 +1,5 @@
 import type { ChartConfiguration } from 'chart.js'
-import { Download, Printer } from 'lucide-preact'
+import { Download, Printer, Search } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import {
   BRAND_HEX,
@@ -13,35 +13,53 @@ import {
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
-import { exportPackages } from '../lib/insforge'
-import type { Pkg, ShipmentStatus } from '../lib/types'
+import { exportPackages, getProviders } from '../lib/insforge'
+import type { ListFilters } from '../lib/insforge'
+import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
 import { Button, Card, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
 const BASE_FONT = { family: 'Inter, system-ui, sans-serif', size: 12 }
+const EXPORT_CAP = 5000
 
 export default function Reports() {
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [searchInput, setSearchInput] = useState('')
+  const [filters, setFilters] = useState<ListFilters>({})
   const [rows, setRows] = useState<Pkg[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
+    getProviders().then(setProviders).catch(() => {})
+  }, [])
+
+  // Debounce the search box into the applied filters, same as the Envíos page.
+  useEffect(() => {
+    const t = setTimeout(() => setFilters((f) => ({ ...f, search: searchInput })), 350)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  function patch(p: Partial<ListFilters>) {
+    setFilters((f) => ({ ...f, ...p }))
+  }
+
+  // Refetches whenever ANY filter changes (search/provider/status/service/date range).
+  useEffect(() => {
     let cancelled = false
     setLoading(true)
     setErr(null)
-    exportPackages({ from: from || undefined, to: to || undefined }, 5000)
+    exportPackages(filters, EXPORT_CAP)
       .then((r) => !cancelled && setRows(r))
       .catch(() => !cancelled && setErr('No se pudieron cargar los datos.'))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [from, to])
+  }, [filters])
 
   const agg = useMemo(() => {
-    const providers = Array.from(new Set(rows.map((r) => r.providers?.code ?? 'desconocido'))).sort()
+    const provCodes = Array.from(new Set(rows.map((r) => r.providers?.code ?? 'desconocido'))).sort()
     const matrix: Record<string, Record<string, number>> = {}
     const byStatus: Record<string, number> = {}
     const service: Record<string, number> = { aereo: 0, maritimo: 0, '—': 0 }
@@ -58,7 +76,7 @@ export default function Reports() {
       byMonth[m] = (byMonth[m] ?? 0) + 1
     }
     return {
-      providers,
+      providers: provCodes,
       matrix,
       byStatus,
       service,
@@ -188,40 +206,88 @@ export default function Reports() {
     downloadCSV(`reporte-detallado-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(flat, cols))
   }
 
+  // Short one-line summary of what's applied — shown on screen and printed into the PDF header.
+  const filterSummary = [
+    filters.search && `"${filters.search}"`,
+    filters.providerId && providerLabel(providers.find((p) => p.id === filters.providerId)?.code),
+    filters.status && STATUS_LABEL[filters.status as ShipmentStatus],
+    filters.service && SERVICE_LABEL[filters.service],
+    (filters.from || filters.to) && `${filters.from || 'inicio'} – ${filters.to || 'hoy'}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   return (
     <div class="mx-auto max-w-6xl space-y-5">
       {/* Screen header + filters (hidden when printing) */}
-      <div class="flex flex-wrap items-end justify-between gap-3 print:hidden">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight text-secondary">Reportes</h1>
-          <p class="text-sm text-gray-500">{rows.length} paquetes en el rango seleccionado.</p>
+      <div class="space-y-3 print:hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight text-secondary">Reportes</h1>
+            <p class="text-sm text-gray-500">{rows.length} paquetes en el rango seleccionado.</p>
+          </div>
+          <div class="flex flex-wrap items-end gap-2">
+            <Button variant="ghost" onClick={exportMatrix}>
+              <Download class="h-4 w-4" aria-hidden="true" /> CSV estados
+            </Button>
+            <Button variant="ghost" onClick={exportDetailed}>
+              <Download class="h-4 w-4" aria-hidden="true" /> CSV detallado
+            </Button>
+            <Button onClick={() => window.print()}>
+              <Printer class="h-4 w-4" aria-hidden="true" /> Exportar PDF
+            </Button>
+          </div>
         </div>
-        <div class="flex flex-wrap items-end gap-2">
-          <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
-            Desde
-            <input type="date" class={inputCls} value={from} onChange={(e) => setFrom((e.target as HTMLInputElement).value)} />
-          </label>
-          <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
-            Hasta
-            <input type="date" class={inputCls} value={to} onChange={(e) => setTo((e.target as HTMLInputElement).value)} />
-          </label>
-          <Button variant="ghost" onClick={exportMatrix}>
-            <Download class="h-4 w-4" aria-hidden="true" /> CSV estados
-          </Button>
-          <Button variant="ghost" onClick={exportDetailed}>
-            <Download class="h-4 w-4" aria-hidden="true" /> CSV detallado
-          </Button>
-          <Button onClick={() => window.print()}>
-            <Printer class="h-4 w-4" aria-hidden="true" /> Exportar PDF
-          </Button>
-        </div>
+
+        <Card class="p-4">
+          <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+            <div class="relative lg:col-span-2">
+              <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+              <input
+                class={`${inputCls} w-full pl-9`}
+                placeholder="Buscar guía, tracking o casillero…"
+                value={searchInput}
+                onInput={(e) => setSearchInput((e.target as HTMLInputElement).value)}
+              />
+            </div>
+            <select class={inputCls} value={filters.providerId ?? ''} onChange={(e) => patch({ providerId: (e.target as HTMLSelectElement).value || undefined })}>
+              <option value="">Todos los proveedores</option>
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {providerLabel(p.code)}
+                </option>
+              ))}
+            </select>
+            <select class={inputCls} value={filters.status ?? ''} onChange={(e) => patch({ status: (e.target as HTMLSelectElement).value || undefined })}>
+              <option value="">Todos los estados</option>
+              {STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ))}
+            </select>
+            <select class={inputCls} value={filters.service ?? ''} onChange={(e) => patch({ service: (e.target as HTMLSelectElement).value || undefined })}>
+              <option value="">Aéreo y marítimo</option>
+              <option value="aereo">Aéreo</option>
+              <option value="maritimo">Marítimo</option>
+            </select>
+            <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+              Desde
+              <input type="date" class={inputCls} value={filters.from ?? ''} onChange={(e) => patch({ from: (e.target as HTMLInputElement).value || undefined })} />
+            </label>
+            <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
+              Hasta
+              <input type="date" class={inputCls} value={filters.to ?? ''} onChange={(e) => patch({ to: (e.target as HTMLInputElement).value || undefined })} />
+            </label>
+          </div>
+        </Card>
       </div>
 
-      {/* Printed-only header: gives the PDF a title, the filter range, and a generation timestamp */}
+      {/* Printed-only header: gives the PDF a title, the applied filters, and a generation timestamp */}
       <div class="hidden print:block">
         <h1 class="text-xl font-bold text-secondary">Reporte de envíos — HIT Cargo</h1>
         <p class="text-sm text-gray-600">
-          Rango: {from || 'inicio'} – {to || 'hoy'} · {rows.length} paquetes · Generado {fmtDateTime(new Date().toISOString())}
+          {filterSummary || 'Sin filtros'} · {rows.length} paquetes · Generado {fmtDateTime(new Date().toISOString())}
         </p>
       </div>
 
@@ -242,19 +308,19 @@ export default function Reports() {
           <div class="grid gap-5 md:grid-cols-2">
             <Card class="avoid-break p-5">
               <h3 class="mb-3 text-sm font-semibold text-secondary">Distribución por estado</h3>
-              <ChartCanvas config={statusChart} height={220} />
+              {rows.length === 0 ? <Empty /> : <ChartCanvas config={statusChart} height={220} />}
             </Card>
             <Card class="avoid-break p-5">
               <h3 class="mb-3 text-sm font-semibold text-secondary">Estado × proveedor</h3>
-              <ChartCanvas config={providerChart} height={220} />
+              {rows.length === 0 ? <Empty /> : <ChartCanvas config={providerChart} height={220} />}
             </Card>
             <Card class="avoid-break p-5">
               <h3 class="mb-3 text-sm font-semibold text-secondary">Por servicio</h3>
-              <ChartCanvas config={serviceChart} height={220} />
+              {rows.length === 0 ? <Empty /> : <ChartCanvas config={serviceChart} height={220} />}
             </Card>
             <Card class="avoid-break p-5">
               <h3 class="mb-3 text-sm font-semibold text-secondary">Recibidos por mes</h3>
-              <ChartCanvas config={monthChart} height={220} />
+              {rows.length === 0 ? <Empty /> : <ChartCanvas config={monthChart} height={220} />}
             </Card>
           </div>
 
@@ -291,6 +357,13 @@ export default function Reports() {
                       </tr>
                     )
                   })}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colspan={agg.providers.length + 2} class="px-4 py-6 text-center text-gray-400">
+                        Sin resultados para estos filtros.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -335,4 +408,8 @@ function Kpi({ label, value, tone = 'text-secondary' }: { label: string; value: 
       <div class={`mt-1 text-3xl font-bold tabular-nums tracking-tight ${tone}`}>{value}</div>
     </Card>
   )
+}
+
+function Empty() {
+  return <div class="flex h-full items-center justify-center text-sm text-gray-400">Sin datos</div>
 }
