@@ -33,6 +33,31 @@ export const STATUS_SOFT: Record<ShipmentStatus, string> = {
   desconocido: 'bg-gray-50 text-gray-500',
 }
 
+// Same palette as STATUS_DOT but as literal hex — Chart.js draws to <canvas>, it can't read
+// Tailwind utility classes, so chart series need real color values.
+export const STATUS_HEX: Record<ShipmentStatus, string> = {
+  en_almacen: '#22c55e',
+  parcial: '#eab308',
+  en_transito: '#ef4444',
+  en_destino: '#a855f7',
+  entregado: '#f97316',
+  excepcion: '#6b7280',
+  desconocido: '#d1d5db',
+}
+
+// Brand tokens as hex, for chart series (mirrors tailwind.config.js colors.*).
+export const BRAND_HEX = {
+  primary: '#FF3B3F',
+  primaryDark: '#D92E31',
+  secondary: '#111111',
+  accentYellow: '#FFD700',
+  accentBlue: '#00A8E8',
+}
+export const PROVIDER_HEX: Record<string, string> = {
+  everest: BRAND_HEX.primary,
+  global_connection: BRAND_HEX.accentBlue,
+}
+
 export const STATUS_ORDER: ShipmentStatus[] = [
   'en_almacen',
   'parcial',

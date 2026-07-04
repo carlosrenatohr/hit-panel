@@ -23,3 +23,11 @@ body {
 /* thin scrollbars for the data table */
 .scroll-thin::-webkit-scrollbar { height: 8px; width: 8px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
+
+/* Print / "export to PDF" (native browser print → Save as PDF keeps table text crisp and
+   selectable — sharper for accounting records than a rasterized screenshot-to-PDF). */
+@media print {
+  body { background: white; }
+  .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
+  .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+}

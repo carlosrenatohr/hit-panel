@@ -25,7 +25,7 @@ export default function Shell({
   return (
     <div class="flex min-h-screen bg-neutral-bg text-gray-800">
       {/* Sidebar */}
-      <aside class="hidden w-60 shrink-0 flex-col bg-secondary px-4 py-5 text-white md:flex">
+      <aside class="hidden w-60 shrink-0 flex-col bg-secondary px-4 py-5 text-white md:flex print:hidden">
         <div class="mb-8 flex items-center gap-2.5 px-2">
           <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
             <Package class="h-5 w-5 text-white" aria-hidden="true" />
@@ -69,7 +69,7 @@ export default function Shell({
 
       {/* Mobile top nav */}
       <div class="flex flex-1 flex-col">
-        <header class="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 md:hidden">
+        <header class="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 md:hidden print:hidden">
           <div class="flex items-center gap-2 font-bold tracking-tight text-secondary">
             <span class="flex h-7 w-7 items-center justify-center rounded bg-primary">
               <Package class="h-4 w-4 text-white" aria-hidden="true" />
