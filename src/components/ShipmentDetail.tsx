@@ -1,8 +1,11 @@
 import { Anchor, Check, CheckCircle2, Copy, Package, Plane, StickyNote, Tag, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import {
+  cleanName,
   fmtDate,
   fmtDateTime,
+  isHazmat,
+  officeFlag,
   PIPELINE_STAGES,
   PIPELINE_STEP,
   providerLabel,
@@ -12,7 +15,7 @@ import {
 } from '../lib/format'
 import { addNote, addTag, getPackageDetail, setManualStatus } from '../lib/insforge'
 import type { PackageDetail, Role, ShipmentStatus } from '../lib/types'
-import { Button, IconButton, inputCls, Spinner, StatusPill } from './ui'
+import { Button, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
 
 export default function ShipmentDetail({
   guia,
@@ -144,13 +147,17 @@ export default function ShipmentDetail({
                 })}
               </div>
               <div class="flex flex-wrap items-center gap-4 border-t border-gray-100 pt-3 text-sm">
+                <span class="flex items-center gap-1.5 font-medium text-gray-800">
+                  {cleanName(d.pkg.referencia_name)}
+                  {isHazmat(d.pkg.referencia_name) && <HazmatBadge />}
+                </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   {d.pkg.service_type === 'maritimo' ? (
                     <Anchor class="h-4 w-4 text-accent-blue" aria-hidden="true" />
                   ) : (
                     <Plane class="h-4 w-4 text-accent-blue" aria-hidden="true" />
                   )}
-                  {d.pkg.service_type === 'maritimo' ? 'Marítimo' : 'Aéreo'}
+                  {d.pkg.service_type === 'maritimo' ? 'Marítimo' : 'Aéreo'} {officeFlag(d.pkg.origin_office)}
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   <Package class="h-4 w-4 text-gray-400" aria-hidden="true" />
