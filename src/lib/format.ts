@@ -82,9 +82,28 @@ export const PIPELINE_STEP: Record<ShipmentStatus, number> = {
 export const PIPELINE_STAGES = ['Bodega Miami', 'En tránsito', 'Nicaragua', 'Entregado']
 
 export const SERVICE_LABEL: Record<string, string> = { aereo: 'Aéreo', maritimo: 'Marítimo' }
+export const SERVICE_EMOJI: Record<string, string> = { aereo: '✈️', maritimo: '🚢' }
 export const PROVIDER_LABEL: Record<string, string> = {
   everest: 'Everest',
   global_connection: 'Global Connection',
+}
+
+// Origin office → country flag. Everything we've seen so far is MIA (Miami), but this stays a
+// lookup so a new origin office just needs one more entry, not a code change.
+const OFFICE_FLAG: Record<string, string> = { MIA: '🇺🇸', MGA: '🇳🇮' }
+export function officeFlag(code?: string | null): string {
+  return code ? (OFFICE_FLAG[code] ?? '') : ''
+}
+
+// Everest has no dedicated hazmat field — the warehouse staff prefixes the Reference field with
+// "HAZMAT" instead (e.g. "HAZMAT/FERNANDA QUINTANILLA"). Global Connection never does this.
+const HAZMAT_PREFIX = /^hazmat\s*\/?\s*/i
+export function isHazmat(referenciaName?: string | null): boolean {
+  return !!referenciaName && HAZMAT_PREFIX.test(referenciaName.trim())
+}
+export function cleanName(referenciaName?: string | null): string {
+  if (!referenciaName) return '—'
+  return referenciaName.trim().replace(HAZMAT_PREFIX, '').trim() || '—'
 }
 
 export function statusLabel(s?: string | null): string {

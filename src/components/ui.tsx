@@ -1,7 +1,47 @@
-import { AlertTriangle, Loader2 } from 'lucide-preact'
+import { AlertTriangle, Biohazard, Loader2 } from 'lucide-preact'
 import type { ComponentChildren, JSX } from 'preact'
+import { useState } from 'preact/hooks'
 import { STATUS_DOT, STATUS_LABEL, STATUS_SOFT } from '../lib/format'
 import type { ShipmentStatus } from '../lib/types'
+
+/** Click/hover badge with a short explainer popover — keyboard and mobile friendly (not just :hover). */
+export function InfoTooltip({ text, children }: { text: string; children: ComponentChildren }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span class="relative inline-flex" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button
+        type="button"
+        class="inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((o) => !o)
+        }}
+        onBlur={() => setOpen(false)}
+      >
+        {children}
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          class="absolute left-1/2 top-full z-20 mt-1.5 w-52 -translate-x-1/2 rounded-lg bg-secondary px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg"
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
+const HAZMAT_EXPLAINER = 'Mercancía peligrosa (hazmat). Requiere manejo especial y puede tardar más en tránsito.'
+export function HazmatBadge() {
+  return (
+    <InfoTooltip text={HAZMAT_EXPLAINER}>
+      <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700 ring-1 ring-inset ring-red-200">
+        <Biohazard class="h-3 w-3" aria-hidden="true" /> Hazmat
+      </span>
+    </InfoTooltip>
+  )
+}
 
 /** Compact colored dot + label — for dense table rows, doesn't compete for attention. */
 export function StatusDot({ s, class: cls = '' }: { s?: ShipmentStatus | null; class?: string }) {

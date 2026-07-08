@@ -8,7 +8,7 @@ export const insforge = createClient({ baseUrl, anonKey })
 
 // Lightweight column set for the list view (skip heavy/internal-only fields).
 const LIST_COLS =
-  'id,almacen_id,tracking_number,status,manual_status,effective_status,service_type,weight_lb,pieces,origin_office,dest_office,received_at,last_event_at,scraped_at,provider_id,providers(code,name)'
+  'id,almacen_id,tracking_number,status,manual_status,effective_status,service_type,weight_lb,pieces,origin_office,dest_office,referencia_name,received_at,last_event_at,scraped_at,provider_id,providers(code,name)'
 
 // ── Auth ────────────────────────────────────────────────────────────────────────
 export async function signIn(email: string, password: string): Promise<void> {
