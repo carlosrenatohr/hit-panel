@@ -4,6 +4,7 @@ import { cleanName, downloadCSV, isHazmat, providerLabel, STATUS_LABEL, STATUS_O
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider } from '../lib/types'
+import { DateRangePicker } from './DateRangePicker'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
 import { Button, Card, inputCls, Spinner } from './ui'
 
@@ -125,7 +126,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
 
       {/* Filters */}
       <Card class="p-4">
-        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-7">
           <div class="relative lg:col-span-2">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
             <input
@@ -170,14 +171,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
               </option>
             ))}
           </select>
-          <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
-            Desde
-            <input type="date" class={inputCls} onChange={(e) => patch({ from: (e.target as HTMLInputElement).value || undefined })} />
-          </label>
-          <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
-            Hasta
-            <input type="date" class={inputCls} onChange={(e) => patch({ to: (e.target as HTMLInputElement).value || undefined })} />
-          </label>
+          <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
         </div>
       </Card>
 
