@@ -1,4 +1,3 @@
-import { Package } from 'lucide-preact'
 import { useState } from 'preact/hooks'
 import { signIn } from '../lib/insforge'
 import { Button, Field, inputCls } from './ui'
@@ -26,9 +25,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div class="flex min-h-screen items-center justify-center bg-secondary px-4">
       <form onSubmit={submit} class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
         <div class="mb-6 text-center">
-          <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-sm">
-            <Package class="h-6 w-6 text-white" aria-hidden="true" />
-          </div>
+          <img src="/logo-mark.png" alt="HIT Cargo" class="mx-auto mb-3 h-14 w-14 object-contain" />
           <h1 class="text-xl font-bold tracking-tight text-secondary">HIT Cargo</h1>
           <p class="mt-1 text-sm text-gray-500">Panel interno del equipo</p>
         </div>

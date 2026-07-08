@@ -1,4 +1,4 @@
-import { BarChart3, LayoutDashboard, LogOut, Package, PackageSearch } from 'lucide-preact'
+import { BarChart3, LayoutDashboard, LogOut, PackageSearch } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import type { SessionUser } from '../lib/types'
 import type { View } from './App'
@@ -27,9 +27,7 @@ export default function Shell({
       {/* Sidebar */}
       <aside class="hidden w-60 shrink-0 flex-col bg-secondary px-4 py-5 text-white md:flex print:hidden">
         <div class="mb-8 flex items-center gap-2.5 px-2">
-          <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-            <Package class="h-5 w-5 text-white" aria-hidden="true" />
-          </span>
+          <img src="/logo-mark.png" alt="HIT Cargo" class="h-9 w-9 object-contain" />
           <div>
             <div class="text-sm font-bold leading-tight tracking-tight">HIT Cargo</div>
             <div class="text-[11px] text-gray-400">Panel interno</div>
@@ -71,9 +69,7 @@ export default function Shell({
       <div class="flex flex-1 flex-col">
         <header class="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 md:hidden print:hidden">
           <div class="flex items-center gap-2 font-bold tracking-tight text-secondary">
-            <span class="flex h-7 w-7 items-center justify-center rounded bg-primary">
-              <Package class="h-4 w-4 text-white" aria-hidden="true" />
-            </span>
+            <img src="/logo-mark.png" alt="HIT Cargo" class="h-7 w-7 object-contain" />
             HIT Panel
           </div>
           <select
