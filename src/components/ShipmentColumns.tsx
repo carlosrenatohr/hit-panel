@@ -1,5 +1,5 @@
 import type { JSX } from 'preact'
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import {
   cleanName,
   daysAgo,
@@ -10,8 +10,8 @@ import {
   SERVICE_EMOJI,
 } from '../lib/format'
 import type { Pkg, ShipmentStatus } from '../lib/types'
-import { Button, HazmatBadge, StaleBadge, StatusDot } from './ui'
-import { GripVertical, SlidersHorizontal } from 'lucide-preact'
+import { Button, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot } from './ui'
+import { GripVertical, Lock, Search, SlidersHorizontal, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
 export interface ColumnDef {
@@ -115,16 +115,8 @@ export function useColumnPrefs() {
 
   return {
     columns,
-    toggle(key: string) {
-      setColumns((cols) => cols.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)))
-    },
-    reorder(from: number, to: number) {
-      setColumns((cols) => {
-        const next = [...cols]
-        const [moved] = next.splice(from, 1)
-        next.splice(to, 0, moved)
-        return next
-      })
+    setAll(next: ColState[]) {
+      setColumns(next)
     },
     reset() {
       setColumns(defaultColumns())
@@ -132,62 +124,122 @@ export function useColumnPrefs() {
   }
 }
 
-/** Button + popover to show/hide and drag-reorder columns. */
+/** Button + modal to show/hide and drag-reorder columns. Edits a local draft; only applied on
+ * "Guardar" (Cancelar discards it) — same staged-changes pattern as most column customizers. */
 export function ColumnPicker({ prefs }: { prefs: ReturnType<typeof useColumnPrefs> }) {
   const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState<ColState[]>(prefs.columns)
+  const [search, setSearch] = useState('')
   const [dragIdx, setDragIdx] = useState<number | null>(null)
-  const boxRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!open) return
-    const onDocClick = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDocClick)
-    return () => document.removeEventListener('mousedown', onDocClick)
-  }, [open])
+  function openModal() {
+    setDraft(prefs.columns)
+    setSearch('')
+    setOpen(true)
+  }
+  function toggleDraft(key: string) {
+    setDraft((cols) => cols.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)))
+  }
+  function reorderDraft(from: number, to: number) {
+    setDraft((cols) => {
+      const next = [...cols]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  const q = search.trim().toLowerCase()
+  const visible = draft.filter((c) => {
+    const def = COLUMN_DEFS.find((d) => d.key === c.key)
+    return !q || def?.label.toLowerCase().includes(q)
+  })
 
   return (
-    <div class="relative" ref={boxRef}>
-      <Button variant="ghost" onClick={() => setOpen((o) => !o)}>
+    <>
+      <Button variant="ghost" onClick={openModal}>
         <SlidersHorizontal class="h-4 w-4" aria-hidden="true" /> Columnas
       </Button>
       {open && (
-        <div class="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-gray-100 bg-white p-2 shadow-lg">
-          <div class="flex items-center justify-between px-2 py-1">
-            <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Mostrar / ordenar</span>
-            <button class="text-xs font-medium text-primary hover:underline" onClick={prefs.reset}>
-              Restablecer
-            </button>
-          </div>
-          <ul>
-            {prefs.columns.map((c, i) => {
-              const def = COLUMN_DEFS.find((d) => d.key === c.key)
-              if (!def) return null
-              return (
-                <li
-                  key={c.key}
-                  draggable
-                  onDragStart={() => setDragIdx(i)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragIdx !== null && dragIdx !== i) prefs.reorder(dragIdx, i)
-                    setDragIdx(null)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOpen(false)}>
+          <div class="w-full max-w-sm rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div class="border-b border-gray-100 p-4">
+              <div class="flex items-center justify-between">
+                <h2 class="text-base font-bold text-secondary">Personalizar columnas</h2>
+                <IconButton label="Cerrar" onClick={() => setOpen(false)}>
+                  <X class="h-4 w-4" aria-hidden="true" />
+                </IconButton>
+              </div>
+              <p class="mt-0.5 text-xs text-gray-500">Elegí y ordená las columnas de la tabla.</p>
+            </div>
+
+            <div class="p-3">
+              <div class="relative mb-2">
+                <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                <input
+                  class={`${inputCls} w-full pl-8 text-sm`}
+                  placeholder="Buscar columna…"
+                  value={search}
+                  onInput={(e) => setSearch((e.target as HTMLInputElement).value)}
+                />
+              </div>
+
+              <div class="scroll-thin max-h-72 overflow-y-auto">
+                <div class="flex items-center gap-2 rounded-lg px-2 py-2">
+                  <Lock class="h-3.5 w-3.5 shrink-0 text-gray-300" aria-hidden="true" />
+                  <span class="flex-1 text-sm text-gray-400">Guía</span>
+                  <span class="text-[10px] font-medium uppercase tracking-wide text-gray-300">Fija</span>
+                </div>
+                <ul>
+                  {visible.map((c) => {
+                    const def = COLUMN_DEFS.find((d) => d.key === c.key)
+                    if (!def) return null
+                    const realIdx = draft.findIndex((d) => d.key === c.key)
+                    return (
+                      <li
+                        key={c.key}
+                        draggable
+                        onDragStart={() => setDragIdx(realIdx)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (dragIdx !== null && dragIdx !== realIdx) reorderDraft(dragIdx, realIdx)
+                          setDragIdx(null)
+                        }}
+                        class="flex cursor-grab items-center gap-2 rounded-lg px-2 py-2 active:cursor-grabbing hover:bg-gray-50"
+                      >
+                        <GripVertical class="h-4 w-4 shrink-0 text-gray-300" aria-hidden="true" />
+                        <label class="flex flex-1 items-center gap-2 text-sm text-gray-700">
+                          <input type="checkbox" checked={c.visible} onChange={() => toggleDraft(c.key)} />
+                          {def.label}
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-gray-100 p-3">
+              <button type="button" class="text-xs font-medium text-primary hover:underline" onClick={() => setDraft(defaultColumns())}>
+                Restablecer
+              </button>
+              <div class="flex gap-2">
+                <Button variant="ghost" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => {
+                    prefs.setAll(draft)
+                    setOpen(false)
                   }}
-                  class="flex cursor-grab items-center gap-2 rounded-lg px-2 py-1.5 active:cursor-grabbing hover:bg-gray-50"
                 >
-                  <GripVertical class="h-4 w-4 shrink-0 text-gray-300" aria-hidden="true" />
-                  <label class="flex flex-1 items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" checked={c.visible} onChange={() => prefs.toggle(c.key)} />
-                    {def.label}
-                  </label>
-                </li>
-              )
-            })}
-          </ul>
-          <p class="border-t border-gray-100 px-2 pt-1.5 text-[11px] text-gray-400">Arrastrá para reordenar.</p>
+                  Guardar
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
