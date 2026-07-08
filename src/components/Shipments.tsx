@@ -1,12 +1,24 @@
 import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
-import { cleanName, downloadCSV, isHazmat, providerLabel, STATUS_LABEL, STATUS_ORDER, toCSV } from '../lib/format'
+import {
+  cleanName,
+  daysAgo,
+  downloadCSV,
+  fmtDate,
+  isHazmat,
+  officeFlag,
+  providerLabel,
+  SERVICE_EMOJI,
+  STATUS_LABEL,
+  STATUS_ORDER,
+  toCSV,
+} from '../lib/format'
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
-import type { Pkg, Provider } from '../lib/types'
+import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
-import { Button, Card, inputCls, Spinner } from './ui'
+import { Button, Card, HazmatBadge, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
 
 const PAGE_SIZE = 25
 const SORTS: { col: string; label: string }[] = [
@@ -116,7 +128,10 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
           <p class="text-sm text-gray-500">{count} resultados</p>
         </div>
         <div class="flex gap-2">
-          <ColumnPicker prefs={colPrefs} />
+          {/* Columns only customize the desktop table; the mobile card layout ignores them. */}
+          <span class="hidden md:inline-flex">
+            <ColumnPicker prefs={colPrefs} />
+          </span>
           <Button variant="ghost" onClick={doExport} disabled={exporting}>
             <Download class="h-4 w-4" aria-hidden="true" />
             {exporting ? 'Exportando…' : 'Exportar CSV'}
@@ -126,8 +141,8 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
 
       {/* Filters */}
       <Card class="p-4">
-        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-7">
-          <div class="relative lg:col-span-2">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-7">
+          <div class="relative col-span-2 lg:col-span-2">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
             <input
               class={`${inputCls} w-full pl-9`}
@@ -171,15 +186,68 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
               </option>
             ))}
           </select>
-          <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
+          <div class="col-span-2 lg:col-span-1">
+            <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
+          </div>
         </div>
       </Card>
 
       {err && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
 
-      {/* Table */}
+      {/* List — cards on mobile, table on desktop */}
       <Card>
-        <div class="scroll-thin overflow-x-auto">
+        {/* Mobile cards */}
+        <div class="divide-y divide-gray-100 md:hidden">
+          {loading ? (
+            <div class="p-6">
+              <Spinner />
+            </div>
+          ) : rows.length === 0 ? (
+            <p class="px-4 py-10 text-center text-gray-400">Sin resultados para estos filtros.</p>
+          ) : (
+            rows.map((p) => {
+              const stale = daysAgo(p.last_event_at)
+              const showStale = stale !== null && stale > 10 && p.effective_status !== 'entregado'
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onOpen(p.almacen_id)}
+                  class="flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-semibold text-secondary">{p.almacen_id}</span>
+                    <StatusDot s={p.effective_status as ShipmentStatus} />
+                  </div>
+                  <div class="flex items-center gap-1.5 text-sm text-gray-700">
+                    <span class="truncate">{cleanName(p.referencia_name)}</span>
+                    {isHazmat(p.referencia_name) && <HazmatBadge />}
+                    {p.photo_ref && <span title="Tiene foto">🖼️</span>}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                    <span>{providerLabel(p.providers?.code)}</span>
+                    <span>
+                      {p.service_type ? SERVICE_EMOJI[p.service_type] : '—'} {officeFlag(p.origin_office)}
+                    </span>
+                    <span>
+                      {p.pieces ?? '—'} pzs{p.weight_lb ? ` · ${p.weight_lb} lb` : ''}
+                    </span>
+                    <span class="ml-auto flex items-center gap-1.5">
+                      {fmtDate(p.last_event_at)}
+                      {showStale && <StaleBadge days={stale as number} />}
+                    </span>
+                  </div>
+                  {p.tracking_number && (
+                    <div class="truncate font-mono text-xs text-gray-400">{p.tracking_number}</div>
+                  )}
+                </button>
+              )
+            })
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div class="scroll-thin hidden overflow-x-auto md:block">
           <table class="w-full min-w-[900px] text-sm">
             <thead>
               <tr class="border-b border-gray-100 bg-gray-50/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
