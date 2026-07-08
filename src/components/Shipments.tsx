@@ -1,11 +1,14 @@
 import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import {
+  cleanName,
   daysAgo,
   downloadCSV,
   fmtDate,
+  isHazmat,
+  officeFlag,
   providerLabel,
-  SERVICE_LABEL,
+  SERVICE_EMOJI,
   STATUS_LABEL,
   STATUS_ORDER,
   toCSV,
@@ -13,7 +16,7 @@ import {
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
-import { Button, Card, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
+import { Button, Card, HazmatBadge, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
 
 const PAGE_SIZE = 25
 const SORTS: { col: string; label: string }[] = [
@@ -75,6 +78,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
       const data = await exportPackages(filters, 2000)
       const cols = [
         { key: 'almacen_id', label: 'Guia' },
+        { key: 'name', label: 'Nombre' },
         { key: 'tracking_number', label: 'Tracking' },
         { key: 'provider', label: 'Proveedor' },
         { key: 'effective_status', label: 'Estado' },
@@ -85,8 +89,14 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
         { key: 'dest_office', label: 'Destino' },
         { key: 'received_at', label: 'Recibido' },
         { key: 'last_event_at', label: 'Ultimo evento' },
+        { key: 'hazmat', label: 'Hazmat' },
       ]
-      const flat = data.map((p) => ({ ...p, provider: providerLabel(p.providers?.code) }))
+      const flat = data.map((p) => ({
+        ...p,
+        provider: providerLabel(p.providers?.code),
+        name: cleanName(p.referencia_name),
+        hazmat: isHazmat(p.referencia_name) ? 'si' : '',
+      }))
       downloadCSV(`envios-hit-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(flat, cols))
     } catch {
       setErr('No se pudo exportar.')
@@ -177,25 +187,26 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
             <thead>
               <tr class="border-b border-gray-100 bg-gray-50/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 <th class="px-4 py-3">Guía</th>
+                <th class="px-4 py-3">Nombre</th>
                 <th class="hidden px-4 py-3 lg:table-cell">Tracking</th>
                 <th class="px-4 py-3">Proveedor</th>
                 <th class="px-4 py-3">Estado</th>
                 <th class="hidden px-4 py-3 md:table-cell">Servicio</th>
                 <th class="hidden px-4 py-3 md:table-cell">Carga</th>
-                <th class="px-4 py-3">Ruta</th>
+                <th class="hidden px-4 py-3 lg:table-cell">Ruta</th>
                 <th class="px-4 py-3">Últ. evento</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colspan={8} class="px-4 py-10">
+                  <td colspan={9} class="px-4 py-10">
                     <Spinner />
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colspan={8} class="px-4 py-10 text-center text-gray-400">
+                  <td colspan={9} class="px-4 py-10 text-center text-gray-400">
                     Sin resultados para estos filtros.
                   </td>
                 </tr>
@@ -213,6 +224,12 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
                       class="cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                     >
                       <td class="px-4 py-3 font-semibold text-secondary">{p.almacen_id}</td>
+                      <td class="px-4 py-3 text-gray-700">
+                        <div class="flex items-center gap-1.5">
+                          {cleanName(p.referencia_name)}
+                          {isHazmat(p.referencia_name) && <HazmatBadge />}
+                        </div>
+                      </td>
                       <td class="hidden max-w-[160px] truncate px-4 py-3 font-mono text-xs text-gray-500 lg:table-cell">
                         {p.tracking_number ?? '—'}
                       </td>
@@ -220,13 +237,15 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
                       <td class="px-4 py-3">
                         <StatusDot s={p.effective_status as ShipmentStatus} />
                       </td>
-                      <td class="hidden px-4 py-3 text-gray-600 md:table-cell">
-                        {p.service_type ? SERVICE_LABEL[p.service_type] : '—'}
+                      <td class="hidden px-4 py-3 md:table-cell">
+                        <span title={p.service_type ?? undefined}>
+                          {p.service_type ? SERVICE_EMOJI[p.service_type] : '—'} {officeFlag(p.origin_office)}
+                        </span>
                       </td>
                       <td class="hidden px-4 py-3 text-gray-600 md:table-cell">
                         {p.pieces ?? '—'} pzs{p.weight_lb ? ` · ${p.weight_lb} lb` : ''}
                       </td>
-                      <td class="px-4 py-3 text-gray-600">
+                      <td class="hidden px-4 py-3 text-gray-600 lg:table-cell">
                         {(p.origin_office ?? '—') + ' → ' + (p.dest_office ?? '—')}
                       </td>
                       <td class="px-4 py-3 text-gray-600">
