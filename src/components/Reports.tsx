@@ -324,8 +324,12 @@ export default function Reports() {
             </Card>
           </div>
 
-          {/* Exact figures backing the charts — the part that matters for accounting/audit */}
-          <Card class="avoid-break">
+          {/* Exact figures backing the charts — the part that matters for accounting/audit.
+              break-before-page: always start this on a fresh printed page instead of wherever
+              the charts happen to end — otherwise the next avoid-break block (the service/month
+              cards below) doesn't fit the leftover space and the print engine strands it alone
+              on its own page, leaving a big blank gap. */}
+          <Card class="avoid-break break-before-page">
             <SectionTitle>Estado × proveedor — cifras exactas</SectionTitle>
             <div class="scroll-thin overflow-x-auto">
               <table class="w-full min-w-[480px] text-sm">
@@ -369,7 +373,9 @@ export default function Reports() {
             </div>
           </Card>
 
-          <div class="grid gap-5 md:grid-cols-2">
+          {/* Redundant with the two charts above (same numbers) — screen-only, kept out of the
+              PDF so the report doesn't grow an extra page for a repeat of the same figures. */}
+          <div class="grid gap-5 print:hidden md:grid-cols-2">
             <Card class="avoid-break">
               <SectionTitle>Por servicio</SectionTitle>
               <div class="space-y-2 p-5 text-sm">
