@@ -1,5 +1,6 @@
 import type { ChartConfiguration } from 'chart.js'
-import { Download, Printer, Search } from 'lucide-preact'
+import { Download, Printer, Search, TrendingDown, TrendingUp } from 'lucide-preact'
+import type { ComponentChildren } from 'preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import {
   BRAND_HEX,
@@ -13,11 +14,16 @@ import {
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
-import { exportPackages, getProviders } from '../lib/insforge'
+import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
+import { DateRangePicker } from './DateRangePicker'
 import { Button, Card, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const BASE_FONT = { family: 'Inter, system-ui, sans-serif', size: 12 }
 const EXPORT_CAP = 5000
@@ -53,6 +59,33 @@ export default function Reports() {
       .then((r) => !cancelled && setRows(r))
       .catch(() => !cancelled && setErr('No se pudieron cargar los datos.'))
       .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [filters])
+
+  // "vs período anterior" needs a bounded range — shift the same span immediately before it.
+  // Only total + entregados counts are needed, so pageSize:1 just reads the count header.
+  const [prev, setPrev] = useState<{ total: number; entregados: number } | null>(null)
+  useEffect(() => {
+    if (!filters.from || !filters.to) {
+      setPrev(null)
+      return
+    }
+    const from = new Date(filters.from + 'T00:00:00')
+    const to = new Date(filters.to + 'T00:00:00')
+    const spanDays = Math.round((+to - +from) / 86400000) + 1
+    const prevTo = new Date(from)
+    prevTo.setDate(prevTo.getDate() - 1)
+    const prevFrom = new Date(prevTo)
+    prevFrom.setDate(prevFrom.getDate() - (spanDays - 1))
+    let cancelled = false
+    Promise.all([
+      listPackages({ ...filters, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+      listPackages({ ...filters, status: 'entregado', from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+    ])
+      .then(([totalRes, entRes]) => !cancelled && setPrev({ total: totalRes.count, entregados: entRes.count }))
+      .catch(() => !cancelled && setPrev(null))
     return () => {
       cancelled = true
     }
@@ -240,7 +273,7 @@ export default function Reports() {
         </div>
 
         <Card class="p-4">
-          <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+          <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-7">
             <div class="relative lg:col-span-2">
               <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
               <input
@@ -271,14 +304,7 @@ export default function Reports() {
               <option value="aereo">Aéreo</option>
               <option value="maritimo">Marítimo</option>
             </select>
-            <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
-              Desde
-              <input type="date" class={inputCls} value={filters.from ?? ''} onChange={(e) => patch({ from: (e.target as HTMLInputElement).value || undefined })} />
-            </label>
-            <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
-              Hasta
-              <input type="date" class={inputCls} value={filters.to ?? ''} onChange={(e) => patch({ to: (e.target as HTMLInputElement).value || undefined })} />
-            </label>
+            <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
           </div>
         </Card>
       </div>
@@ -298,8 +324,13 @@ export default function Reports() {
         <>
           {/* KPI strip */}
           <div class="avoid-break grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Kpi label="Total" value={rows.length} />
-            <Kpi label="Entregados" value={agg.entregados} tone="text-orange-600" />
+            <Kpi label="Total" value={rows.length} trend={prev && <Trend current={rows.length} previous={prev.total} />} />
+            <Kpi
+              label="Entregados"
+              value={agg.entregados}
+              tone="text-orange-600"
+              trend={prev && <Trend current={agg.entregados} previous={prev.entregados} />}
+            />
             <Kpi label="En tránsito" value={agg.enTransito} tone="text-red-600" />
             <Kpi label="Excepciones" value={agg.excepciones} tone="text-gray-600" />
           </div>
@@ -407,12 +438,39 @@ export default function Reports() {
   )
 }
 
-function Kpi({ label, value, tone = 'text-secondary' }: { label: string; value: number; tone?: string }) {
+function Kpi({
+  label,
+  value,
+  tone = 'text-secondary',
+  trend,
+}: {
+  label: string
+  value: number
+  tone?: string
+  trend?: ComponentChildren
+}) {
   return (
     <Card class="p-4">
       <div class="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
       <div class={`mt-1 text-3xl font-bold tabular-nums tracking-tight ${tone}`}>{value}</div>
+      {trend && <div class="mt-1">{trend}</div>}
     </Card>
+  )
+}
+
+/** % change vs the immediately preceding period of the same length. Only rendered when a
+ * concrete date range is active — "vs previous period" is meaningless for "all time". */
+function Trend({ current, previous }: { current: number; previous: number }) {
+  if (previous === 0) {
+    return current > 0 ? <span class="text-xs font-medium text-green-600">Nuevo</span> : null
+  }
+  const pct = Math.round(((current - previous) / previous) * 100)
+  const up = pct >= 0
+  const Icon = up ? TrendingUp : TrendingDown
+  return (
+    <span class={`flex items-center gap-1 text-xs font-medium ${up ? 'text-green-600' : 'text-red-600'}`}>
+      <Icon class="h-3 w-3" aria-hidden="true" /> {Math.abs(pct)}% vs período anterior
+    </span>
   )
 }
 
