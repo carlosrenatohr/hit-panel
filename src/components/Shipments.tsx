@@ -1,22 +1,11 @@
 import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
-import {
-  cleanName,
-  daysAgo,
-  downloadCSV,
-  fmtDate,
-  isHazmat,
-  officeFlag,
-  providerLabel,
-  SERVICE_EMOJI,
-  STATUS_LABEL,
-  STATUS_ORDER,
-  toCSV,
-} from '../lib/format'
+import { cleanName, downloadCSV, isHazmat, providerLabel, STATUS_LABEL, STATUS_ORDER, toCSV } from '../lib/format'
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
-import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
-import { Button, Card, HazmatBadge, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
+import type { Pkg, Provider } from '../lib/types'
+import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
+import { Button, Card, inputCls, Spinner } from './ui'
 
 const PAGE_SIZE = 25
 const SORTS: { col: string; label: string }[] = [
@@ -33,6 +22,11 @@ const SORTS: { col: string; label: string }[] = [
 ]
 
 export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }) {
+  const colPrefs = useColumnPrefs()
+  const visibleCols = colPrefs.columns
+    .filter((c) => c.visible)
+    .map((c) => COLUMN_DEFS.find((d) => d.key === c.key))
+    .filter((d): d is (typeof COLUMN_DEFS)[number] => !!d)
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<ListFilters>({ sortCol: 'received_at', ascending: false })
@@ -120,10 +114,13 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
           <h1 class="text-2xl font-bold tracking-tight text-secondary">Envíos</h1>
           <p class="text-sm text-gray-500">{count} resultados</p>
         </div>
-        <Button variant="ghost" onClick={doExport} disabled={exporting}>
-          <Download class="h-4 w-4" aria-hidden="true" />
-          {exporting ? 'Exportando…' : 'Exportar CSV'}
-        </Button>
+        <div class="flex gap-2">
+          <ColumnPicker prefs={colPrefs} />
+          <Button variant="ghost" onClick={doExport} disabled={exporting}>
+            <Download class="h-4 w-4" aria-hidden="true" />
+            {exporting ? 'Exportando…' : 'Exportar CSV'}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -193,76 +190,44 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
             <thead>
               <tr class="border-b border-gray-100 bg-gray-50/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 <th class="px-4 py-3">Guía</th>
-                <th class="px-4 py-3">Nombre</th>
-                <th class="hidden px-4 py-3 lg:table-cell">Tracking</th>
-                <th class="px-4 py-3">Proveedor</th>
-                <th class="px-4 py-3">Estado</th>
-                <th class="hidden px-4 py-3 md:table-cell">Servicio</th>
-                <th class="hidden px-4 py-3 md:table-cell">Carga</th>
-                <th class="hidden px-4 py-3 lg:table-cell">Ruta</th>
-                <th class="px-4 py-3">Últ. evento</th>
+                {visibleCols.map((c) => (
+                  <th key={c.key} class="px-4 py-3">
+                    {c.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colspan={9} class="px-4 py-10">
+                  <td colspan={1 + visibleCols.length} class="px-4 py-10">
                     <Spinner />
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colspan={9} class="px-4 py-10 text-center text-gray-400">
+                  <td colspan={1 + visibleCols.length} class="px-4 py-10 text-center text-gray-400">
                     Sin resultados para estos filtros.
                   </td>
                 </tr>
               ) : (
-                rows.map((p) => {
-                  const stale = daysAgo(p.last_event_at)
-                  const showStale = stale !== null && stale > 10 && p.effective_status !== 'entregado'
-                  return (
-                    <tr
-                      key={p.id}
-                      tabIndex={0}
-                      role="button"
-                      onClick={() => onOpen(p.almacen_id)}
-                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen(p.almacen_id))}
-                      class="cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-                    >
-                      <td class="px-4 py-3 font-semibold text-secondary">{p.almacen_id}</td>
-                      <td class="px-4 py-3 text-gray-700">
-                        <div class="flex items-center gap-1.5">
-                          {cleanName(p.referencia_name)}
-                          {isHazmat(p.referencia_name) && <HazmatBadge />}
-                        </div>
+                rows.map((p) => (
+                  <tr
+                    key={p.id}
+                    tabIndex={0}
+                    role="button"
+                    onClick={() => onOpen(p.almacen_id)}
+                    onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen(p.almacen_id))}
+                    class="cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                  >
+                    <td class="px-4 py-3 font-semibold text-secondary">{p.almacen_id}</td>
+                    {visibleCols.map((c) => (
+                      <td key={c.key} class="px-4 py-3">
+                        {c.render(p)}
                       </td>
-                      <td class="hidden max-w-[160px] truncate px-4 py-3 font-mono text-xs text-gray-500 lg:table-cell">
-                        {p.tracking_number ?? '—'}
-                      </td>
-                      <td class="px-4 py-3 text-gray-600">{providerLabel(p.providers?.code)}</td>
-                      <td class="px-4 py-3">
-                        <StatusDot s={p.effective_status as ShipmentStatus} />
-                      </td>
-                      <td class="hidden px-4 py-3 md:table-cell">
-                        <span title={p.service_type ?? undefined}>
-                          {p.service_type ? SERVICE_EMOJI[p.service_type] : '—'} {officeFlag(p.origin_office)}
-                        </span>
-                      </td>
-                      <td class="hidden px-4 py-3 text-gray-600 md:table-cell">
-                        {p.pieces ?? '—'} pzs{p.weight_lb ? ` · ${p.weight_lb} lb` : ''}
-                      </td>
-                      <td class="hidden px-4 py-3 text-gray-600 lg:table-cell">
-                        {(p.origin_office ?? '—') + ' → ' + (p.dest_office ?? '—')}
-                      </td>
-                      <td class="px-4 py-3 text-gray-600">
-                        <div class="flex items-center gap-1.5">
-                          {fmtDate(p.last_event_at)}
-                          {showStale && <StaleBadge days={stale as number} />}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
+                    ))}
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
