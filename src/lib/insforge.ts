@@ -74,7 +74,7 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 
   if (f.search && f.search.trim()) {
     const s = f.search.trim().replace(/[(),*]/g, '')
-    q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*`)
+    q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*,referencia_name.ilike.*${s}*`)
   }
   if (f.providerId) q = q.eq('provider_id', f.providerId)
   if (f.status) q = q.eq('effective_status', f.status)
