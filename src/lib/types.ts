@@ -14,6 +14,7 @@ export interface Provider {
   id?: string
   code: string
   name: string
+  base_url?: string
 }
 
 export interface Pkg {
@@ -36,6 +37,7 @@ export interface Pkg {
   referencia_name: string | null
   casillero: string | null
   declared_value: number | null
+  photo_ref: string | null
   received_at: string | null
   last_event_at: string | null
   scraped_at: string | null

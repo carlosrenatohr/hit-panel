@@ -28,6 +28,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
       <div class="flex items-center gap-1.5">
         <span class="text-gray-700">{cleanName(p.referencia_name)}</span>
         {isHazmat(p.referencia_name) && <HazmatBadge />}
+        {p.photo_ref && <span title="Tiene foto">🖼️</span>}
       </div>
     ),
   },

@@ -31,6 +31,7 @@ export default function ShipmentDetail({
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [photoOpen, setPhotoOpen] = useState(false)
 
   const [newStatus, setNewStatus] = useState('')
   const [statusNote, setStatusNote] = useState('')
@@ -58,10 +59,14 @@ export default function ShipmentDetail({
   }, [guia])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (photoOpen) setPhotoOpen(false)
+      else onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, photoOpen])
 
   async function run(fn: () => Promise<void>) {
     setBusy(true)
@@ -83,6 +88,11 @@ export default function ShipmentDetail({
   }
 
   const step = d ? PIPELINE_STEP[d.pkg.effective_status as ShipmentStatus] : 0
+  const providerBase = d?.pkg.providers?.base_url?.replace(/\/$/, '')
+  const providerUrl = providerBase ? `${providerBase}/appl2.0/agent/whs_detail.asp?id=${guia}` : null
+  const parcelUrl = d?.pkg.tracking_number
+    ? `https://parcelsapp.com/en/tracking/${encodeURIComponent(d.pkg.tracking_number)}`
+    : null
 
   return (
     <div
@@ -165,6 +175,30 @@ export default function ShipmentDetail({
                 </span>
                 <span class="text-gray-500">{providerLabel(d.pkg.providers?.code)}</span>
               </div>
+              {(d.pkg.photo_ref || providerUrl || parcelUrl) && (
+                <div class="mt-3 flex flex-wrap items-center gap-4 border-t border-gray-100 pt-3 text-sm">
+                  {d.pkg.photo_ref && (
+                    <button
+                      type="button"
+                      onClick={() => setPhotoOpen(true)}
+                      class="flex items-center gap-1.5 text-gray-600 hover:text-primary"
+                    >
+                      <img src={d.pkg.photo_ref} alt="Foto del paquete" class="h-8 w-8 rounded object-cover ring-1 ring-gray-200" />
+                      🖼️ Ver foto
+                    </button>
+                  )}
+                  {providerUrl && (
+                    <a href={providerUrl} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 text-gray-600 hover:text-primary">
+                      🔗 Ver en {providerLabel(d.pkg.providers?.code)}
+                    </a>
+                  )}
+                  {parcelUrl && (
+                    <a href={parcelUrl} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 text-gray-600 hover:text-primary">
+                      📦 Rastrear en Parcel
+                    </a>
+                  )}
+                </div>
+              )}
               {d.pkg.description && <p class="mt-3 text-sm text-gray-600">{d.pkg.description}</p>}
               {d.pkg.manual_status && (
                 <p class="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800">
@@ -331,6 +365,25 @@ export default function ShipmentDetail({
           </div>
         )}
       </div>
+
+      {photoOpen && d?.pkg.photo_ref && (
+        <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onClick={() => setPhotoOpen(false)}>
+          <button
+            type="button"
+            aria-label="Cerrar"
+            onClick={() => setPhotoOpen(false)}
+            class="absolute right-4 top-4 rounded-lg p-2 text-white hover:bg-white/10"
+          >
+            <X class="h-5 w-5" aria-hidden="true" />
+          </button>
+          <img
+            src={d.pkg.photo_ref}
+            alt="Foto del paquete"
+            class="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }

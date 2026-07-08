@@ -8,7 +8,7 @@ export const insforge = createClient({ baseUrl, anonKey })
 
 // Lightweight column set for the list view (skip heavy/internal-only fields).
 const LIST_COLS =
-  'id,almacen_id,tracking_number,status,manual_status,effective_status,service_type,weight_lb,pieces,origin_office,dest_office,referencia_name,received_at,last_event_at,scraped_at,provider_id,providers(code,name)'
+  'id,almacen_id,tracking_number,status,manual_status,effective_status,service_type,weight_lb,pieces,origin_office,dest_office,referencia_name,photo_ref,received_at,last_event_at,scraped_at,provider_id,providers(code,name,base_url)'
 
 // ── Auth ────────────────────────────────────────────────────────────────────────
 export async function signIn(email: string, password: string): Promise<void> {
@@ -93,7 +93,7 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 export async function getPackageDetail(guia: string): Promise<PackageDetail | null> {
   const { data: pkg, error } = await insforge.database
     .from('packages')
-    .select('*, providers(code,name)')
+    .select('*, providers(code,name,base_url)')
     .eq('almacen_id', guia)
     .maybeSingle()
   if (error) throw error
