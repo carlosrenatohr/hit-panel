@@ -24,6 +24,12 @@ const SORTS: { col: string; label: string }[] = [
   { col: 'last_event_at', label: 'Último evento' },
   { col: 'scraped_at', label: 'Actualizado' },
   { col: 'almacen_id', label: 'Guía' },
+  { col: 'referencia_name', label: 'Nombre' },
+  { col: 'tracking_number', label: 'Tracking' },
+  { col: 'effective_status', label: 'Estado' },
+  { col: 'service_type', label: 'Servicio' },
+  { col: 'weight_lb', label: 'Peso' },
+  { col: 'pieces', label: 'Piezas' },
 ]
 
 export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }) {
