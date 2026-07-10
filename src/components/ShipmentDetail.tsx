@@ -2,6 +2,7 @@ import { Anchor, Check, CheckCircle2, Copy, Package, Plane, StickyNote, Tag, X }
 import { useEffect, useState } from 'preact/hooks'
 import {
   cleanName,
+  daysAgo,
   fmtDate,
   fmtDateTime,
   isHazmat,
@@ -15,7 +16,7 @@ import {
 } from '../lib/format'
 import { addNote, addTag, getPackageDetail, setManualStatus } from '../lib/insforge'
 import type { PackageDetail, Role, ShipmentStatus } from '../lib/types'
-import { Button, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
+import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
 
 export default function ShipmentDetail({
   guia,
@@ -175,6 +176,17 @@ export default function ShipmentDetail({
                 </span>
                 <span class="text-gray-500">{providerLabel(d.pkg.providers?.code)}</span>
               </div>
+              {d.pkg.received_at && (
+                <div
+                  class="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 text-sm text-gray-600"
+                  title="Fecha en que se recibió el paquete en la bodega de Miami (primer evento)"
+                >
+                  <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Recibido en Miami</span>
+                  <span class="font-medium text-gray-800">{fmtDate(d.pkg.received_at)}</span>
+                  {d.pkg.effective_status !== 'entregado' &&
+                    daysAgo(d.pkg.received_at) !== null && <DaysBadge days={daysAgo(d.pkg.received_at) as number} />}
+                </div>
+              )}
               {(d.pkg.photo_ref || providerUrl || parcelUrl) && (
                 <div class="mt-3 flex flex-wrap items-center gap-4 border-t border-gray-100 pt-3 text-sm">
                   {d.pkg.photo_ref && (

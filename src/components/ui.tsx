@@ -1,4 +1,4 @@
-import { AlertTriangle, Biohazard, Loader2 } from 'lucide-preact'
+import { AlertTriangle, Biohazard, Clock, Loader2 } from 'lucide-preact'
 import type { ComponentChildren, JSX } from 'preact'
 import { useState } from 'preact/hooks'
 import { STATUS_DOT, STATUS_LABEL, STATUS_SOFT } from '../lib/format'
@@ -150,10 +150,26 @@ export function Chip({ children, class: cls = '' }: { children: ComponentChildre
   )
 }
 
+/** Red warning: days since the LAST tracking event — flags a package that hasn't moved. */
 export function StaleBadge({ days }: { days: number }) {
   return (
-    <span class="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600">
+    <span
+      title={`${days} días sin actualización desde el último evento`}
+      class="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600"
+    >
       <AlertTriangle class="h-3 w-3" aria-hidden="true" /> {days}d
+    </span>
+  )
+}
+
+/** Neutral info: days elapsed since the package was received in the Miami warehouse. */
+export function DaysBadge({ days }: { days: number }) {
+  return (
+    <span
+      title={`${days} días desde la recepción en Miami`}
+      class="inline-flex items-center gap-0.5 rounded-full bg-accent-blue/10 px-1.5 py-0.5 text-[11px] font-medium text-accent-blue"
+    >
+      <Clock class="h-3 w-3" aria-hidden="true" /> {days}d
     </span>
   )
 }

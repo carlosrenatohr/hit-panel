@@ -10,7 +10,7 @@ import {
   SERVICE_EMOJI,
 } from '../lib/format'
 import type { Pkg, ShipmentStatus } from '../lib/types'
-import { Button, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot } from './ui'
+import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot } from './ui'
 import { GripVertical, Lock, Search, SlidersHorizontal, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
@@ -61,6 +61,21 @@ export const COLUMN_DEFS: ColumnDef[] = [
     key: 'ruta',
     label: 'Ruta',
     render: (p) => <span class="text-gray-600">{(p.origin_office ?? '—') + ' → ' + (p.dest_office ?? '—')}</span>,
+  },
+  {
+    key: 'recibido',
+    label: 'Recibido Miami',
+    render: (p) => {
+      // Days in the pipeline since Miami reception — shown until the package is delivered.
+      const days = daysAgo(p.received_at)
+      const showDays = days !== null && p.effective_status !== 'entregado'
+      return (
+        <div class="flex items-center gap-1.5 text-gray-600">
+          {fmtDate(p.received_at)}
+          {showDays && <DaysBadge days={days as number} />}
+        </div>
+      )
+    },
   },
   {
     key: 'ultEvento',

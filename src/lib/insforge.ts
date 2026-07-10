@@ -82,7 +82,11 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   if (f.from) q = q.gte('received_at', f.from)
   if (f.to) q = q.lte('received_at', f.to)
 
-  q = q.order(f.sortCol ?? 'received_at', { ascending: f.ascending ?? false })
+  const sortCol = f.sortCol ?? 'status_rank'
+  q = q.order(sortCol, { ascending: f.ascending ?? false })
+  // Default "ready for pickup first" view: within a status rank, surface the packages that have
+  // waited longest since Miami reception (oldest first) — the most overdue for their next step.
+  if (sortCol === 'status_rank') q = q.order('received_at', { ascending: true })
   q = q.range(fromIdx, toIdx)
 
   const { data, count, error } = await q

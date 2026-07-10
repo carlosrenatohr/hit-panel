@@ -18,21 +18,41 @@ import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
-import { Button, Card, HazmatBadge, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
+import { Button, Card, DaysBadge, HazmatBadge, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
 
 const PAGE_SIZE = 25
-const SORTS: { col: string; label: string }[] = [
-  { col: 'received_at', label: 'Recibido' },
-  { col: 'last_event_at', label: 'Último evento' },
-  { col: 'scraped_at', label: 'Actualizado' },
-  { col: 'almacen_id', label: 'Guía' },
-  { col: 'referencia_name', label: 'Nombre' },
-  { col: 'tracking_number', label: 'Tracking' },
-  { col: 'effective_status', label: 'Estado' },
-  { col: 'service_type', label: 'Servicio' },
-  { col: 'weight_lb', label: 'Peso' },
-  { col: 'pieces', label: 'Piezas' },
+// `dir` is the direction applied when the option is picked. The default (status_rank asc) puts
+// packages ready for pickup in Nicaragua at the top; insforge.ts adds oldest-reception-first as a
+// tiebreaker. The rest default to descending (newest/highest first), which reads naturally.
+const SORTS: { col: string; label: string; dir: 'asc' | 'desc' }[] = [
+  { col: 'status_rank', label: 'Listos para retiro', dir: 'asc' },
+  { col: 'received_at', label: 'Recibido', dir: 'desc' },
+  { col: 'last_event_at', label: 'Último evento', dir: 'desc' },
+  { col: 'scraped_at', label: 'Actualizado', dir: 'desc' },
+  { col: 'almacen_id', label: 'Guía', dir: 'desc' },
+  { col: 'referencia_name', label: 'Nombre', dir: 'desc' },
+  { col: 'tracking_number', label: 'Tracking', dir: 'desc' },
+  { col: 'effective_status', label: 'Estado', dir: 'desc' },
+  { col: 'service_type', label: 'Servicio', dir: 'desc' },
+  { col: 'weight_lb', label: 'Peso', dir: 'desc' },
+  { col: 'pieces', label: 'Piezas', dir: 'desc' },
 ]
+
+// Condensed page list with ellipses — always shows first, last, and a window around the current
+// page. Keeps the pager a fixed width no matter how many thousands of packages accumulate.
+function pageWindow(current: number, total: number): (number | '…')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const keep = new Set([1, total, current, current - 1, current + 1])
+  const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b)
+  const out: (number | '…')[] = []
+  let prev = 0
+  for (const p of sorted) {
+    if (p - prev > 1) out.push('…')
+    out.push(p)
+    prev = p
+  }
+  return out
+}
 
 export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }) {
   const colPrefs = useColumnPrefs()
@@ -42,7 +62,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
     .filter((d): d is (typeof COLUMN_DEFS)[number] => !!d)
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
-  const [filters, setFilters] = useState<ListFilters>({ sortCol: 'received_at', ascending: false })
+  const [filters, setFilters] = useState<ListFilters>({ sortCol: 'status_rank', ascending: true })
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<Pkg[]>([])
   const [count, setCount] = useState(0)
@@ -174,6 +194,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
           </select>
           <select
             class={inputCls}
+            value={`${filters.sortCol}:${filters.ascending ? 'asc' : 'desc'}`}
             onChange={(e) => {
               const v = (e.target as HTMLSelectElement).value
               const [col, dir] = v.split(':')
@@ -181,8 +202,8 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
             }}
           >
             {SORTS.map((s) => (
-              <option key={s.col} value={`${s.col}:desc`}>
-                {s.label} ↓
+              <option key={s.col} value={`${s.col}:${s.dir}`}>
+                {s.label} {s.col === 'status_rank' ? '🎯' : s.dir === 'asc' ? '↑' : '↓'}
               </option>
             ))}
           </select>
@@ -208,6 +229,8 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
             rows.map((p) => {
               const stale = daysAgo(p.last_event_at)
               const showStale = stale !== null && stale > 10 && p.effective_status !== 'entregado'
+              const recDays = daysAgo(p.received_at)
+              const showRecDays = recDays !== null && p.effective_status !== 'entregado'
               return (
                 <button
                   key={p.id}
@@ -237,6 +260,12 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
                       {showStale && <StaleBadge days={stale as number} />}
                     </span>
                   </div>
+                  {p.received_at && (
+                    <div class="flex items-center gap-1.5 text-xs text-gray-400">
+                      <span>Recibido Miami: {fmtDate(p.received_at)}</span>
+                      {showRecDays && <DaysBadge days={recDays as number} />}
+                    </div>
+                  )}
                   {p.tracking_number && (
                     <div class="truncate font-mono text-xs text-gray-400">{p.tracking_number}</div>
                   )}
@@ -294,19 +323,50 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
             </tbody>
           </table>
         </div>
-        {/* Pagination */}
-        <div class="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-sm">
-          <span class="text-gray-500">
-            Página {page} de {pages}
+        {/* Pagination — numeric, condensed with ellipses */}
+        <div class="flex items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 text-sm">
+          <span class="hidden shrink-0 text-gray-500 sm:block">
+            {count} resultados · pág. {page}/{pages}
           </span>
-          <div class="flex gap-2">
-            <Button variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-              <ChevronLeft class="h-4 w-4" aria-hidden="true" /> Anterior
-            </Button>
-            <Button variant="ghost" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}>
-              Siguiente <ChevronRight class="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
+          <nav class="flex flex-1 items-center justify-end gap-1" aria-label="Paginación">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              aria-label="Anterior"
+              class="rounded-lg px-2 py-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <ChevronLeft class="h-4 w-4" aria-hidden="true" />
+            </button>
+            {pageWindow(page, pages).map((p, i) =>
+              p === '…' ? (
+                <span key={`e${i}`} class="px-1.5 text-gray-400">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPage(p)}
+                  aria-current={p === page ? 'page' : undefined}
+                  class={`min-w-[2rem] rounded-lg px-2 py-1.5 text-center tabular-nums transition-colors ${
+                    p === page ? 'bg-primary font-semibold text-white' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {p}
+                </button>
+              ),
+            )}
+            <button
+              type="button"
+              disabled={page >= pages}
+              onClick={() => setPage((p) => Math.min(pages, p + 1))}
+              aria-label="Siguiente"
+              class="rounded-lg px-2 py-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              <ChevronRight class="h-4 w-4" aria-hidden="true" />
+            </button>
+          </nav>
         </div>
       </Card>
     </div>
