@@ -65,7 +65,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
               <input
                 type={showPw ? 'text' : 'password'}
                 required
-                class={`${inputCls} pr-10`}
+                class={`${inputCls} w-full pr-10`}
                 value={password}
                 onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
                 autocomplete="current-password"
@@ -75,7 +75,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
                 onClick={() => setShowPw((v) => !v)}
                 aria-label={showPw ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 tabIndex={-1}
-                class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition-colors hover:text-primary"
               >
                 {showPw ? <EyeOff class="h-4 w-4" aria-hidden="true" /> : <Eye class="h-4 w-4" aria-hidden="true" />}
               </button>
