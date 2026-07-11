@@ -1,7 +1,7 @@
 {
   "name": "hit-panel",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "HIT Cargo internal admin panel (shipments ops dashboard)",
   "scripts": {

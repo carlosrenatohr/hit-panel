@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-07-10
+
+### Changed
+- Login screen now shows the full HIT Cargo logo (web-optimized transparent asset) instead of the
+  mark + text lockup.
+
 ## [0.2.0] — 2026-07-10
 
 First tagged release of the HIT Cargo **internal team panel** — a private dashboard (Astro 6 +
