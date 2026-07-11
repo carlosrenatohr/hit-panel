@@ -43,6 +43,7 @@ export default function ShipmentDetail({
   const [showInvoice, setShowInvoice] = useState(false)
 
   const canWrite = role === 'admin' || role === 'staff'
+  const canBill = role === 'admin' || role === 'billing'
 
   async function load() {
     setLoading(true)
@@ -128,7 +129,7 @@ export default function ShipmentDetail({
             )}
           </div>
           {d && <StatusPill s={d.pkg.effective_status as ShipmentStatus} class="shrink-0" />}
-          {canWrite && d && (
+          {canBill && d && (
             <IconButton label="Crear factura para este paquete" onClick={() => setShowInvoice(true)}>
               <FileText class="h-4 w-4" aria-hidden="true" />
             </IconButton>

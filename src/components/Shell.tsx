@@ -9,7 +9,7 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
   { key: 'overview', label: 'Resumen', icon: LayoutDashboard },
   { key: 'shipments', label: 'Envíos', icon: PackageSearch },
   { key: 'reports', label: 'Reportes', icon: BarChart3 },
-  { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'staff'] },
+  { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'billing', 'staff'] },
 ]
 
 export default function Shell({

@@ -53,7 +53,7 @@ export default function App() {
       {view === 'overview' && <Overview onOpen={setDetail} onGoShipments={() => setView('shipments')} />}
       {view === 'shipments' && <Shipments onOpen={setDetail} />}
       {view === 'reports' && <Reports />}
-      {view === 'facturacion' && (user.role === 'admin' || user.role === 'staff') && <Facturacion role={user.role} />}
+      {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
       {detail && (
         <ShipmentDetail guia={detail} role={user.role} onClose={() => setDetail(null)} />
       )}

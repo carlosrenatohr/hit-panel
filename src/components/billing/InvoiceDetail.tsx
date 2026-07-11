@@ -1,4 +1,4 @@
-import { Ban, Link2, Package, Printer, Trash2, X } from 'lucide-preact'
+import { Ban, Check, Copy, Link2, Package, Printer, Share2, Trash2, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import {
   billingApi,
@@ -43,6 +43,8 @@ export default function InvoiceDetail({
   const [amount, setAmount] = useState('')
   const [fx, setFx] = useState('')
   const [guia, setGuia] = useState('')
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -98,6 +100,26 @@ export default function InvoiceDetail({
             {inv && <StatusPill s={inv.status} />}
           </div>
           <div class="flex items-center gap-1">
+            {inv && canWrite && (
+              <button
+                aria-label="Compartir link público"
+                title="Compartir link público"
+                onClick={async () => {
+                  try {
+                    const { url } = await billingApi.shareInvoice(id)
+                    setShareUrl(url)
+                    navigator.clipboard?.writeText(url)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 1500)
+                  } catch (e) {
+                    setErr(e instanceof Error ? e.message : 'No se pudo generar el link.')
+                  }
+                }}
+                class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <Share2 class="h-4 w-4" />
+              </button>
+            )}
             {inv && (
               <button aria-label="Imprimir" title="Imprimir" onClick={() => window.print()} class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
                 <Printer class="h-4 w-4" />
@@ -125,6 +147,14 @@ export default function InvoiceDetail({
                   <div><span class="text-gray-400">Saldo</span><div class="font-medium">{fmtUsd(inv.outstanding)}</div></div>
                 </div>
               </Card>
+
+              {shareUrl && (
+                <Card class="flex items-center gap-2 p-3">
+                  {copied ? <Check class="h-4 w-4 shrink-0 text-green-600" /> : <Copy class="h-4 w-4 shrink-0 text-gray-400" />}
+                  <input readOnly value={shareUrl} class="flex-1 truncate bg-transparent text-xs text-gray-600 outline-none" onClick={(e) => (e.target as HTMLInputElement).select()} />
+                  <button class="text-xs font-medium text-primary" onClick={() => { navigator.clipboard?.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 1500) }}>Copiar</button>
+                </Card>
+              )}
 
               {/* Lines */}
               <Card>

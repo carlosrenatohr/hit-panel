@@ -33,7 +33,7 @@ function pageWindow(current: number, total: number): (number | '…')[] {
 }
 
 export default function Facturacion({ role }: { role: Role }) {
-  const canWrite = role === 'admin' || role === 'staff'
+  const canWrite = role === 'admin' || role === 'billing'
   const [tab, setTab] = useState<Tab>('facturas')
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<InvoiceFilters>({})

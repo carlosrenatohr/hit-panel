@@ -199,4 +199,5 @@ export const billingApi = {
   closeMonth: (year: number, month: number) => api<MonthlyClose>(`/close-month${qs({ year, month })}`),
   reports: (year: number) => api<YearReport>(`/reports${qs({ year })}`),
   exceptions: () => api<Exceptions>('/exceptions'),
+  shareInvoice: (id: string) => api<{ token: string; url: string }>(`/invoices/${id}/share`, { method: 'POST' }),
 }
