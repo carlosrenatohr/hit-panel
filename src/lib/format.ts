@@ -159,3 +159,38 @@ export function downloadCSV(filename: string, csv: string): void {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+// ── Billing ─────────────────────────────────────────────────────────────────────
+/** USD amount, e.g. 32.5 -> "$32.50". Null/NaN -> "—". */
+export function fmtUsd(n?: number | null): string {
+  if (n == null || isNaN(n)) return '—'
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+export const INVOICE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Borrador',
+  ISSUED: 'Emitida',
+  PARTIAL: 'Parcial',
+  PAID: 'Pagada',
+  VOID: 'Anulada',
+}
+
+// Soft badge bg+text per invoice status (mirrors the shipment STATUS_SOFT convention).
+export const INVOICE_STATUS_SOFT: Record<string, string> = {
+  DRAFT: 'bg-gray-100 text-gray-600',
+  ISSUED: 'bg-blue-50 text-blue-700',
+  PARTIAL: 'bg-yellow-50 text-yellow-800',
+  PAID: 'bg-green-50 text-green-700',
+  VOID: 'bg-red-50 text-red-700',
+}
+
+export const INVOICE_STATUS_ORDER = ['DRAFT', 'ISSUED', 'PARTIAL', 'PAID', 'VOID']
+
+export const FREIGHT_LABEL: Record<string, string> = { AIR: 'Aéreo', MAR: 'Marítimo' }
+export const TIER_LABEL: Record<string, string> = {
+  REGULAR: 'Regular',
+  ESPECIAL: 'Especial',
+  VIP: 'VIP',
+  MADRES: 'Madres',
+  DARIO: 'Darío',
+}

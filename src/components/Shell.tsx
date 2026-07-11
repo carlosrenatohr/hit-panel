@@ -1,12 +1,15 @@
-import { BarChart3, LayoutDashboard, LogOut, PackageSearch } from 'lucide-preact'
+import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
-import type { SessionUser } from '../lib/types'
+import type { Role, SessionUser } from '../lib/types'
 import type { View } from './App'
 
-const NAV: { key: View; label: string; icon: typeof LayoutDashboard }[] = [
+// `roles` (when present) restricts a nav item to those roles — billing is money, so
+// it's admin/billing/staff only; viewer never sees the tab. Backend still enforces this.
+const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Role[] }[] = [
   { key: 'overview', label: 'Resumen', icon: LayoutDashboard },
   { key: 'shipments', label: 'Envíos', icon: PackageSearch },
   { key: 'reports', label: 'Reportes', icon: BarChart3 },
+  { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'billing', 'staff'] },
 ]
 
 export default function Shell({
@@ -22,6 +25,7 @@ export default function Shell({
   onLogout: () => void
   children: ComponentChildren
 }) {
+  const nav = NAV.filter((n) => !n.roles || n.roles.includes(user.role))
   return (
     <div class="flex min-h-screen bg-neutral-bg text-gray-800">
       {/* Sidebar */}
@@ -34,7 +38,7 @@ export default function Shell({
           </div>
         </div>
         <nav class="flex flex-col gap-1">
-          {NAV.map((n) => {
+          {nav.map((n) => {
             const Icon = n.icon
             const active = view === n.key
             return (
@@ -77,7 +81,7 @@ export default function Shell({
             value={view}
             onChange={(e) => onView((e.target as HTMLSelectElement).value as View)}
           >
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <option key={n.key} value={n.key}>
                 {n.label}
               </option>

@@ -8,7 +8,7 @@ export type ShipmentStatus =
   | 'desconocido'
 
 export type ServiceType = 'aereo' | 'maritimo' | null
-export type Role = 'admin' | 'staff' | 'viewer'
+export type Role = 'admin' | 'billing' | 'staff' | 'viewer'
 
 export interface Provider {
   id?: string
