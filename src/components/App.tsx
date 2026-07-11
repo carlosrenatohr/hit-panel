@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'preact/hooks'
 import { currentUser, signOut } from '../lib/insforge'
 import type { SessionUser } from '../lib/types'
+import Facturacion from './billing/Facturacion'
 import Login from './Login'
 import Overview from './Overview'
 import Reports from './Reports'
@@ -9,7 +10,7 @@ import ShipmentDetail from './ShipmentDetail'
 import Shipments from './Shipments'
 import { Spinner } from './ui'
 
-export type View = 'overview' | 'shipments' | 'reports'
+export type View = 'overview' | 'shipments' | 'reports' | 'facturacion'
 
 export default function App() {
   const [user, setUser] = useState<SessionUser | null>(null)
@@ -52,6 +53,7 @@ export default function App() {
       {view === 'overview' && <Overview onOpen={setDetail} onGoShipments={() => setView('shipments')} />}
       {view === 'shipments' && <Shipments onOpen={setDetail} />}
       {view === 'reports' && <Reports />}
+      {view === 'facturacion' && (user.role === 'admin' || user.role === 'staff') && <Facturacion role={user.role} />}
       {detail && (
         <ShipmentDetail guia={detail} role={user.role} onClose={() => setDetail(null)} />
       )}

@@ -30,4 +30,13 @@ body {
   body { background: white; }
   .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
   .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Single-invoice printing: when a .invoice-print block is present, isolate it —
+     hide the whole app and render only that block. The block is otherwise hidden
+     on screen (Tailwind `hidden print:block`). This is the seam a future custom
+     invoice format plugs into (swap the InvoicePrint component). */
+  body:has(.invoice-print) * { visibility: hidden !important; }
+  body:has(.invoice-print) .invoice-print,
+  body:has(.invoice-print) .invoice-print * { visibility: visible !important; }
+  body:has(.invoice-print) .invoice-print { position: absolute; left: 0; top: 0; width: 100%; }
 }

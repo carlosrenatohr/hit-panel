@@ -1,5 +1,6 @@
-import { Anchor, Check, CheckCircle2, Copy, Package, Plane, StickyNote, Tag, X } from 'lucide-preact'
+import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, StickyNote, Tag, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
+import InvoiceForm from './billing/InvoiceForm'
 import {
   cleanName,
   daysAgo,
@@ -39,6 +40,7 @@ export default function ShipmentDetail({
   const [tagLabel, setTagLabel] = useState('')
   const [tagValue, setTagValue] = useState('')
   const [noteBody, setNoteBody] = useState('')
+  const [showInvoice, setShowInvoice] = useState(false)
 
   const canWrite = role === 'admin' || role === 'staff'
 
@@ -126,10 +128,33 @@ export default function ShipmentDetail({
             )}
           </div>
           {d && <StatusPill s={d.pkg.effective_status as ShipmentStatus} class="shrink-0" />}
+          {canWrite && d && (
+            <IconButton label="Crear factura para este paquete" onClick={() => setShowInvoice(true)}>
+              <FileText class="h-4 w-4" aria-hidden="true" />
+            </IconButton>
+          )}
           <IconButton label="Cerrar" onClick={onClose}>
             <X class="h-4 w-4" aria-hidden="true" />
           </IconButton>
         </div>
+
+        {showInvoice && d && (
+          <InvoiceForm
+            prefill={{
+              clientName: cleanName(d.pkg.referencia_name) === '—' ? '' : cleanName(d.pkg.referencia_name),
+              lines: [
+                {
+                  freightType: d.pkg.service_type === 'maritimo' ? 'MAR' : 'AIR',
+                  tier: 'REGULAR',
+                  quantityLbs: d.pkg.weight_lb ?? 0,
+                },
+              ],
+              packageIds: [d.pkg.id],
+            }}
+            onClose={() => setShowInvoice(false)}
+            onCreated={() => setShowInvoice(false)}
+          />
+        )}
 
         {loading ? (
           <div class="p-6">

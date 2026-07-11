@@ -100,7 +100,13 @@ export function SectionTitle({ children, class: cls = '' }: { children: Componen
   )
 }
 
-type BtnProps = JSX.HTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' }
+// Preact's JSX.HTMLAttributes (now deprecated) doesn't surface `disabled`/`type` for
+// buttons, so declare them explicitly — otherwise every `<Button disabled>` fails typecheck.
+type BtnProps = JSX.HTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'ghost' | 'danger'
+  disabled?: boolean
+  type?: 'button' | 'submit' | 'reset'
+}
 export function Button({ variant = 'primary', class: cls = '', children, ...rest }: BtnProps) {
   const styles: Record<string, string> = {
     primary: 'bg-primary text-white shadow-sm hover:bg-primary-dark hover:shadow',
@@ -122,7 +128,7 @@ export function IconButton({
   class: cls = '',
   children,
   ...rest
-}: JSX.HTMLAttributes<HTMLButtonElement> & { label: string }) {
+}: JSX.HTMLAttributes<HTMLButtonElement> & { label: string; disabled?: boolean; type?: 'button' | 'submit' | 'reset' }) {
   return (
     <button
       aria-label={label}

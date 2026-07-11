@@ -91,7 +91,9 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 
   const { data, count, error } = await q
   if (error) throw error
-  return { rows: (data as Pkg[]) ?? [], count: count ?? 0 }
+  // PostgREST types the embedded `providers(...)` as an array; our Pkg models it as a single
+  // object. Narrow via unknown (the shape is correct at runtime — a to-one relation).
+  return { rows: (data as unknown as Pkg[]) ?? [], count: count ?? 0 }
 }
 
 export async function getPackageDetail(guia: string): Promise<PackageDetail | null> {
