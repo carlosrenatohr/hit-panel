@@ -20,6 +20,18 @@ export async function signOut(): Promise<void> {
   await insforge.auth.signOut()
 }
 
+/** Step 1 of self-service reset: emails a 6-digit code (InsForge `resetPasswordMethod: "code"`). */
+export async function sendPasswordReset(email: string): Promise<void> {
+  const { error } = await insforge.auth.sendResetPasswordEmail({ email })
+  if (error) throw error
+}
+
+/** Step 2: sets the new password using the code from the email. */
+export async function completePasswordReset(otp: string, newPassword: string): Promise<void> {
+  const { error } = await insforge.auth.resetPassword({ otp, newPassword })
+  if (error) throw error
+}
+
 /** Resolves the signed-in user + their staff role from app_users (RLS-gated). Null if not staff. */
 export async function currentUser(): Promise<SessionUser | null> {
   const { data, error } = await insforge.auth.getCurrentUser()

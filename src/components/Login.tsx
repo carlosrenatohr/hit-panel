@@ -1,6 +1,7 @@
 import { Eye, EyeOff } from 'lucide-preact'
 import { useState } from 'preact/hooks'
 import { signIn } from '../lib/insforge'
+import ForgotPassword from './ForgotPassword'
 import { Button, Field, inputCls } from './ui'
 
 export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
@@ -9,6 +10,23 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
   const [showPw, setShowPw] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [forgot, setForgot] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  if (forgot) {
+    return (
+      <ForgotPassword
+        email={email}
+        onDone={(e) => {
+          setEmail(e)
+          setForgot(false)
+          setErr(null)
+          setNotice('Contraseña actualizada. Iniciá sesión con la nueva.')
+        }}
+        onCancel={() => setForgot(false)}
+      />
+    )
+  }
 
   async function submit(e: Event) {
     e.preventDefault()
@@ -63,10 +81,22 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
               </button>
             </div>
           </Field>
+          {notice && <p class="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{notice}</p>}
           {err && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
           <Button type="submit" disabled={busy} class="w-full">
             {busy ? 'Entrando…' : 'Entrar'}
           </Button>
+          <button
+            type="button"
+            onClick={() => {
+              setErr(null)
+              setNotice(null)
+              setForgot(true)
+            }}
+            class="text-center text-sm text-gray-500 hover:text-secondary"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
         </div>
       </form>
       <p class="text-xs font-medium tracking-wide text-white/50">HIT CARGO · Envíos que conectan.</p>
