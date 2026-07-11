@@ -43,9 +43,13 @@ export default function App() {
   if (!user) return <Login onSignedIn={refresh} />
 
   async function logout() {
-    await signOut()
-    setUser(null)
-    setView('overview')
+    try {
+      await signOut()
+    } finally {
+      // Clear local state even if signOut() rejects, so a network hiccup can't leave the UI logged in.
+      setUser(null)
+      setView('overview')
+    }
   }
 
   return (

@@ -22,8 +22,8 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
   }
 
   return (
-    <div class="flex min-h-screen items-center justify-center bg-secondary px-4">
-      <form onSubmit={submit} class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
+    <div class="flex min-h-screen flex-col items-center justify-center gap-5 bg-gradient-to-br from-navy via-navy to-secondary px-4">
+      <form onSubmit={submit} class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl ring-1 ring-black/5">
         <div class="mb-6 text-center">
           <img src="/logo-full.png" alt="HIT Cargo" class="mx-auto mb-2 h-16 w-auto object-contain" />
           <p class="mt-1 text-sm text-gray-500">Panel interno del equipo</p>
@@ -56,6 +56,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
           </Button>
         </div>
       </form>
+      <p class="text-xs font-medium tracking-wide text-white/50">HIT CARGO · Envíos que conectan.</p>
     </div>
   )
 }

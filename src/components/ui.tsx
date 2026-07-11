@@ -100,13 +100,7 @@ export function SectionTitle({ children, class: cls = '' }: { children: Componen
   )
 }
 
-// Preact's JSX.HTMLAttributes (now deprecated) doesn't surface `disabled`/`type` for
-// buttons, so declare them explicitly — otherwise every `<Button disabled>` fails typecheck.
-type BtnProps = JSX.HTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'ghost' | 'danger'
-  disabled?: boolean
-  type?: 'button' | 'submit' | 'reset'
-}
+type BtnProps = JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' }
 export function Button({ variant = 'primary', class: cls = '', children, ...rest }: BtnProps) {
   const styles: Record<string, string> = {
     primary: 'bg-primary text-white shadow-sm hover:bg-primary-dark hover:shadow',
@@ -128,7 +122,7 @@ export function IconButton({
   class: cls = '',
   children,
   ...rest
-}: JSX.HTMLAttributes<HTMLButtonElement> & { label: string; disabled?: boolean; type?: 'button' | 'submit' | 'reset' }) {
+}: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
     <button
       aria-label={label}
@@ -173,7 +167,7 @@ export function DaysBadge({ days }: { days: number }) {
   return (
     <span
       title={`${days} días desde la recepción en Miami`}
-      class="inline-flex items-center gap-0.5 rounded-full bg-accent-blue/10 px-1.5 py-0.5 text-[11px] font-medium text-accent-blue"
+      class="inline-flex items-center gap-0.5 rounded-full bg-navy/10 px-1.5 py-0.5 text-[11px] font-medium text-navy"
     >
       <Clock class="h-3 w-3" aria-hidden="true" /> {days}d
     </span>

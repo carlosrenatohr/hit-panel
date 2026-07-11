@@ -10,12 +10,13 @@ const { title = 'HIT Cargo — Panel' } = Astro.props
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <title>{title}</title>
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/mark-32.png" />
     <link rel="apple-touch-icon" href="/mark-180.png" />
-    <!-- Same typeface as the marketing site (hit-cargo-web), same weight range. -->
+    <!-- Same typefaces as the marketing site (hit-cargo-web): Montserrat (impact) + Poppins (body). -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
   </head>
   <body>
     <slot />

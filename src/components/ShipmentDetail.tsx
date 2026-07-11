@@ -190,9 +190,9 @@ export default function ShipmentDetail({
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   {d.pkg.service_type === 'maritimo' ? (
-                    <Anchor class="h-4 w-4 text-accent-blue" aria-hidden="true" />
+                    <Anchor class="h-4 w-4 text-navy" aria-hidden="true" />
                   ) : (
-                    <Plane class="h-4 w-4 text-accent-blue" aria-hidden="true" />
+                    <Plane class="h-4 w-4 text-primary" aria-hidden="true" />
                   )}
                   {d.pkg.service_type === 'maritimo' ? 'Marítimo' : 'Aéreo'} {officeFlag(d.pkg.origin_office)}
                 </span>
@@ -296,7 +296,7 @@ export default function ShipmentDetail({
               <div class="mb-3 flex flex-wrap gap-2">
                 {d.tags.length === 0 && <span class="text-sm text-gray-400">Sin etiquetas.</span>}
                 {d.tags.map((t) => (
-                  <span key={t.id} class="rounded-full bg-accent-blue/10 px-2.5 py-1 text-xs font-medium text-accent-blue">
+                  <span key={t.id} class="rounded-full bg-navy/10 px-2.5 py-1 text-xs font-medium text-navy">
                     {t.label}
                     {t.value ? `: ${t.value}` : ''}
                   </span>

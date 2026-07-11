@@ -1,6 +1,6 @@
 import { CheckCircle2, ChevronRight, Package, Radio } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
-import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
+import { fmtDateTime, providerLabel, STATUS_ORDER } from '../lib/format'
 import { getProviders, getStats } from '../lib/insforge'
 import type { Provider, ShipmentStatus, Stats } from '../lib/types'
 import { Button, Card, SectionTitle, Spinner, StatusDot } from './ui'

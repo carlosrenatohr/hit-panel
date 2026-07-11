@@ -11,9 +11,14 @@ body {
   margin: 0;
   background: #f8f9fa; /* neutral-bg, same token as the site */
   color: #1f2430;
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: Poppins, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-feature-settings: 'tnum' 1; /* tabular figures — stat numbers don't jitter */
   -webkit-font-smoothing: antialiased;
+}
+
+/* Brand book §04: strong hierarchy is built with Montserrat weights. */
+h1, h2, h3, h4, h5, h6 {
+  font-family: Montserrat, system-ui, sans-serif;
 }
 
 * {
