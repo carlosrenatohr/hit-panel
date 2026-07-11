@@ -141,16 +141,26 @@ interface ApiEnvelope<T> {
   error?: { code: string; message: string }
 }
 
-// The SDK keeps the live access token in its TokenManager. The browser-auth TS
-// surface doesn't publicly type the getter, so read it through a minimal interface
-// (tolerant of getAccessToken vs getSession across SDK versions).
+// The SDK keeps the live access token in the client's (private) TokenManager —
+// `insforge.tokenManager.getAccessToken()`. `.auth` does NOT expose it publicly, so
+// read it through a minimal interface (private at the type level, present at runtime).
+// TokenManager is the shared instance the SDK updates on refresh, so this stays live.
 interface TokenSource {
   getAccessToken?: () => string | null
   getSession?: () => { accessToken?: string | null } | null
 }
+interface ClientWithToken {
+  tokenManager?: TokenSource
+  auth?: TokenSource
+}
 function accessToken(): string | null {
-  const a = insforge.auth as unknown as TokenSource
-  return a.getAccessToken?.() ?? a.getSession?.()?.accessToken ?? null
+  const c = insforge as unknown as ClientWithToken
+  return (
+    c.tokenManager?.getAccessToken?.() ??
+    c.auth?.getAccessToken?.() ??
+    c.auth?.getSession?.()?.accessToken ??
+    null
+  )
 }
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
