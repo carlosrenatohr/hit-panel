@@ -47,15 +47,16 @@ export const STATUS_HEX: Record<ShipmentStatus, string> = {
 
 // Brand tokens as hex, for chart series (mirrors tailwind.config.js colors.*).
 export const BRAND_HEX = {
-  primary: '#FF3B3F',
-  primaryDark: '#D92E31',
+  primary: '#FF7A00',
+  primaryDark: '#E56E00',
   secondary: '#111111',
+  navy: '#14213D',
   accentYellow: '#FFD700',
   accentBlue: '#00A8E8',
 }
 export const PROVIDER_HEX: Record<string, string> = {
   everest: BRAND_HEX.primary,
-  global_connection: BRAND_HEX.accentBlue,
+  global_connection: BRAND_HEX.navy,
 }
 
 export const STATUS_ORDER: ShipmentStatus[] = [
