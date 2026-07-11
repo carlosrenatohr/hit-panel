@@ -1,5 +1,6 @@
-import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-preact'
-import { useEffect, useState } from 'preact/hooks'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, Search } from 'lucide-preact'
+import { useCallback, useEffect, useState } from 'preact/hooks'
+import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import {
   cleanName,
   daysAgo,
@@ -69,6 +70,15 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [showCal, setShowCal] = useState(false)
+
+  // Calendar: packages received per day in the selected month (received_at).
+  const loadRecvMonth = useCallback(async (y: number, m: number): Promise<CalendarEvent[]> => {
+    const mm = String(m).padStart(2, '0')
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    const { rows } = await listPackages({ from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}`, pageSize: 500 })
+    return rows.filter((p) => p.received_at).map((p) => ({ date: p.received_at as string, kind: 'recibido' }))
+  }, [])
 
   useEffect(() => {
     getProviders().then(setProviders).catch(() => {})
@@ -152,12 +162,24 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
           <span class="hidden md:inline-flex">
             <ColumnPicker prefs={colPrefs} />
           </span>
+          <Button variant="ghost" onClick={() => setShowCal((v) => !v)}>
+            <CalendarDays class="h-4 w-4" aria-hidden="true" />
+            {showCal ? 'Ocultar calendario' : 'Calendario'}
+          </Button>
           <Button variant="ghost" onClick={doExport} disabled={exporting}>
             <Download class="h-4 w-4" aria-hidden="true" />
             {exporting ? 'Exportando…' : 'Exportar CSV'}
           </Button>
         </div>
       </div>
+
+      {showCal && (
+        <MonthCalendar
+          title="Recepción en Miami por día"
+          legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
+          loadEvents={loadRecvMonth}
+        />
+      )}
 
       {/* Filters */}
       <Card class="p-4">

@@ -10,6 +10,7 @@ import {
 } from '../../lib/billing'
 import { FREIGHT_LABEL, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { Button, Card, Field, inputCls, Spinner } from '../ui'
+import { InvoiceDaysBadge } from './badges'
 import InvoicePrint from './InvoicePrint'
 
 function StatusPill({ s }: { s: string }) {
@@ -139,7 +140,11 @@ export default function InvoiceDetail({
               {/* Summary */}
               <Card class="p-4">
                 <div class="mb-2 text-sm font-medium text-gray-700">{inv.clientName ?? '—'}</div>
-                <div class="text-xs text-gray-500">{fmtDate(inv.issueDate)} · año fiscal {inv.fiscalYear}</div>
+                <div class="flex items-center gap-1.5 text-xs text-gray-500">
+                  {fmtDate(inv.issueDate)} · año fiscal {inv.fiscalYear}
+                  <InvoiceDaysBadge issueDate={inv.issueDate} paidAt={inv.paidAt} status={inv.status} />
+                </div>
+                {inv.status === 'PAID' && inv.paidAt && <div class="text-[11px] text-gray-400">Pagada el {fmtDate(inv.paidAt)}</div>}
                 <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
                   <div><span class="text-gray-400">Total</span><div class="text-lg font-bold text-secondary">{fmtUsd(inv.total)}</div></div>
                   <div><span class="text-gray-400">Ganancia</span><div class="font-semibold text-green-700">{fmtUsd(inv.profit)}{inv.margin != null && <span class="ml-1 text-xs text-gray-400">({Math.round(inv.margin * 100)}%)</span>}</div></div>

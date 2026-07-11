@@ -4,6 +4,7 @@ import { billingApi, type FreightType, type InvoiceFilters, type InvoiceListRow,
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
 import { Button, Card, inputCls, SectionTitle, Spinner } from '../ui'
+import { InvoiceDaysBadge } from './badges'
 import BillingReports from './BillingReports'
 import ExceptionsView from './Exceptions'
 import InvoiceDetail from './InvoiceDetail'
@@ -222,7 +223,9 @@ export default function Facturacion({ role }: { role: Role }) {
                   <tr key={r.id} class="cursor-pointer border-b border-gray-50 hover:bg-gray-50" onClick={() => setDetailId(r.id)}>
                     <td class="px-4 py-2 font-medium text-secondary">#{r.invoiceNumber}<span class="ml-1 text-[11px] text-gray-400">{r.fiscalYear}</span></td>
                     <td class="px-4 py-2">{r.clientName ?? '—'}</td>
-                    <td class="px-4 py-2 text-gray-500">{fmtDate(r.issueDate)}</td>
+                    <td class="px-4 py-2 text-gray-500">
+                      <span class="flex items-center gap-1.5">{fmtDate(r.issueDate)}<InvoiceDaysBadge issueDate={r.issueDate} paidAt={r.paidAt} status={r.status} /></span>
+                    </td>
                     <td class="px-4 py-2"><span class={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${INVOICE_STATUS_SOFT[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{INVOICE_STATUS_LABEL[r.status] ?? r.status}</span></td>
                     <td class="px-4 py-2 text-right font-medium">{fmtUsd(r.total)}</td>
                     <td class="px-4 py-2 text-right">{r.outstanding > 0 ? <span class="text-yellow-700">{fmtUsd(r.outstanding)}</span> : <span class="text-gray-300">—</span>}</td>
