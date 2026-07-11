@@ -80,7 +80,13 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   if (f.status) q = q.eq('effective_status', f.status)
   if (f.service) q = q.eq('service_type', f.service)
   if (f.from) q = q.gte('received_at', f.from)
-  if (f.to) q = q.lte('received_at', f.to)
+  // `to` is a date-only string; received_at is timestamptz. `lte('2026-07-10')` compares against
+  // midnight and drops everything received later that day. Use `< next day` to include the whole day.
+  if (f.to) {
+    const next = new Date(f.to + 'T00:00:00Z')
+    next.setUTCDate(next.getUTCDate() + 1)
+    q = q.lt('received_at', next.toISOString().slice(0, 10))
+  }
 
   const sortCol = f.sortCol ?? 'status_rank'
   q = q.order(sortCol, { ascending: f.ascending ?? false })
@@ -91,7 +97,9 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 
   const { data, count, error } = await q
   if (error) throw error
-  return { rows: (data as Pkg[]) ?? [], count: count ?? 0 }
+  // The SDK infers the to-one `providers(...)` embed as an array and LIST_COLS omits heavy Pkg
+  // fields, so the shapes don't overlap for a direct cast — go through `unknown` (compiler's advice).
+  return { rows: (data as unknown as Pkg[]) ?? [], count: count ?? 0 }
 }
 
 export async function getPackageDetail(guia: string): Promise<PackageDetail | null> {
