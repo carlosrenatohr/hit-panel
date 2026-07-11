@@ -84,6 +84,28 @@ export interface MonthlyClose {
   receivables: number
   byFreight: Record<FreightType, { revenue: number; profit: number; lbs: number }>
 }
+export interface YearReport {
+  year: number
+  invoices: number
+  revenue: number
+  profit: number
+  receivables: number
+  byMonth: Array<{ month: number; revenue: number; profit: number; invoices: number }>
+  byFreight: Record<FreightType, { revenue: number; profit: number; lbs: number }>
+}
+export interface ExceptionRow {
+  invoiceId: string
+  invoiceNumber: number
+  fiscalYear: number
+  client: string | null
+  detail: string
+}
+export interface Exceptions {
+  offCatalog: ExceptionRow[]
+  quarantinedPayments: ExceptionRow[]
+  orphanInvoices: ExceptionRow[]
+  clientsToReview: { id: string; name: string }[]
+}
 
 export interface InvoiceFilters {
   status?: InvoiceStatus
@@ -175,4 +197,6 @@ export const billingApi = {
   unlinkPackage: (id: string, packageId: string) =>
     api<InvoiceView>(`/invoices/${id}/packages/${packageId}`, { method: 'DELETE' }),
   closeMonth: (year: number, month: number) => api<MonthlyClose>(`/close-month${qs({ year, month })}`),
+  reports: (year: number) => api<YearReport>(`/reports${qs({ year })}`),
+  exceptions: () => api<Exceptions>('/exceptions'),
 }

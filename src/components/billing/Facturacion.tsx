@@ -4,8 +4,17 @@ import { billingApi, type FreightType, type InvoiceFilters, type InvoiceListRow,
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
 import { Button, Card, inputCls, SectionTitle, Spinner } from '../ui'
+import BillingReports from './BillingReports'
+import ExceptionsView from './Exceptions'
 import InvoiceDetail from './InvoiceDetail'
 import InvoiceForm from './InvoiceForm'
+
+type Tab = 'facturas' | 'reportes' | 'excepciones'
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'facturas', label: 'Facturas' },
+  { key: 'reportes', label: 'Reportes' },
+  { key: 'excepciones', label: 'Excepciones' },
+]
 
 const PAGE_SIZE = 25
 
@@ -25,6 +34,7 @@ function pageWindow(current: number, total: number): (number | '…')[] {
 
 export default function Facturacion({ role }: { role: Role }) {
   const canWrite = role === 'admin' || role === 'staff'
+  const [tab, setTab] = useState<Tab>('facturas')
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<InvoiceFilters>({})
   const [page, setPage] = useState(1)
@@ -117,6 +127,23 @@ export default function Facturacion({ role }: { role: Role }) {
         </div>
       </div>
 
+      <div class="flex gap-1 border-b border-gray-200">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            class={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${tab === t.key ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'reportes' && <BillingReports />}
+      {tab === 'excepciones' && <ExceptionsView onOpen={setDetailId} />}
+
+      {tab === 'facturas' && (
+        <div class="space-y-4">
       {/* Filters */}
       <Card class="p-3">
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -217,6 +244,8 @@ export default function Facturacion({ role }: { role: Role }) {
           </div>
         )}
       </Card>
+        </div>
+      )}
 
       {showForm && (
         <InvoiceForm
