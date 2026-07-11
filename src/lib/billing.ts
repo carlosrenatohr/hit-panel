@@ -37,6 +37,7 @@ export interface InvoiceListRow {
   fiscalYear: number
   clientName: string | null
   issueDate: string | null
+  paidAt: string | null
   status: InvoiceStatus
   total: number
   profit: number

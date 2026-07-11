@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useCallback, useEffect, useState } from 'preact/hooks'
 import { billingApi, type YearReport } from '../../lib/billing'
 import { BRAND_HEX, fmtUsd } from '../../lib/format'
 import ChartCanvas from '../charts/ChartCanvas'
+import MonthCalendar, { type CalendarEvent } from '../MonthCalendar'
 import { Card, SectionTitle, Spinner } from '../ui'
+
+function monthRange(y: number, m: number): { from: string; to: string } {
+  const mm = String(m).padStart(2, '0')
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}` }
+}
 
 const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -20,6 +27,17 @@ export default function BillingReports() {
   const [rep, setRep] = useState<YearReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+
+  const loadBillingMonth = useCallback(async (y: number, m: number): Promise<CalendarEvent[]> => {
+    const { from, to } = monthRange(y, m)
+    const { rows } = await billingApi.listInvoices({ from, to, pageSize: 500 })
+    const ev: CalendarEvent[] = []
+    for (const r of rows) {
+      if (r.issueDate) ev.push({ date: r.issueDate, kind: 'facturado' })
+      if (r.status === 'PAID' && r.paidAt) ev.push({ date: r.paidAt, kind: 'pagado' })
+    }
+    return ev
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -94,6 +112,15 @@ export default function BillingReports() {
           </Card>
         </>
       )}
+
+      <MonthCalendar
+        title="Calendario de facturación"
+        legend={[
+          { kind: 'facturado', label: 'Facturado', dot: 'bg-primary' },
+          { kind: 'pagado', label: 'Pagado', dot: 'bg-green-500' },
+        ]}
+        loadEvents={loadBillingMonth}
+      />
     </div>
   )
 }
