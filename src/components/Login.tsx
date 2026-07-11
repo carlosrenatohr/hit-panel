@@ -25,8 +25,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div class="flex min-h-screen items-center justify-center bg-secondary px-4">
       <form onSubmit={submit} class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
         <div class="mb-6 text-center">
-          <img src="/logo-mark.png" alt="HIT Cargo" class="mx-auto mb-3 h-14 w-14 object-contain" />
-          <h1 class="text-xl font-bold tracking-tight text-secondary">HIT Cargo</h1>
+          <img src="/logo-full.png" alt="HIT Cargo" class="mx-auto mb-2 h-16 w-auto object-contain" />
           <p class="mt-1 text-sm text-gray-500">Panel interno del equipo</p>
         </div>
         <div class="flex flex-col gap-4">
