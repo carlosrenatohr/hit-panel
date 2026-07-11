@@ -167,7 +167,7 @@ export function DaysBadge({ days }: { days: number }) {
   return (
     <span
       title={`${days} días desde la recepción en Miami`}
-      class="inline-flex items-center gap-0.5 rounded-full bg-accent-blue/10 px-1.5 py-0.5 text-[11px] font-medium text-accent-blue"
+      class="inline-flex items-center gap-0.5 rounded-full bg-navy/10 px-1.5 py-0.5 text-[11px] font-medium text-navy"
     >
       <Clock class="h-3 w-3" aria-hidden="true" /> {days}d
     </span>

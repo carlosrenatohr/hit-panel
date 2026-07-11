@@ -161,8 +161,8 @@ export default function Reports() {
 
   const serviceChart: ChartConfiguration = useMemo(() => {
     const entries = [
-      ['aereo', agg.service.aereo, BRAND_HEX.accentBlue],
-      ['maritimo', agg.service.maritimo, BRAND_HEX.accentYellow],
+      ['aereo', agg.service.aereo, BRAND_HEX.primary],
+      ['maritimo', agg.service.maritimo, BRAND_HEX.navy],
     ].filter(([, n]) => (n as number) > 0) as [string, number, string][]
     return {
       type: 'doughnut',
@@ -188,8 +188,8 @@ export default function Reports() {
           {
             label: 'Paquetes recibidos',
             data: months.map((m) => agg.byMonth[m]),
-            borderColor: BRAND_HEX.accentBlue,
-            backgroundColor: `${BRAND_HEX.accentBlue}22`,
+            borderColor: BRAND_HEX.primary,
+            backgroundColor: `${BRAND_HEX.primary}22`,
             fill: true,
             tension: 0.3,
             pointRadius: 3,

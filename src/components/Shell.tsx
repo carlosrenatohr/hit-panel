@@ -25,7 +25,7 @@ export default function Shell({
   return (
     <div class="flex min-h-screen bg-neutral-bg text-gray-800">
       {/* Sidebar */}
-      <aside class="hidden w-60 shrink-0 flex-col bg-secondary px-4 py-5 text-white md:flex print:hidden">
+      <aside class="hidden w-60 shrink-0 flex-col bg-navy px-4 py-5 text-white md:flex print:hidden">
         <div class="mb-8 flex items-center gap-2.5 px-2">
           <img src="/logo-mark.png" alt="HIT Cargo" class="h-9 w-9 object-contain" />
           <div>
@@ -43,7 +43,7 @@ export default function Shell({
                 onClick={() => onView(n.key)}
                 aria-current={active ? 'page' : undefined}
                 class={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
-                  active ? 'bg-primary text-white' : 'text-gray-300 hover:bg-secondary-light hover:text-white'
+                  active ? 'bg-primary text-white' : 'text-gray-300 hover:bg-navy-light hover:text-white'
                 }`}
               >
                 <Icon class="h-4 w-4" aria-hidden="true" />
@@ -57,7 +57,7 @@ export default function Shell({
           <div class="px-2 text-[11px] font-medium uppercase tracking-wide text-primary">{user.role}</div>
           <button
             onClick={onLogout}
-            class="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-secondary-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            class="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-navy-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           >
             <LogOut class="h-4 w-4" aria-hidden="true" />
             Salir
