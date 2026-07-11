@@ -1,7 +1,7 @@
 import type { ChartConfiguration } from 'chart.js'
 import { Download, Printer, Search, TrendingDown, TrendingUp } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
-import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
 import {
   BRAND_HEX,
   downloadCSV,
@@ -18,6 +18,7 @@ import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
+import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import { DateRangePicker } from './DateRangePicker'
 import { Button, Card, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
@@ -250,6 +251,14 @@ export default function Reports() {
     .filter(Boolean)
     .join(' · ')
 
+  // Monthly reception calendar (received_at per day) — independent of the filters above.
+  const loadRecvMonth = useCallback(async (y: number, m: number): Promise<CalendarEvent[]> => {
+    const mm = String(m).padStart(2, '0')
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    const { rows: pkgs } = await listPackages({ from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}`, pageSize: 500 })
+    return pkgs.filter((p) => p.received_at).map((p) => ({ date: p.received_at as string, kind: 'recibido' }))
+  }, [])
+
   return (
     <div class="mx-auto max-w-6xl space-y-5">
       {/* Screen header + filters (hidden when printing) */}
@@ -434,6 +443,14 @@ export default function Reports() {
           </div>
         </>
       )}
+
+      <div class="print:hidden">
+        <MonthCalendar
+          title="Recepción en Miami por día"
+          legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
+          loadEvents={loadRecvMonth}
+        />
+      </div>
     </div>
   )
 }
