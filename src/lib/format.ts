@@ -139,7 +139,10 @@ export function daysAgo(s?: string | null): number | null {
 
 export function toCSV(rows: Record<string, unknown>[], cols: { key: string; label: string }[]): string {
   const esc = (v: unknown) => {
-    const s = v == null ? '' : String(v)
+    let s = v == null ? '' : String(v)
+    // Formula-injection guard: Excel/Sheets execute cells starting with = + - @ tab or CR.
+    // Scraped Cargotrack text (names, offices) reaches these exports, so neutralize the trigger.
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
   }
   const head = cols.map((c) => esc(c.label)).join(',')
