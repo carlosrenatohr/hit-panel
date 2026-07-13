@@ -54,13 +54,3 @@ pnpm exec wrangler pages deploy dist --project-name hit-panel --branch main
 ```
 
 Because the panel is static, the URL and the anon key are compiled into the bundle — if they change, you rebuild before redeploying; updating `.env` alone isn't enough.
-
----
-
-## Documentation
-
-Details live in [`docs/`](docs/README.md), numbered so you don't have to hunt: architecture, auth and roles, the data model with its RLS policies, per-section usage guide, and deployment.
-
----
-
-*Code and comments in English; user-facing copy in Spanish.*
