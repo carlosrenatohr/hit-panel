@@ -1,4 +1,4 @@
-import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch } from 'lucide-preact'
+import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch, Users } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import type { Role, SessionUser } from '../lib/types'
 import type { View } from './App'
@@ -10,6 +10,7 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
   { key: 'shipments', label: 'Envíos', icon: PackageSearch },
   { key: 'reports', label: 'Reportes', icon: BarChart3 },
   { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'billing', 'staff'] },
+  { key: 'customers', label: 'Clientes', icon: Users, roles: ['admin', 'billing', 'staff'] },
 ]
 
 export default function Shell({
