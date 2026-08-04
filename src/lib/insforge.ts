@@ -160,7 +160,33 @@ export async function addNote(guia: string, body: string): Promise<void> {
 }
 
 /** Fetches up to `cap` rows matching the current filters for CSV export (no pagination). */
-export async function exportPackages(f: ListFilters, cap = 1000): Promise<Pkg[]> {
+export async function exportPackages(f: ListFilters, cap = 2000): Promise<Pkg[]> {
   const { rows } = await listPackages({ ...f, page: 1, pageSize: cap })
   return rows
+}
+
+// ── Server-side aggregation (avoids 5000-row truncation in Reports) ──
+export interface ReportsAgg {
+  total: number
+  by_status: Record<string, number>
+  by_provider: Record<string, number>
+  by_service: Record<string, number>
+  received_by_month: Record<string, number>
+}
+
+export async function reportsAggregate(f: ListFilters): Promise<ReportsAgg> {
+  const {
+    providerId, status, service, search, from, to,
+  } = f
+  const providerIdNum = providerId ? Number(providerId) : null
+  const { data, error } = await insforge.database.rpc('reports_aggregate', {
+    p_provider_id: providerIdNum,
+    p_status: status ?? null,
+    p_service: service ?? null,
+    p_search: search ?? null,
+    p_from: from ?? null,
+    p_to: to ?? null,
+  })
+  if (error) throw error
+  return (data as ReportsAgg) ?? { total: 0, by_status: {}, by_provider: {}, by_service: {}, received_by_month: {} }
 }
