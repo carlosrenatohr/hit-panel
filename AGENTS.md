@@ -1,23 +1,16 @@
-# CLAUDE.md — Hit Cargo Panel
+# AGENTS.md — Hit Cargo Panel
 
 This sub-repo (`hit-panel`) is one of five in the workspace. The canonical AGENTS.md lives at the workspace root (`/hit/AGENTS.md`) and covers cross-repo architecture, coding standards, CI/deploy, security, and agent workflow.
 
+## Codebase Memory (knowledge graph)
+
+This project is indexed in Codebase Memory. **Preferir MCP tools sobre grep/glob/read:**
+
+1. `search_graph` — encontrar funciones/clases/routes/variables por patrón
+2. `trace_path` — ver quién llama una función antes de tocarla (impact analysis)
+3. `get_code_snippet` — leer código de un símbolo exacto (no archivos enteros)
+4. `detect_changes` — antes de refactor, cuantificar blast radius
+
+**Nunca leer un archivo entero si no es el que estás editando.** Para strings literales usar grep con `include` filter.
+
 This file only adds repo-specific context for working on the panel.
-
-## Key standards (mirror of workspace AGENTS.md)
-
-- **Agent workflow:** use Codebase Memory (`search_graph`, `trace_path`) before `grep`/`read`; `read` only the file you edit; verify with `pnpm check` (astro typecheck); never merge without green gate + 1 review.
-- **Astro 6 + Preact**; 100% client-only (`client:only`); serves as static site on Cloudflare Pages.
-- **No backend propio.** Reads/writes go through InsForge direct:
-  - **Lectura:** `@insforge/sdk` con el JWT del usuario (RLS decide).
-  - **Escritura:** **siempre y obligatoriamente por RPC** `SECURITY DEFINER` — `set_manual_status`, `add_package_tag`, `add_package_note`, `dashboard_stats`. Nunca `UPDATE`/`INSERT` directo.
-- **Env vars** (`PUBLIC_*`) se hornean en el bundle → rebuild + redeploy si cambian.
-- **Anon key** es pública (identifica el proyecto, no autoriza). Autorización real = **JWT del usuario + RLS**.
-
-### Local dev
-```bash
-pnpm install
-cp .env.example .env    # PUBLIC_INSFORGE_URL + PUBLIC_INSFORGE_ANON_KEY
-pnpm dev                # localhost:4321
-pnpm check              # astro typecheck (current gate)
-```
