@@ -3,12 +3,14 @@
   "type": "module",
   "version": "0.2.1",
   "private": true,
+  "packageManager": "pnpm@10.32.1",
   "description": "HIT Cargo internal admin panel (shipments ops dashboard)",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check"
+    "check": "astro check",
+    "test": "echo 'No tests yet — see docs/backlog.md #37' && exit 0"
   },
   "dependencies": {
     "@astrojs/preact": "^5.1.2",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
+    "lefthook": "^1.13.6",
     "typescript": "^5.6.3"
   }
 }
