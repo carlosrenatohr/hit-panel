@@ -1,4 +1,4 @@
-import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, StickyNote, Tag, X } from 'lucide-preact'
+import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, RefreshCw, StickyNote, Tag, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import InvoiceForm from './billing/InvoiceForm'
 import {
@@ -16,6 +16,7 @@ import {
   statusLabel,
 } from '../lib/format'
 import { addNote, addTag, getPackageDetail, setManualStatus } from '../lib/insforge'
+import { refreshCooldownUntil, refreshPackage } from '../lib/refresh'
 import type { PackageDetail, Role, ShipmentStatus } from '../lib/types'
 import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
 
@@ -34,6 +35,9 @@ export default function ShipmentDetail({
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [photoOpen, setPhotoOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [cooldownUntil, setCooldownUntil] = useState(() => refreshCooldownUntil(guia))
+  const [now, setNow] = useState(() => Date.now())
 
   const [newStatus, setNewStatus] = useState('')
   const [statusNote, setStatusNote] = useState('')
@@ -44,6 +48,7 @@ export default function ShipmentDetail({
 
   const canWrite = role === 'admin' || role === 'staff'
   const canBill = role === 'admin' || role === 'billing'
+  const canRefresh = role === 'admin'
 
   async function load() {
     setLoading(true)
@@ -82,6 +87,42 @@ export default function ShipmentDetail({
       setErr((e as Error)?.message ?? 'La acción falló.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  // Countdown while a guia is on the server-side refresh cooldown (5 min).
+  useEffect(() => {
+    if (cooldownUntil <= Date.now()) return
+    const t = setInterval(() => {
+      setNow(Date.now())
+      if (Date.now() >= cooldownUntil) {
+        setCooldownUntil(0)
+        clearInterval(t)
+      }
+    }, 1000)
+    return () => clearInterval(t)
+  }, [cooldownUntil])
+
+  const cooldownLeft = Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
+  const cooldownLabel = cooldownLeft > 60 ? `${Math.ceil(cooldownLeft / 60)} min` : `${cooldownLeft} s`
+
+  async function runRefresh() {
+    if (busy || refreshing || cooldownLeft > 0) return
+    setRefreshing(true)
+    setErr(null)
+    try {
+      const out = await refreshPackage(guia)
+      if (!out.ok) {
+        setErr(out.message ?? 'El re-scrape falló.')
+      } else {
+        await load()
+      }
+      setCooldownUntil(refreshCooldownUntil(guia))
+      setNow(Date.now())
+    } catch {
+      setErr('El re-scrape falló.')
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -349,6 +390,29 @@ export default function ShipmentDetail({
               <section class="rounded-xl border-l-4 border-primary bg-white p-4 shadow-sm">
                 <h3 class="mb-3 text-sm font-semibold text-secondary">Acciones</h3>
                 <div class="space-y-4">
+                  {canRefresh && (
+                    <div>
+                      <div class="mb-1 text-xs font-medium text-gray-500">Datos de Cargotrack</div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          disabled={busy || refreshing || cooldownLeft > 0}
+                          onClick={runRefresh}
+                        >
+                          <RefreshCw class={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                          {refreshing
+                            ? 'Actualizando…'
+                            : cooldownLeft > 0
+                              ? `Refrescar en ${cooldownLabel}`
+                              : 'Refrescar ahora'}
+                        </Button>
+                        <span class="text-xs text-gray-400">
+                          Re-scrapea el paquete en Cargotrack (máx. 1 vez cada 5 min)
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <div class="mb-1 text-xs font-medium text-gray-500">Cambiar estado (override manual)</div>
                     <div class="flex flex-wrap gap-2">

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/preact';
+import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import ShipmentDetail from './ShipmentDetail';
 
 const mockDetail = vi.hoisted(() => ({
@@ -49,10 +49,18 @@ const mockDetail = vi.hoisted(() => ({
 }));
 
 vi.mock('../lib/insforge', () => ({
+  insforge: {},
   getPackageDetail: vi.fn().mockResolvedValue(mockDetail),
   setManualStatus: vi.fn().mockResolvedValue(undefined),
   addTag: vi.fn().mockResolvedValue(undefined),
   addNote: vi.fn().mockResolvedValue(undefined),
+}));
+
+const refreshPackage = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true, provider: 'everest' }));
+
+vi.mock('../lib/refresh', () => ({
+  refreshPackage,
+  refreshCooldownUntil: vi.fn().mockReturnValue(0),
 }));
 
 describe('ShipmentDetail', () => {
@@ -79,5 +87,27 @@ describe('ShipmentDetail', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Everest').length).toBeGreaterThan(0);
     });
+  });
+
+  it('refreshes the package when admin clicks "Refrescar ahora"', async () => {
+    render(<ShipmentDetail guia="910500" role="admin" onClose={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
+    });
+
+    await fireEvent.click(screen.getByText('Refrescar ahora'));
+
+    await waitFor(() => {
+      expect(refreshPackage).toHaveBeenCalledWith('910500');
+    });
+  });
+
+  it('hides the refresh button for non-admin roles', async () => {
+    render(<ShipmentDetail guia="910500" role="staff" onClose={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
+    });
+
+    expect(screen.queryByText('Refrescar ahora')).toBeNull();
   });
 });
