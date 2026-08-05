@@ -63,7 +63,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
     .filter((d): d is (typeof COLUMN_DEFS)[number] => !!d)
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
-  const [filters, setFilters] = useState<ListFilters>({ sortCol: 'status_rank', ascending: true })
+  const [filters, setFilters] = useState<ListFilters>({ sortCol: 'status_rank', ascending: true, search: '' })
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<Pkg[]>([])
   const [count, setCount] = useState(0)
@@ -84,11 +84,14 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
     getProviders().then(setProviders).catch(() => {})
   }, [])
 
-  // Debounce the search box into the applied filters.
+  // Debounce the search box into the applied filters. The setters are idempotent: when the applied
+  // value already matches the input (e.g. on the first mount with an empty search), the same
+  // filters/page objects are returned, the effect that calls listPackages() does NOT re-fire, and
+  // we avoid a second request 350 ms after mount that produced a visible loading flicker.
   useEffect(() => {
     const t = setTimeout(() => {
-      setFilters((f) => ({ ...f, search: searchInput }))
-      setPage(1)
+      setFilters((f) => (f.search === searchInput ? f : { ...f, search: searchInput }))
+      setPage((p) => (p === 1 ? p : 1))
     }, 350)
     return () => clearTimeout(t)
   }, [searchInput])
