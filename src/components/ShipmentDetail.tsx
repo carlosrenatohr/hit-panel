@@ -198,7 +198,18 @@ export default function ShipmentDetail({
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   <Package class="h-4 w-4 text-gray-400" aria-hidden="true" />
-                  {d.pkg.pieces ?? '—'} pzs{d.pkg.weight_lb ? ` · ${d.pkg.weight_lb} lb` : ''}
+                  {d.pkg.pieces ?? '—'} pzs
+                  <span class="text-gray-300" aria-hidden="true">·</span>
+                  {d.pkg.weight_lb != null ? (
+                    <span class="font-medium tabular-nums text-gray-800">{d.pkg.weight_lb} lb</span>
+                  ) : (
+                    <span
+                      class="italic text-gray-400"
+                      title="Cargotrack no devolvió peso para este paquete"
+                    >
+                      peso sin dato
+                    </span>
+                  )}
                 </span>
                 <span class="text-gray-500">{providerLabel(d.pkg.providers?.code)}</span>
               </div>
@@ -323,6 +334,7 @@ export default function ShipmentDetail({
                 <Fact k="Remitente" v={d.pkg.remitente} />
                 <Fact k="Valor declarado" v={d.pkg.declared_value} />
                 <Fact k="Dimensiones" v={d.pkg.dimensions} />
+                <Fact k="Peso (lb)" v={d.pkg.weight_lb ?? 'Sin dato'} />
                 <Fact k="Volumen (cf)" v={d.pkg.volume_cf} />
                 <Fact k="Origen" v={d.pkg.origin_office} />
                 <Fact k="Destino" v={d.pkg.dest_office} />
