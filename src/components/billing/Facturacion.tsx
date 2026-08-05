@@ -1,9 +1,9 @@
-import { CalendarClock, Download, FileText, Plus, Search } from 'lucide-preact'
+import { CalendarClock, Download, FileText, Plus, RefreshCw, Search } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { billingApi, type FreightType, type InvoiceFilters, type InvoiceListRow, type InvoiceStatus, type MonthlyClose } from '../../lib/billing'
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
-import { Button, Card, inputCls, SectionTitle, Spinner } from '../ui'
+import { Button, Card, IconButton, inputCls, SectionTitle, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import BillingReports from './BillingReports'
 import ExceptionsView from './Exceptions'
@@ -123,6 +123,9 @@ export default function Facturacion({ role }: { role: Role }) {
       <div class="flex items-center justify-between">
         <h1 class="text-lg font-bold text-secondary">Facturación</h1>
         <div class="flex gap-2">
+          <IconButton label="Actualizar" onClick={reload} disabled={loading}>
+            <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </IconButton>
           <Button variant="ghost" onClick={doExport}><Download class="h-4 w-4" /> CSV</Button>
           {canWrite && <Button onClick={() => setShowForm(true)}><Plus class="h-4 w-4" /> Nueva factura</Button>}
         </div>

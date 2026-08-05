@@ -1,9 +1,9 @@
-import { CheckCircle2, ChevronRight, Package, Radio } from 'lucide-preact'
+import { CheckCircle2, ChevronRight, Package, Radio, RefreshCw } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_ORDER } from '../lib/format'
 import { getProviders, getStats } from '../lib/insforge'
 import type { Provider, ShipmentStatus, Stats } from '../lib/types'
-import { Button, Card, SectionTitle, Spinner, StatusDot } from './ui'
+import { Button, Card, IconButton, SectionTitle, Spinner, StatusDot } from './ui'
 
 function hoursAgo(s?: string | null): number | null {
   if (!s) return null
@@ -21,19 +21,24 @@ export default function Overview({
 }) {
   const [stats, setStats] = useState<Stats | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
+  const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const [s, p] = await Promise.all([getStats(), getProviders()])
-        setStats(s)
-        setProviders(p)
-      } catch {
-        setErr('No se pudo cargar el resumen.')
-      }
-    })()
-  }, [])
+  async function load() {
+    setLoading(true)
+    setErr(null)
+    try {
+      const [s, p] = await Promise.all([getStats(), getProviders()])
+      setStats(s)
+      setProviders(p)
+    } catch {
+      setErr('No se pudo cargar el resumen.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
 
   if (err) return <p class="text-red-600">{err}</p>
   if (!stats) return <Spinner label="Cargando resumen…" />
@@ -44,9 +49,14 @@ export default function Overview({
     <div class="mx-auto max-w-6xl space-y-6">
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-bold tracking-tight text-secondary">Resumen</h1>
-        <Button variant="ghost" onClick={onGoShipments}>
-          Ver envíos <ChevronRight class="h-4 w-4" aria-hidden="true" />
-        </Button>
+        <div class="flex items-center gap-2">
+          <IconButton label="Actualizar" onClick={load} disabled={loading}>
+            <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </IconButton>
+          <Button variant="ghost" onClick={onGoShipments}>
+            Ver envíos <ChevronRight class="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}
