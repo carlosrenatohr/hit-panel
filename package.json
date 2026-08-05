@@ -3,12 +3,13 @@
   "type": "module",
   "version": "0.2.1",
   "private": true,
+  "packageManager": "pnpm@10.32.1",
   "description": "HIT Cargo internal admin panel (shipments ops dashboard)",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check",
+    "check": "vitest run && astro check",
     "test": "vitest run",
     "test:watch": "vitest"
   },
