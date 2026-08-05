@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Search } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, RefreshCw, Search } from 'lucide-preact'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import {
@@ -19,7 +19,7 @@ import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
-import { Button, Card, DaysBadge, HazmatBadge, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
+import { Button, Card, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
 
 const PAGE_SIZE = 25
 // `dir` is the direction applied when the option is picked. The default (status_rank asc) puts
@@ -110,6 +110,15 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
     }
   }, [filters, page])
 
+  function reload() {
+    setLoading(true)
+    setErr(null)
+    listPackages({ ...filters, page, pageSize: PAGE_SIZE })
+      .then((r) => { setRows(r.rows); setCount(r.count) })
+      .catch(() => setErr('No se pudieron cargar los envíos.'))
+      .finally(() => setLoading(false))
+  }
+
   function patch(p: Partial<ListFilters>) {
     setFilters((f) => ({ ...f, ...p }))
     setPage(1)
@@ -158,6 +167,9 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
           <p class="text-sm text-gray-500">{count} resultados</p>
         </div>
         <div class="flex gap-2">
+          <IconButton label="Actualizar" onClick={reload} disabled={loading}>
+            <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </IconButton>
           {/* Columns only customize the desktop table; the mobile card layout ignores them. */}
           <span class="hidden md:inline-flex">
             <ColumnPicker prefs={colPrefs} />

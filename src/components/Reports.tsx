@@ -1,5 +1,5 @@
 import type { ChartConfiguration } from 'chart.js'
-import { Download, Printer, Search, TrendingDown, TrendingUp } from 'lucide-preact'
+import { Download, Printer, RefreshCw, Search, TrendingDown, TrendingUp } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
 import {
@@ -20,7 +20,7 @@ import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import { DateRangePicker } from './DateRangePicker'
-import { Button, Card, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
+import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -64,6 +64,15 @@ export default function Reports() {
       cancelled = true
     }
   }, [filters])
+
+  function reload() {
+    setLoading(true)
+    setErr(null)
+    exportPackages(filters, EXPORT_CAP)
+      .then((r) => setRows(r))
+      .catch(() => setErr('No se pudieron cargar los datos.'))
+      .finally(() => setLoading(false))
+  }
 
   // "vs período anterior" needs a bounded range — shift the same span immediately before it.
   // Only total + entregados counts are needed, so pageSize:1 just reads the count header.
@@ -269,6 +278,9 @@ export default function Reports() {
             <p class="text-sm text-gray-500">{rows.length} paquetes en el rango seleccionado.</p>
           </div>
           <div class="flex flex-wrap items-end gap-2">
+            <IconButton label="Actualizar" onClick={reload} disabled={loading}>
+              <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </IconButton>
             <Button variant="ghost" onClick={exportMatrix}>
               <Download class="h-4 w-4" aria-hidden="true" /> CSV estados
             </Button>
