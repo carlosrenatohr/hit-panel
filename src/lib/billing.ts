@@ -7,7 +7,7 @@
 
 import { insforge } from './insforge'
 
-const API_BASE = (import.meta.env.PUBLIC_API_URL as string) || 'https://hit-ever-scraper.honchkrow1995.workers.dev'
+const API_BASE = (import.meta.env.PUBLIC_API_URL as string) || 'https://hit-ever-scraper.nativerse.workers.dev'
 
 export type FreightType = 'AIR' | 'MAR'
 export type PriceTier = 'REGULAR' | 'ESPECIAL' | 'VIP' | 'MADRES' | 'DARIO'

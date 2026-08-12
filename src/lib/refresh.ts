@@ -2,7 +2,7 @@ import { insforge } from './insforge'
 
 const WORKER_URL =
   (import.meta.env.PUBLIC_API_URL as string | undefined)?.replace(/\/+$/, '') ??
-  'https://hit-ever-scraper.honchkrow1995.workers.dev'
+  'https://hit-ever-scraper.nativerse.workers.dev'
 
 // Mirrors the server's per-guia cooldown (hit-ever2/src/routes/staff.ts, 5 min) so the
 // button disables immediately without a round-trip. The server is the source of truth;
