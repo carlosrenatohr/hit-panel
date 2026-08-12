@@ -10,7 +10,12 @@ key es segura en el cliente; la seguridad real es RLS + JWT).
 ```bash
 PUBLIC_INSFORGE_URL=https://a4qvtp8s.us-east.insforge.app
 PUBLIC_INSFORGE_ANON_KEY=<anon key — npx @insforge/cli secrets get ANON_KEY>
+PUBLIC_API_URL=https://hit-ever-scraper.nativerse.workers.dev
 ```
+
+`PUBLIC_API_URL` es la base del Worker para `/api/billing/*`, `/api/customer/*` y el refresh manual
+(`/staff/packages/:guia/refresh`). El bundle ya tiene el fallback al dominio `nativerse`, pero si apuntás
+a otro ambiente (dev/preview), setealas antes de compilar.
 
 ## Build local
 
