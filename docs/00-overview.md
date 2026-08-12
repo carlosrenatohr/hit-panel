@@ -20,12 +20,14 @@ y un **rol** (admin / staff / viewer). No hay contraseña compartida: cada quien
 |---------|-------|
 | Panel (producción) | `https://hit-panel.pages.dev` |
 | Backend InsForge | `https://a4qvtp8s.us-east.insforge.app` (proyecto `8f6f1654-09f5-4ea8-8220-ed52ae464b58`) |
-| Worker de ingesta | `hit-ever2` → `https://hit-ever-scraper.honchkrow1995.workers.dev` |
+| Worker de ingesta | `hit-ever2` → `https://hit-ever-scraper.nativerse.workers.dev` |
 | Repos | panel: `hit-panel` · API/ingesta: `hit-ever2` · sitio: `hit-cargo-web-v-1.2` |
+
+> El dominio `*.honchkrow1995.workers.dev` está deprecado (no resuelve) — usar siempre `nativerse`.
 
 ## Stack
 
-- **Astro 6 + Preact + Tailwind 3.4** (mismos tokens de marca que el sitio: primario `#FF3B3F`).
+- **Astro 6 + Preact + Tailwind 3.4** (mismos tokens de marca que el sitio: primario `#FF7A00` — Naranja HIT, ver brand book del sitio).
 - **@insforge/sdk** (auth + DB) hablando directo con InsForge usando el JWT del usuario.
 - **Cloudflare Pages** (estático; sin servidor ni secretos en el borde).
 
@@ -39,5 +41,12 @@ Worker hit-ever2 ──(scrape Everest/GC)──▶ InsForge (Postgres + Auth + 
    Sitio público /track ◀── Worker (admin key) ──────────┘
 ```
 
-El panel **no** scrapea ni habla con el Worker: lee/escribe InsForge directamente, con permisos por rol.
-La ingesta de datos la sigue haciendo el Worker (cron + email trigger). Ver `hit-ever2`.
+La ingesta de datos la hace el Worker (cron + email trigger). Ver `hit-ever2`.
+
+**El panel sí llama algunos endpoints del Worker** (además de leer InsForge directo con el JWT del usuario):
+
+- `src/lib/billing.ts` → `/api/billing/*` (facturación: catálogo, facturas, pagos, cierres, reportes, excepciones).
+- `src/lib/customer.ts` → `/api/customer/*` (gestión de clientes).
+- `src/lib/refresh.ts` → `/staff/packages/:guia/refresh` (re-scrape manual por guía).
+
+Todas usan `PUBLIC_API_URL` (ver `.env.example`) como base, con fallback al dominio `nativerse` de producción. El Worker valida el JWT del usuario (delegando a InsForge) y resuelve su rol desde `app_users`.

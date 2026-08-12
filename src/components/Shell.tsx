@@ -1,4 +1,4 @@
-import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch, Users } from 'lucide-preact'
+import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch, Plug, Settings, Users } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import type { Role, SessionUser } from '../lib/types'
 import type { View } from './App'
@@ -11,6 +11,8 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
   { key: 'reports', label: 'Reportes', icon: BarChart3 },
   { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'billing', 'staff'] },
   { key: 'customers', label: 'Clientes', icon: Users, roles: ['admin', 'billing', 'staff'] },
+  { key: 'integraciones', label: 'Integraciones', icon: Plug },
+  { key: 'configuracion', label: 'Configuración', icon: Settings },
 ]
 
 export default function Shell({
@@ -57,16 +59,28 @@ export default function Shell({
             )
           })}
         </nav>
-        <div class="mt-auto border-t border-white/10 pt-4">
-          <div class="px-2 text-xs text-gray-400">{user.name ?? user.email}</div>
-          <div class="px-2 text-[11px] font-medium uppercase tracking-wide text-primary">{user.role}</div>
-          <button
-            onClick={onLogout}
-            class="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-navy-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+        <div class="mt-auto pt-4">
+          <a
+            href="https://nativerse.space"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-2 px-2 py-2 text-gray-400 transition-colors hover:text-white"
+            aria-label="Powered by Nativerse"
           >
-            <LogOut class="h-4 w-4" aria-hidden="true" />
-            Salir
-          </button>
+            <img src="/nativerse-logo.webp" alt="Nativerse" class="h-5 w-auto object-contain opacity-80 hover:opacity-100" />
+            <span class="text-xs">Powered by Nativerse</span>
+          </a>
+          <div class="mt-2 border-t border-white/10 pt-4">
+            <div class="px-2 text-xs text-gray-400">{user.name ?? user.email}</div>
+            <div class="px-2 text-[11px] font-medium uppercase tracking-wide text-primary">{user.role}</div>
+            <button
+              onClick={onLogout}
+              class="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-300 transition-colors hover:bg-navy-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            >
+              <LogOut class="h-4 w-4" aria-hidden="true" />
+              Salir
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -94,6 +108,19 @@ export default function Shell({
         </header>
 
         <main class="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+
+        <footer class="flex items-center justify-center gap-2 border-t border-gray-100 bg-white px-4 py-2 md:hidden print:hidden">
+          <a
+            href="https://nativerse.space"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-1.5 text-gray-400 transition-colors hover:text-gray-600"
+            aria-label="Powered by Nativerse"
+          >
+            <img src="/nativerse-logo.webp" alt="Nativerse" class="h-4 w-auto object-contain" />
+            <span class="text-[11px]">Powered by Nativerse</span>
+          </a>
+        </footer>
       </div>
     </div>
   )
