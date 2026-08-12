@@ -287,7 +287,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
                       {p.service_type ? SERVICE_EMOJI[p.service_type] : '—'} {officeFlag(p.origin_office)}
                     </span>
                     <span>
-                      {p.pieces ?? '—'} pzs{p.weight_lb ? ` · ${p.weight_lb} lb` : ''}
+                      {p.pieces ?? '—'} pzs · {p.weight_lb != null ? `${p.weight_lb} lb` : 'peso sin dato'}
                     </span>
                     <span class="ml-auto flex items-center gap-1.5">
                       {fmtDate(p.last_event_at)}
