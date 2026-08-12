@@ -60,17 +60,7 @@ export default function Shell({
           })}
         </nav>
         <div class="mt-auto pt-4">
-          <a
-            href="https://nativerse.space"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="flex items-center gap-2 px-2 py-2 text-gray-400 transition-colors hover:text-white"
-            aria-label="Powered by Nativerse"
-          >
-            <img src="/nativerse-logo.webp" alt="Nativerse" class="h-5 w-auto object-contain opacity-80 hover:opacity-100" />
-            <span class="text-xs">Powered by Nativerse</span>
-          </a>
-          <div class="mt-2 border-t border-white/10 pt-4">
+          <div class="border-t border-white/10 pt-4">
             <div class="px-2 text-xs text-gray-400">{user.name ?? user.email}</div>
             <div class="px-2 text-[11px] font-medium uppercase tracking-wide text-primary">{user.role}</div>
             <button
@@ -81,6 +71,16 @@ export default function Shell({
               Salir
             </button>
           </div>
+          <a
+            href="https://nativerse.space"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="mt-3 flex items-center gap-2 px-2 py-2 text-gray-400 transition-colors hover:text-white"
+            aria-label="Powered by Nativerse"
+          >
+            <span class="text-xs">Powered by:</span>
+            <img src="/nativerse-logo.webp" alt="Nativerse" class="h-5 w-auto object-contain opacity-80 hover:opacity-100" />
+          </a>
         </div>
       </aside>
 
@@ -117,8 +117,8 @@ export default function Shell({
             class="flex items-center gap-1.5 text-gray-400 transition-colors hover:text-gray-600"
             aria-label="Powered by Nativerse"
           >
+            <span class="text-[11px]">Powered by:</span>
             <img src="/nativerse-logo.webp" alt="Nativerse" class="h-4 w-auto object-contain" />
-            <span class="text-[11px]">Powered by Nativerse</span>
           </a>
         </footer>
       </div>

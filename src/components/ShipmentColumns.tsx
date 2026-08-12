@@ -53,7 +53,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
     label: 'Carga',
     render: (p) => (
       <span class="text-gray-600">
-        {p.pieces ?? '—'} pzs{p.weight_lb ? ` · ${p.weight_lb} lb` : ''}
+        {p.pieces ?? '—'} pzs · {p.weight_lb != null ? `${p.weight_lb} lb` : 'peso sin dato'}
       </span>
     ),
   },

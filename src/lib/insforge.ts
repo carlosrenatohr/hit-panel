@@ -119,6 +119,9 @@ export async function getPackageDetail(guia: string): Promise<PackageDetail | nu
     .from('packages')
     .select('*, providers(code,name,base_url)')
     .eq('almacen_id', guia)
+    // A guide can exist in both provider ledgers. Match the Worker lookup and use the newest row.
+    .order('scraped_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
   if (error) throw error
   if (!pkg) return null
