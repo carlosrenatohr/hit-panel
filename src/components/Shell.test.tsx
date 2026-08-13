@@ -20,7 +20,7 @@ describe('Shell branding', () => {
     render(<Shell user={makeUser('suite')} view="overview" onView={() => {}} onLogout={() => {}}>x</Shell>);
     const logos = screen.getAllByAltText('Suite Cargo');
     expect(logos).toHaveLength(2);
-    expect(logos[0].getAttribute('src')).toBe('/orbit-logo-version-finalv2.png');
+    expect(logos[0].getAttribute('src')).toBe('/suite-cargo-demo-logo.png');
     expect(screen.getAllByText('Suite Cargo').length).toBeGreaterThan(0);
   });
 });

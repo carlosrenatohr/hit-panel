@@ -17,7 +17,7 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
 
 const BRANDS: Record<Agency, { logo: string; name: string }> = {
   hit: { logo: '/logo-mark.png', name: 'HIT Cargo' },
-  suite: { logo: '/orbit-logo-version-finalv2.png', name: 'Suite Cargo' },
+  suite: { logo: '/suite-cargo-demo-logo.png', name: 'Suite Cargo' },
 }
 
 export default function Shell({
