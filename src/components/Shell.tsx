@@ -1,6 +1,6 @@
 import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch, Plug, Settings, Users } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
-import type { Role, SessionUser } from '../lib/types'
+import type { Agency, Role, SessionUser } from '../lib/types'
 import type { View } from './App'
 
 // `roles` (when present) restricts a nav item to those roles — billing is money, so
@@ -14,6 +14,11 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
   { key: 'integraciones', label: 'Integraciones', icon: Plug },
   { key: 'configuracion', label: 'Configuración', icon: Settings },
 ]
+
+const BRANDS: Record<Agency, { logo: string; name: string }> = {
+  hit: { logo: '/logo-mark.png', name: 'HIT Cargo' },
+  suite: { logo: '/suite-cargo-demo-logo.png', name: 'Suite Cargo' },
+}
 
 export default function Shell({
   user,
@@ -29,14 +34,15 @@ export default function Shell({
   children: ComponentChildren
 }) {
   const nav = NAV.filter((n) => !n.roles || n.roles.includes(user.role))
+  const brand = BRANDS[user.agency] ?? BRANDS.hit
   return (
     <div class="flex min-h-screen bg-neutral-bg text-gray-800">
       {/* Sidebar */}
       <aside class="hidden w-60 shrink-0 flex-col bg-navy px-4 py-5 text-white md:flex print:hidden">
         <div class="mb-8 flex items-center gap-2.5 px-2">
-          <img src="/logo-mark.png" alt="HIT Cargo" class="h-9 w-9 object-contain" />
+          <img src={brand.logo} alt={brand.name} class="h-9 w-9 object-contain" />
           <div>
-            <div class="text-sm font-bold leading-tight tracking-tight">HIT Cargo</div>
+            <div class="text-sm font-bold leading-tight tracking-tight">{brand.name}</div>
             <div class="text-[11px] text-gray-400">Panel interno</div>
           </div>
         </div>
@@ -88,8 +94,8 @@ export default function Shell({
       <div class="flex flex-1 flex-col">
         <header class="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 md:hidden print:hidden">
           <div class="flex items-center gap-2 font-bold tracking-tight text-secondary">
-            <img src="/logo-mark.png" alt="HIT Cargo" class="h-7 w-7 object-contain" />
-            HIT Panel
+            <img src={brand.logo} alt={brand.name} class="h-7 w-7 object-contain" />
+            {brand.name}
           </div>
           <select
             class="rounded-lg border border-gray-200 px-2 py-1 text-sm"

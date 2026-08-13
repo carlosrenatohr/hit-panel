@@ -38,11 +38,11 @@ export async function currentUser(): Promise<SessionUser | null> {
   if (error || !data?.user) return null
   const { data: row } = await insforge.database
     .from('app_users')
-    .select('role,name,email,active')
+    .select('role,name,email,active,agency')
     .eq('id', data.user.id)
     .maybeSingle()
   if (!row || row.active === false) return null
-  return { id: data.user.id, email: row.email ?? data.user.email, role: row.role, name: row.name }
+  return { id: data.user.id, email: row.email ?? data.user.email, role: row.role, name: row.name, agency: row.agency === 'suite' ? 'suite' : 'hit' }
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
