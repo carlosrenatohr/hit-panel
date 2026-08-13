@@ -87,11 +87,14 @@ export interface Stats {
   delivered_30d: number
 }
 
+export type Agency = 'hit' | 'suite'
+
 export interface SessionUser {
   id: string
   email: string
   role: Role
   name: string | null
+  agency: Agency
 }
 
 export interface PackageDetail {
