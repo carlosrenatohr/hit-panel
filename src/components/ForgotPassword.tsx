@@ -64,7 +64,7 @@ export default function ForgotPassword({
         class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl ring-1 ring-black/5"
       >
         <div class="mb-6 text-center">
-          <img src="/logo-full.png" alt="HIT Cargo" class="mx-auto mb-2 h-16 w-auto object-contain" />
+          <img src="/nativerse-logo-version-finalv1.png" alt="Nativerse" class="mx-auto mb-2 h-16 w-auto object-contain" />
           <p class="mt-1 text-sm font-semibold text-secondary">Recuperar contraseña</p>
           <p class="mt-0.5 text-xs text-gray-500">
             {step === 'request'
