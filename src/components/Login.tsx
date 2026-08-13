@@ -45,7 +45,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div class="flex min-h-screen flex-col items-center justify-center gap-5 bg-gradient-to-br from-navy via-navy to-secondary px-4">
       <form onSubmit={submit} class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl ring-1 ring-black/5">
         <div class="mb-6 text-center">
-          <img src="/nativerse-logo-version-finalv1.png" alt="Nativerse" class="mx-auto mb-2 h-16 w-auto object-contain" />
+          <img src="/nativerse-logo.webp" alt="Nativerse" class="mx-auto mb-2 h-16 w-auto object-contain" />
           <p class="mt-1 text-sm text-gray-500">Panel interno del equipo</p>
         </div>
         <div class="flex flex-col gap-4">
