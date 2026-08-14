@@ -23,6 +23,11 @@ describe('router', () => {
     expect(parseRoute('/')).toEqual({ view: 'overview', guia: null })
   })
 
+  it('falls back to overview on invalid percent-encoding in /envio/:guia', () => {
+    expect(parseRoute('/envio/%zz')).toEqual({ view: 'overview', guia: null })
+    expect(parseRoute('/envio/%E0%A4%A')).toEqual({ view: 'overview', guia: null })
+  })
+
   it('navigate() pushes state and notifies the route listener', () => {
     const seen: string[] = []
     window.addEventListener('popstate', () => seen.push(window.location.pathname))
