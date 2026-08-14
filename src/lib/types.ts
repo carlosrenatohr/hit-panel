@@ -44,6 +44,9 @@ export interface Pkg {
   manual_status_by: string | null
   manual_status_note: string | null
   manual_status_at: string | null
+  rate_override_id: string | null
+  rate_override_by: string | null
+  rate_override_at: string | null
   provider_id: string
   providers?: Provider
 }
