@@ -14,7 +14,7 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
   { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'billing', 'staff'] },
   { key: 'customers', label: 'Clientes', icon: Users, roles: ['admin', 'billing', 'staff'] },
   { key: 'integraciones', label: 'Integraciones', icon: Plug },
-  { key: 'configuracion', label: 'Configuración', icon: Settings },
+  { key: 'configuracion', label: 'Configuración', icon: Settings, roles: ['admin', 'billing', 'staff'] },
 ]
 
 const BRANDS: Record<Agency, { logo: string; name: string }> = {

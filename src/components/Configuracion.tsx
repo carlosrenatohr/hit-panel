@@ -13,6 +13,29 @@ const BRANDING_BUCKET = 'branding'
 
 type Tab = 'branding' | 'rates' | 'audit'
 
+type RowDraft = { tier: PriceTier; price: string; cost: string }
+
+const EMPTY_DRAFTS: RowDraft[] = (
+  Object.keys(TIER_LABELS) as PriceTier[]
+).map((tier) => ({ tier, price: '', cost: '' }))
+
+function toDrafts(rows: RateRow[]): RowDraft[] {
+  if (rows.length === 0) return [...EMPTY_DRAFTS]
+  return rows.map((r) => ({
+    tier: r.tier,
+    price: r.price === 0 ? '' : String(r.price),
+    cost: r.cost === null ? '' : String(r.cost),
+  }))
+}
+
+function toRows(drafts: RowDraft[]): RateRow[] {
+  return drafts.map((d) => ({
+    tier: d.tier,
+    price: Number(d.price) || 0,
+    cost: d.cost === '' ? null : Number(d.cost) || 0,
+  }))
+}
+
 export default function Configuracion({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('branding')
   const canWrite = user.role === 'admin' || user.role === 'billing'
@@ -117,7 +140,7 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
       const { data, error: uploadError } = await insforge.storage.from(BRANDING_BUCKET).upload(`logos/${slug}.webp`, blob)
       if (uploadError) throw uploadError
       if (!data?.url) throw new Error('El logo se subió pero no devolvió URL.')
-      await configApi.updateBranding(slug, { logoUrl: data.url, logoKey: data.key })
+      await configApi.updateBranding(slug, { logoKey: data.key })
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo actualizar el logo.')
@@ -184,11 +207,7 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
 
 // ── Rates ─────────────────────────────────────────────────────────────────────
 
-const FREIGHT_LABELS: Record<FreightType, string> = { aereo: 'Aéreo', maritimo: 'Marítimo' }
-
-const EMPTY_ROWS: RateRow[] = (
-  Object.keys(TIER_LABELS) as PriceTier[]
-).map((tier) => ({ tier, price: 0, cost: null }))
+const FREIGHT_LABELS: Record<FreightType, string> = { AIR: 'Aéreo', MAR: 'Marítimo' }
 
 function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   const [orgs, setOrgs] = useState<AgencyInfo[]>([])
@@ -199,8 +218,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [clients, setClients] = useState<Customer[]>([])
   const [saving, setSaving] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
-  const [newFreight, setNewFreight] = useState<FreightType>('aereo')
-  const [editing, setEditing] = useState<Record<string, RateRow[]>>({})
+  const [newFreight, setNewFreight] = useState<FreightType>('AIR')
+  const [editing, setEditing] = useState<Record<string, RowDraft[]>>({})
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const [assignClient, setAssignClient] = useState('')
   const [assignTable, setAssignTable] = useState('')
@@ -208,7 +227,9 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [overrideTable, setOverrideTable] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
 
-  const load = useCallback(async (selectedOrg: string) => {
+  const multiOrg = canWrite && (user.role === 'admin' || user.role === 'billing')
+
+  const load = useCallback(async (selectedOrg?: string) => {
     setLoading(true)
     setError(null)
     try {
@@ -223,8 +244,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   }, [])
 
   useEffect(() => {
-    void load(org)
-  }, [org, load])
+    void load(multiOrg ? org : undefined)
+  }, [org, load, multiOrg])
 
   useEffect(() => {
     void customerApi
@@ -239,13 +260,25 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     window.setTimeout(() => setNotice(null), 4000)
   }
 
+  function updateDraft(tableId: string, sourceRows: RateRow[], index: number, field: 'price' | 'cost', value: string) {
+    setEditing((prev) => {
+      const drafts = prev[tableId] ?? toDrafts(sourceRows)
+      const next = [...drafts]
+      next[index] = { ...next[index], [field]: value }
+      return { ...prev, [tableId]: next }
+    })
+  }
+
   async function createTable() {
     if (!newName.trim()) return
     setError(null)
     try {
-      const created = await configApi.createRate({ name: newName.trim(), freightType: newFreight, organizationId: org })
+      const input: { name: string; freightType: FreightType; organizationId?: string } = { name: newName.trim(), freightType: newFreight }
+      if (multiOrg) input.organizationId = org
+      const created = await configApi.createRate(input)
       setNewName('')
       setTables((prev) => [created, ...prev])
+      setEditing((prev) => ({ ...prev, [created.id]: toDrafts(created.rows) }))
       showNotice('Tabla de tarifas creada.')
     } catch (e) {
       showError(e)
@@ -278,13 +311,14 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   }
 
   async function saveRows(id: string) {
-    const rows = editing[id]
-    if (!rows) return
+    const drafts = editing[id]
+    if (!drafts) return
     setSaving(id)
     setError(null)
     try {
+      const rows = toRows(drafts)
       await configApi.replaceRows(id, rows)
-      setTables((prev) => prev.map((t) => (t.id === id ? { ...t, rows: [...rows] } : t)))
+      setTables((prev) => prev.map((t) => (t.id === id ? { ...t, rows } : t)))
       setEditing((prev) => {
         const next = { ...prev }
         delete next[id]
@@ -324,8 +358,6 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     }
   }
 
-  const multiOrg = canWrite && (user.role === 'admin' || user.role === 'billing')
-
   if (loading && tables.length === 0) return <Spinner label="Cargando tarifas…" />
 
   return (
@@ -357,8 +389,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
             </Field>
             <Field label="Tipo">
               <select class={inputCls} value={newFreight} onChange={(e) => setNewFreight((e.target as HTMLSelectElement).value as FreightType)}>
-                <option value="aereo">Aéreo</option>
-                <option value="maritimo">Marítimo</option>
+                <option value="AIR">Aéreo</option>
+                <option value="MAR">Marítimo</option>
               </select>
             </Field>
             <Button onClick={createTable} disabled={!newName.trim()}>
@@ -370,8 +402,9 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       )}
 
       {tables.map((t) => {
-        const rows = editing[t.id] ?? t.rows
-        const dirty = editing[t.id] !== undefined
+        const drafts = editing[t.id]
+        const dirty = drafts !== undefined
+        const rows = dirty ? drafts : t.rows
         return (
           <Card key={t.id}>
             <div class="mb-3 flex items-center justify-between gap-2">
@@ -416,49 +449,62 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
-                  <tr key={r.tier} class="border-b border-gray-100">
-                    <td class="py-1.5 pr-3 font-medium text-gray-700">{TIER_LABELS[r.tier]}</td>
-                    <td class="py-1.5 pr-3">
-                      {canWrite ? (
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          class={inputCls}
-                          value={r.price}
-                          onChange={(e) => {
-                            const next = [...rows]
-                            next[i] = { ...r, price: Number((e.target as HTMLInputElement).value) || 0 }
-                            setEditing((prev) => ({ ...prev, [t.id]: next }))
-                          }}
-                        />
-                      ) : (
-                        <span class="text-gray-700">${Number(r.price).toFixed(2)}</span>
-                      )}
-                    </td>
-                    <td class="py-1.5">
-                      {canWrite ? (
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          class={inputCls}
-                          value={r.cost ?? ''}
-                          placeholder="—"
-                          onChange={(e) => {
-                            const next = [...rows]
-                            const v = (e.target as HTMLInputElement).value
-                            next[i] = { ...r, cost: v === '' ? null : Number(v) || 0 }
-                            setEditing((prev) => ({ ...prev, [t.id]: next }))
-                          }}
-                        />
-                      ) : (
-                        <span class="text-gray-500">{r.cost === null ? '—' : `$${Number(r.cost).toFixed(2)}`}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r, i) => {
+                  const isEditing = canWrite && dirty
+                  return (
+                    <tr key={r.tier} class="border-b border-gray-100">
+                      <td class="py-1.5 pr-3 font-medium text-gray-700">{TIER_LABELS[r.tier]}</td>
+                      <td class="py-1.5 pr-3">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            class={inputCls}
+                            value={(r as RowDraft).price}
+                            onChange={(e) => updateDraft(t.id, t.rows, i, 'price', (e.target as HTMLInputElement).value)}
+                          />
+                        ) : canWrite ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            class={inputCls}
+                            value={(r as RateRow).price === 0 ? '' : String((r as RateRow).price)}
+                            onChange={(e) => updateDraft(t.id, t.rows, i, 'price', (e.target as HTMLInputElement).value)}
+                          />
+                        ) : (
+                          <span class="text-gray-700">${Number((r as RateRow).price).toFixed(2)}</span>
+                        )}
+                      </td>
+                      <td class="py-1.5">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            class={inputCls}
+                            value={(r as RowDraft).cost}
+                            placeholder="—"
+                            onChange={(e) => updateDraft(t.id, t.rows, i, 'cost', (e.target as HTMLInputElement).value)}
+                          />
+                        ) : canWrite ? (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            class={inputCls}
+                            value={(r as RateRow).cost ?? ''}
+                            placeholder="—"
+                            onChange={(e) => updateDraft(t.id, t.rows, i, 'cost', (e.target as HTMLInputElement).value)}
+                          />
+                        ) : (
+                          <span class="text-gray-500">{(r as RateRow).cost === null ? '—' : `$${Number((r as RateRow).cost).toFixed(2)}`}</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
             {canWrite && dirty && (

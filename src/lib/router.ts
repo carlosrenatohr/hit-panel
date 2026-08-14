@@ -24,7 +24,11 @@ export function pathFor(view: View, guia?: string | null): string {
 export function parseRoute(pathname: string): Location {
   const parts = pathname.split('/').filter(Boolean)
   if (parts.length === 2 && parts[0] === 'envio') {
-    return { view: 'shipments', guia: decodeURIComponent(parts[1]) }
+    try {
+      return { view: 'shipments', guia: decodeURIComponent(parts[1]) }
+    } catch {
+      return { view: 'overview', guia: null }
+    }
   }
   const view = (Object.keys(VIEW_PATHS) as View[]).find((v) => VIEW_PATHS[v] === pathname)
   return { view: view ?? 'overview', guia: null }

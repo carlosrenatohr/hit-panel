@@ -8,19 +8,16 @@ export interface AgencyInfo {
   logoUrl: string | null
 }
 
-export type FreightType = 'aereo' | 'maritimo'
+export type FreightType = 'AIR' | 'MAR'
 
-export type PriceTier = '0_2' | '2_5' | '5_10' | '10_20' | '20_30' | '30_45' | '45_60' | '60_plus'
+export type PriceTier = 'REGULAR' | 'ESPECIAL' | 'VIP' | 'MADRES' | 'DARIO'
 
 export const TIER_LABELS: Record<PriceTier, string> = {
-  '0_2': '0-2',
-  '2_5': '2-5',
-  '5_10': '5-10',
-  '10_20': '10-20',
-  '20_30': '20-30',
-  '30_45': '30-45',
-  '45_60': '45-60',
-  '60_plus': '60+',
+  REGULAR: 'Regular',
+  ESPECIAL: 'Especial',
+  VIP: 'VIP',
+  MADRES: 'Madres',
+  DARIO: 'Dario',
 }
 
 export interface RateRow {
@@ -111,8 +108,8 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const configApi = {
   branding: () => api<{ agencies: AgencyInfo[] }>('/branding'),
-  updateBranding: (slug: string, patch: { logoUrl?: string | null; logoKey?: string | null }) =>
-    api<{ slug: string; logoUrl: string | null }>(`/branding/${encodeURIComponent(slug)}`, {
+   updateBranding: (slug: string, patch: { logoKey?: string | null }) =>
+     api<{ slug: string; logoUrl: string | null }>(`/branding/${encodeURIComponent(slug)}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
     }),
