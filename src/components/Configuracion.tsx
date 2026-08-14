@@ -133,6 +133,10 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
 
   async function handleLogo(slug: string, file: File | null) {
     if (!file) return
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+      setError('Slug de agencia inválido.')
+      return
+    }
     setUploading(slug)
     setError(null)
     try {
@@ -160,7 +164,7 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
     <div class="flex flex-col gap-3">
       {error && <p class="text-sm text-red-600">{error}</p>}
       {agencies.map((a) => {
-        const editable = canWrite && (user.role === 'admin' || user.role === 'billing' ? true : a.slug === user.agency)
+        const editable = canWrite && (user.role === 'admin' ? true : a.slug === user.agency)
         return (
           <Card key={a.slug}>
             <div class="flex items-center gap-4">
@@ -227,7 +231,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [overrideTable, setOverrideTable] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
 
-  const multiOrg = canWrite && (user.role === 'admin' || user.role === 'billing')
+  const multiOrg = canWrite // admin|billing — both can manage other orgs via resolveOrg
 
   const load = useCallback(async (selectedOrg?: string) => {
     setLoading(true)
@@ -696,7 +700,7 @@ function AuditTab({ user }: { user: SessionUser }) {
                         {new Date(r.createdAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
                       </td>
                       <td class="py-2 pr-3 font-medium text-gray-800">{r.action}</td>
-                      <td class="py-2 pr-3 text-gray-600">{r.actorEmail ?? r.actorId ?? '—'}</td>
+                       <td class="py-2 pr-3 text-gray-600">{r.actorEmail ? r.actorEmail.replace(/^([^@])[^@]*(@.*)$/, '$1***$2') : r.actorId ?? '—'}</td>
                       <td class="py-2 pr-3 text-gray-600">
                         {r.entityType ?? '—'}
                         {r.entityId ? <span class="block text-xs text-gray-400">{r.entityId}</span> : null}

@@ -102,7 +102,10 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   })
   const body = (await response.json().catch(() => null)) as ApiEnvelope<T> | null
-  if (!response.ok || !body?.ok) throw new Error(body?.error?.message ?? `Error ${response.status}`)
+  if (!response.ok || !body?.ok) {
+    const raw = body?.error?.message ?? `Error ${response.status}`
+    throw new Error(raw.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[redact]'))
+  }
   return body.data as T
 }
 
@@ -119,11 +122,11 @@ export const configApi = {
     ),
   createRate: (input: { name: string; freightType: FreightType; organizationId?: string }) =>
     api<RateTableInfo>('/rates', { method: 'POST', body: JSON.stringify(input) }),
-  renameRate: (id: string, name: string) =>
-    api<RateTableInfo>(`/rates/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
-  deleteRate: (id: string) => api<{ ok: boolean }>(`/rates/${id}`, { method: 'DELETE' }),
-  replaceRows: (id: string, rows: RateRow[]) =>
-    api<{ id: string; rows: RateRow[] }>(`/rates/${id}/rows`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+   renameRate: (id: string, name: string) =>
+     api<RateTableInfo>(`/rates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+   deleteRate: (id: string) => api<{ ok: boolean }>(`/rates/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+   replaceRows: (id: string, rows: RateRow[]) =>
+     api<{ id: string; rows: RateRow[] }>(`/rates/${encodeURIComponent(id)}/rows`, { method: 'PUT', body: JSON.stringify({ rows }) }),
   assignClientDefault: (clientId: string, rateTableId: string | null) =>
     api<{ ok: boolean }>('/rates/assign-client', { method: 'POST', body: JSON.stringify({ clientId, rateTableId }) }),
   overridePackage: (guia: string, rateTableId: string | null) =>
