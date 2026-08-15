@@ -2,7 +2,7 @@ import { CheckCircle2, ChevronRight, Package, Radio, RefreshCw } from 'lucide-pr
 import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_ORDER } from '../lib/format'
 import { getProviders, getStats } from '../lib/insforge'
-import type { Provider, ShipmentStatus, Stats } from '../lib/types'
+import type { Provider, ShipmentStatus, Stats, SessionUser } from '../lib/types'
 import { Button, Card, IconButton, SectionTitle, Spinner, StatusDot } from './ui'
 
 function hoursAgo(s?: string | null): number | null {
@@ -13,9 +13,11 @@ function hoursAgo(s?: string | null): number | null {
 }
 
 export default function Overview({
+  user,
   onOpen,
   onGoShipments,
 }: {
+  user: SessionUser
   onOpen: (guia: string) => void
   onGoShipments: () => void
 }) {
@@ -28,7 +30,7 @@ export default function Overview({
     setLoading(true)
     setErr(null)
     try {
-      const [s, p] = await Promise.all([getStats(), getProviders()])
+      const [s, p] = await Promise.all([getStats(user.agency), getProviders()])
       setStats(s)
       setProviders(p)
     } catch {

@@ -34,13 +34,15 @@ vi.mock('../lib/insforge', () => ({
   getProviders: vi.fn().mockResolvedValue(mockProviders),
 }));
 
+const mockUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
+
 describe('Overview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders the overview dashboard with stats', async () => {
-    render(<Overview onOpen={() => {}} onGoShipments={() => {}} />);
+    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getByText('Resumen')).toBeTruthy();
@@ -50,12 +52,12 @@ describe('Overview', () => {
   });
 
   it('shows loading spinner initially', () => {
-    render(<Overview onOpen={() => {}} onGoShipments={() => {}} />);
+    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} />);
     expect(screen.getByText(/Cargando/)).toBeTruthy();
   });
 
   it('displays provider information', async () => {
-    render(<Overview onOpen={() => {}} onGoShipments={() => {}} />);
+    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getAllByText('Everest').length).toBeGreaterThan(0);

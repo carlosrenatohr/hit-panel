@@ -63,13 +63,15 @@ vi.mock('../lib/refresh', () => ({
   refreshCooldownUntil: vi.fn().mockReturnValue(0),
 }));
 
+const adminUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
+
 describe('ShipmentDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders package detail with guia', async () => {
-    render(<ShipmentDetail guia="910500" role="admin" onClose={() => {}} />);
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
@@ -77,12 +79,12 @@ describe('ShipmentDetail', () => {
   });
 
   it('shows loading spinner initially', () => {
-    render(<ShipmentDetail guia="910500" role="admin" onClose={() => {}} />);
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
     expect(screen.getByText(/Cargando/)).toBeTruthy();
   });
 
   it('displays provider name', async () => {
-    render(<ShipmentDetail guia="910500" role="admin" onClose={() => {}} />);
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getAllByText('Everest').length).toBeGreaterThan(0);
@@ -90,7 +92,7 @@ describe('ShipmentDetail', () => {
   });
 
   it('refreshes the package when admin clicks "Refrescar ahora"', async () => {
-    render(<ShipmentDetail guia="910500" role="admin" onClose={() => {}} />);
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
     await waitFor(() => {
       expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
     });
@@ -103,7 +105,8 @@ describe('ShipmentDetail', () => {
   });
 
   it('hides the refresh button for non-admin roles', async () => {
-    render(<ShipmentDetail guia="910500" role="staff" onClose={() => {}} />);
+    const staffUser = { ...adminUser, role: 'staff' as const };
+    render(<ShipmentDetail guia="910500" user={staffUser} onClose={() => {}} />);
     await waitFor(() => {
       expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
     });

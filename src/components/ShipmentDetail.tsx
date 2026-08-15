@@ -18,16 +18,16 @@ import {
 import { addNote, addTag, getPackageDetail, setManualStatus } from '../lib/insforge'
 import { refreshCooldownUntil, refreshPackage } from '../lib/refresh'
 import { configApi } from '../lib/config'
-import type { PackageDetail, Role, ShipmentStatus } from '../lib/types'
+import type { PackageDetail, ShipmentStatus, SessionUser } from '../lib/types'
 import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
 
 export default function ShipmentDetail({
   guia,
-  role,
+  user,
   onClose,
 }: {
   guia: string
-  role: Role
+  user: SessionUser
   onClose: () => void
 }) {
   const [d, setD] = useState<PackageDetail | null>(null)
@@ -47,14 +47,15 @@ export default function ShipmentDetail({
   const [noteBody, setNoteBody] = useState('')
   const [showInvoice, setShowInvoice] = useState(false)
 
-  const canWrite = role === 'admin' || role === 'staff'
-  const canBill = role === 'admin' || role === 'billing'
-  const canRefresh = role === 'admin'
+  const canWrite = user.role === 'admin' || user.role === 'staff'
+  const canBill = user.role === 'admin' || user.role === 'billing'
+  const canRefresh = user.role === 'admin'
+  const isAdmin = user.role === 'admin'
 
   async function load() {
     setLoading(true)
     try {
-      const det = await getPackageDetail(guia)
+      const det = await getPackageDetail(guia, user.role === 'admin' ? undefined : user.agency)
       setD(det)
       if (!det) setErr('No se encontró el paquete.')
     } catch {
@@ -193,7 +194,7 @@ export default function ShipmentDetail({
                 {d.pkg.tracking_number}
               </button>
             )}
-            {d?.pkg.rate_override_id && role !== 'viewer' && (
+            {d?.pkg.rate_override_id && user.role !== 'viewer' && (
               <span class="mt-1 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
                 <Tag class="h-3 w-3" aria-hidden="true" />
                 Tarifa especial{overrideName ? `: ${overrideName}` : ''}
