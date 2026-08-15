@@ -61,8 +61,9 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     .filter((c) => c.visible)
     .map((c) => COLUMN_DEFS.find((d) => d.key === c.key))
     .filter((d): d is (typeof COLUMN_DEFS)[number] => !!d)
-  const canWrite = user.role === 'admin' || user.role === 'billing'
-  const [selectedOrg, setSelectedOrg] = useState<string>(user.agency)
+  // Package writes (create_package RPC) gate on is_writer() = admin|staff.
+  const canWrite = user.role === 'admin' || user.role === 'staff'
+  const selectedOrg = user.agency // tenant is pinned: a user only sees their own agency
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<ListFilters>({ sortCol: 'status_rank', ascending: true })
@@ -95,8 +96,8 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
   }, [])
 
   useEffect(() => {
-    getProviders().then(setProviders).catch(() => {})
-  }, [])
+    getProviders(user.agency).then(setProviders).catch(() => {})
+  }, [user.agency])
 
   // Debounce the search box into the applied filters.
   useEffect(() => {
@@ -238,24 +239,6 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
           legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
           loadEvents={loadRecvMonth}
         />
-      )}
-
-      {canWrite && (
-        <Card class="p-4">
-          <div class="flex items-end gap-3">
-            <Field label="Organización">
-              <select
-                class={inputCls}
-                value={selectedOrg}
-                onChange={(e) => setSelectedOrg((e.target as HTMLSelectElement).value)}
-              >
-                <option value="hit">HIT Cargo</option>
-                <option value="suite">Suite</option>
-              </select>
-            </Field>
-            <p class="text-xs text-gray-500">Filtrar paquetes por agencia/tenant.</p>
-          </div>
-        </Card>
       )}
 
       {/* Filters */}

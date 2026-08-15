@@ -52,8 +52,12 @@ export async function getStats(organizationId?: string): Promise<Stats> {
   return (data as Stats) ?? { total: 0, by_status: {}, by_provider: {}, last_scraped: {}, delivered_30d: 0 }
 }
 
-export async function getProviders(): Promise<Provider[]> {
-  const { data, error } = await insforge.database.from('providers').select('id,code,name').order('code')
+// Providers are tenant-scoped via providers.organization_id: a user only sees
+// the providers of their own agency (hit → everest + global_connection, suite → suite_demo).
+export async function getProviders(agency?: string): Promise<Provider[]> {
+  let q = insforge.database.from('providers').select('id,code,name').order('code')
+  if (agency) q = q.eq('organization_id', agency)
+  const { data, error } = await q
   if (error) throw error
   return (data as Provider[]) ?? []
 }

@@ -16,7 +16,7 @@ import {
 } from '../lib/format'
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
-import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
+import type { Pkg, Provider, SessionUser, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import { DateRangePicker } from './DateRangePicker'
@@ -29,7 +29,8 @@ function ymd(d: Date): string {
 const BASE_FONT = { family: 'Inter, system-ui, sans-serif', size: 12 }
 const EXPORT_CAP = 5000
 
-export default function Reports() {
+export default function Reports({ user }: { user: SessionUser }) {
+  const organizationId = user.agency // tenant is pinned: a user only sees their own agency
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<ListFilters>({})
@@ -38,8 +39,8 @@ export default function Reports() {
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
-    getProviders().then(setProviders).catch(() => {})
-  }, [])
+    getProviders(user.agency).then(setProviders).catch(() => {})
+  }, [user.agency])
 
   // Debounce the search box into the applied filters, same as the Envíos page.
   useEffect(() => {
@@ -56,7 +57,7 @@ export default function Reports() {
     let cancelled = false
     setLoading(true)
     setErr(null)
-    exportPackages(filters, EXPORT_CAP)
+    exportPackages({ ...filters, organizationId }, EXPORT_CAP)
       .then((r) => !cancelled && setRows(r))
       .catch(() => !cancelled && setErr('No se pudieron cargar los datos.'))
       .finally(() => !cancelled && setLoading(false))
@@ -68,7 +69,7 @@ export default function Reports() {
   function reload() {
     setLoading(true)
     setErr(null)
-    exportPackages(filters, EXPORT_CAP)
+    exportPackages({ ...filters, organizationId }, EXPORT_CAP)
       .then((r) => setRows(r))
       .catch(() => setErr('No se pudieron cargar los datos.'))
       .finally(() => setLoading(false))
@@ -91,8 +92,8 @@ export default function Reports() {
     prevFrom.setDate(prevFrom.getDate() - (spanDays - 1))
     let cancelled = false
     Promise.all([
-      listPackages({ ...filters, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
-      listPackages({ ...filters, status: 'entregado', from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+      listPackages({ ...filters, organizationId, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+      listPackages({ ...filters, organizationId, status: 'entregado', from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
     ])
       .then(([totalRes, entRes]) => !cancelled && setPrev({ total: totalRes.count, entregados: entRes.count }))
       .catch(() => !cancelled && setPrev(null))
