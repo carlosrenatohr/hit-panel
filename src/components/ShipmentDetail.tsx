@@ -17,6 +17,7 @@ import {
 } from '../lib/format'
 import { addNote, addTag, getPackageDetail, setManualStatus } from '../lib/insforge'
 import { refreshCooldownUntil, refreshPackage } from '../lib/refresh'
+import { configApi } from '../lib/config'
 import type { PackageDetail, Role, ShipmentStatus } from '../lib/types'
 import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
 
@@ -139,6 +140,30 @@ export default function ShipmentDetail({
     ? `https://parcelsapp.com/en/tracking/${encodeURIComponent(d.pkg.tracking_number)}`
     : null
 
+  // Rate override display: name is resolved from the config module (staff is pinned
+  // to their own agency server-side); viewer never sees billing data at all.
+  const [overrideName, setOverrideName] = useState<string | null>(null)
+  useEffect(() => {
+    const overrideId = d?.pkg.rate_override_id
+    if (!overrideId) {
+      setOverrideName(null)
+      return
+    }
+    let alive = true
+    configApi
+      .listRates()
+      .then(({ tables }) => {
+        if (!alive) return
+        setOverrideName(tables.find((t) => t.id === overrideId)?.name ?? null)
+      })
+      .catch(() => {
+        if (alive) setOverrideName(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [d?.pkg.rate_override_id])
+
   return (
     <div
       class="fixed inset-0 z-50 flex justify-end bg-black/40"
@@ -167,6 +192,12 @@ export default function ShipmentDetail({
                 {copied ? <Check class="h-3 w-3 text-green-600" /> : <Copy class="h-3 w-3" />}
                 {d.pkg.tracking_number}
               </button>
+            )}
+            {d?.pkg.rate_override_id && role !== 'viewer' && (
+              <span class="mt-1 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+                <Tag class="h-3 w-3" aria-hidden="true" />
+                Tarifa especial{overrideName ? `: ${overrideName}` : ''}
+              </span>
             )}
           </div>
           {d && <StatusPill s={d.pkg.effective_status as ShipmentStatus} class="shrink-0" />}

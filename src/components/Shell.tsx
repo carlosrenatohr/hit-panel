@@ -1,7 +1,9 @@
 import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch, Plug, Settings, Users } from 'lucide-preact'
+import { useEffect, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
+import { configApi } from '../lib/config'
 import type { Agency, Role, SessionUser } from '../lib/types'
-import type { View } from './App'
+import type { View } from '../lib/router'
 
 // `roles` (when present) restricts a nav item to those roles — billing is money, so
 // it's admin/billing/staff only; viewer never sees the tab. Backend still enforces this.
@@ -12,7 +14,7 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
   { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'billing', 'staff'] },
   { key: 'customers', label: 'Clientes', icon: Users, roles: ['admin', 'billing', 'staff'] },
   { key: 'integraciones', label: 'Integraciones', icon: Plug },
-  { key: 'configuracion', label: 'Configuración', icon: Settings },
+  { key: 'configuracion', label: 'Configuración', icon: Settings, roles: ['admin', 'billing', 'staff'] },
 ]
 
 const BRANDS: Record<Agency, { logo: string; name: string }> = {
@@ -33,8 +35,33 @@ export default function Shell({
   onLogout: () => void
   children: ComponentChildren
 }) {
+  // Branding comes from the Worker (/api/config/branding); the static table is the
+  // offline fallback and the initial paint so the shell never flashes empty.
+  const [brands, setBrands] = useState<Record<string, { logo: string; name: string }>>(BRANDS)
+  useEffect(() => {
+    let alive = true
+    configApi
+      .branding()
+      .then(({ agencies }) => {
+        if (!alive) return
+        const next = { ...BRANDS } as Record<string, { logo: string; name: string }>
+        for (const a of agencies) {
+          next[a.slug] = {
+            logo: a.logoUrl ?? (BRANDS as Record<string, { logo: string; name: string }>)[a.slug]?.logo ?? '/logo-mark.png',
+            name: a.name,
+          }
+        }
+        setBrands(next)
+      })
+      .catch(() => {
+        // keep static fallback; branding is cosmetic
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
   const nav = NAV.filter((n) => !n.roles || n.roles.includes(user.role))
-  const brand = BRANDS[user.agency] ?? BRANDS.hit
+  const brand = brands[user.agency] ?? BRANDS.hit
   return (
     <div class="flex min-h-screen bg-neutral-bg text-gray-800">
       {/* Sidebar */}

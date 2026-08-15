@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'preact/hooks'
 import { currentUser, signOut } from '../lib/insforge'
+import { navigate, useRoute } from '../lib/router'
 import type { SessionUser } from '../lib/types'
+import Configuracion from './Configuracion'
 import ComingSoon from './ComingSoon'
 import Facturacion from './billing/Facturacion'
 import Customers from './Customers'
@@ -17,8 +19,9 @@ export type View = 'overview' | 'shipments' | 'reports' | 'facturacion' | 'custo
 export default function App() {
   const [user, setUser] = useState<SessionUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<View>('overview')
-  const [detail, setDetail] = useState<string | null>(null)
+  const route = useRoute()
+  const view = route.view
+  const detail = route.guia
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -50,14 +53,14 @@ export default function App() {
     } finally {
       // Clear local state even if signOut() rejects, so a network hiccup can't leave the UI logged in.
       setUser(null)
-      setView('overview')
+      navigate({ view: 'overview' })
     }
   }
 
   return (
-    <Shell user={user} view={view} onView={setView} onLogout={logout}>
-      {view === 'overview' && <Overview onOpen={setDetail} onGoShipments={() => setView('shipments')} />}
-      {view === 'shipments' && <Shipments onOpen={setDetail} />}
+    <Shell user={user} view={view} onView={(v) => navigate({ view: v })} onLogout={logout}>
+      {view === 'overview' && <Overview onOpen={(guia) => navigate({ view, guia })} onGoShipments={() => navigate({ view: 'shipments' })} />}
+      {view === 'shipments' && <Shipments onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
       {view === 'reports' && <Reports />}
       {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
       {view === 'customers' && user.role !== 'viewer' && <Customers role={user.role} />}
@@ -67,15 +70,8 @@ export default function App() {
           description="Conectá el panel con otras herramientas (billing, mensajería, proveedores). Esta sección estará disponible pronto."
         />
       )}
-      {view === 'configuracion' && (
-        <ComingSoon
-          title="Configuración"
-          description="Ajustes del panel: usuarios, roles y preferencias del equipo. Esta sección estará disponible pronto."
-        />
-      )}
-      {detail && (
-        <ShipmentDetail guia={detail} role={user.role} onClose={() => setDetail(null)} />
-      )}
+      {view === 'configuracion' && user.role !== 'viewer' && <Configuracion user={user} />}
+      {detail && <ShipmentDetail guia={detail} role={user.role} onClose={() => navigate({ view })} />}
     </Shell>
   )
 }
