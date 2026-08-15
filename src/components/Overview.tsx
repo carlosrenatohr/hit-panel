@@ -30,7 +30,7 @@ export default function Overview({
     setLoading(true)
     setErr(null)
     try {
-      const [s, p] = await Promise.all([getStats(user.agency), getProviders()])
+      const [s, p] = await Promise.all([getStats(user.agency), getProviders(user.agency)])
       setStats(s)
       setProviders(p)
     } catch {

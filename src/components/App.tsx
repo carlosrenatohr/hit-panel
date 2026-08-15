@@ -61,7 +61,7 @@ export default function App() {
     <Shell user={user} view={view} onView={(v) => navigate({ view: v })} onLogout={logout}>
       {view === 'overview' && <Overview user={user} onOpen={(guia) => navigate({ view, guia })} onGoShipments={() => navigate({ view: 'shipments' })} />}
       {view === 'shipments' && <Shipments user={user} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
-      {view === 'reports' && <Reports />}
+      {view === 'reports' && <Reports user={user} />}
       {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
       {view === 'customers' && user.role !== 'viewer' && <Customers role={user.role} />}
       {view === 'integraciones' && (
