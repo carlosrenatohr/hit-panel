@@ -69,13 +69,15 @@ vi.mock('../lib/insforge', () => ({
   exportPackages: vi.fn().mockResolvedValue(mockPkgs),
 }));
 
+const mockUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
+
 describe('Shipments', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders the shipments table with packages', async () => {
-    render(<Shipments onOpen={() => {}} />);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
@@ -85,7 +87,7 @@ describe('Shipments', () => {
   });
 
   it('shows search input', async () => {
-    render(<Shipments onOpen={() => {}} />);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/Buscar/)).toBeTruthy();
@@ -93,7 +95,7 @@ describe('Shipments', () => {
   });
 
   it('displays result count', async () => {
-    render(<Shipments onOpen={() => {}} />);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getAllByText(/2 resultados/).length).toBeGreaterThan(0);

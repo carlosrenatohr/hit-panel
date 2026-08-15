@@ -88,12 +88,13 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
     setError(null)
     try {
       const { agencies: rows } = await configApi.branding()
-      setAgencies(rows)
+      // Each user sees only their own tenant's branding — agencies are distinct brands.
+      setAgencies(rows.filter((a) => a.slug === user.agency))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el branding.')
     }
     setLoading(false)
-  }, [])
+  }, [user.agency])
 
   useEffect(() => {
     void load()
@@ -166,21 +167,22 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
       {agencies.map((a) => {
         const editable = canWrite && (user.role === 'admin' ? true : a.slug === user.agency)
         return (
-          <Card key={a.slug}>
-            <div class="flex items-center gap-4">
+          <Card key={a.slug} class="p-4">
+            <div class="flex items-start gap-4">
               {a.logoUrl ? (
-                <img src={a.logoUrl} alt={a.name} class="h-12 w-12 rounded-lg border border-gray-200 object-contain bg-white" />
+                <img src={a.logoUrl} alt={a.name} class="h-24 w-24 rounded-lg border border-gray-200 object-contain bg-white" />
               ) : (
-                <div class="flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
-                  <Building2 class="h-5 w-5" aria-hidden="true" />
+                <div class="flex h-24 w-24 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
+                  <Building2 class="h-8 w-8" aria-hidden="true" />
                 </div>
               )}
               <div class="flex-1">
-                <div class="text-sm font-semibold text-gray-800">{a.name}</div>
+                <div class="mb-1 text-lg font-semibold text-gray-800">{a.name}</div>
                 <div class="text-xs text-gray-500">
                   {a.slug} {a.logoUrl ? '· logo actualizado' : '· sin logo personalizado'}
                 </div>
               </div>
+
               {editable && (
                 <label
                   class={`flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark ${
@@ -229,6 +231,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [assignTable, setAssignTable] = useState('')
   const [overrideGuia, setOverrideGuia] = useState('')
   const [overrideTable, setOverrideTable] = useState('')
+  const [assignMode, setAssignMode] = useState<'client' | 'package'>('client')
   const [notice, setNotice] = useState<string | null>(null)
 
   const multiOrg = canWrite // admin|billing — both can manage other orgs via resolveOrg
@@ -291,6 +294,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
 
   async function renameTable(id: string) {
     if (!renaming || !renaming.name.trim()) return
+    if (!window.confirm(`¿Renombrar "${renaming.name}"? Esta acción se registra en el historial de auditoría.`)) return
     setError(null)
     try {
       await configApi.renameRate(id, renaming.name.trim())
@@ -317,6 +321,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   async function saveRows(id: string) {
     const drafts = editing[id]
     if (!drafts) return
+    if (!window.confirm('¿Guardar los cambios en las tarifas de esta tabla? Esta acción se registra en el historial de auditoría.')) return
     setSaving(id)
     setError(null)
     try {
@@ -337,6 +342,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
 
   async function assignDefault() {
     if (!assignClient) return
+    if (!window.confirm('¿Aplicar esta tarifa por defecto al cliente seleccionado?')) return
     setError(null)
     try {
       await configApi.assignClientDefault(assignClient, assignTable || null)
@@ -351,6 +357,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   async function applyOverride() {
     const guia = overrideGuia.trim()
     if (!guia) return
+    if (!window.confirm(`¿Aplicar esta tarifa especial al paquete ${guia}?`)) return
     setError(null)
     try {
       await configApi.overridePackage(guia, overrideTable || null)
@@ -530,59 +537,76 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       )}
 
       {canWrite && (
-        <Card>
-          <SectionTitle>Tarifa por defecto del cliente</SectionTitle>
-          <div class="flex flex-wrap items-end gap-3">
-            <Field label="Cliente">
-              <select class={inputCls} value={assignClient} onChange={(e) => setAssignClient((e.target as HTMLSelectElement).value)}>
-                <option value="">Seleccionar cliente…</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Tabla">
-              <select class={inputCls} value={assignTable} onChange={(e) => setAssignTable((e.target as HTMLSelectElement).value)}>
-                <option value="">(sin tarifa)</option>
-                {tables.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} · {FREIGHT_LABELS[t.freightType]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Button onClick={assignDefault} disabled={!assignClient}>
-              Aplicar
-            </Button>
+        <Card class="p-4">
+          <SectionTitle>Asignaciones de tarifa</SectionTitle>
+          <div class="mb-3 flex gap-4 border-b border-gray-200 text-xs font-medium text-gray-500">
+            <button
+              type="button"
+              onClick={() => setAssignMode('client')}
+              class={`pb-2 ${assignMode === 'client' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-800'}`}
+            >
+              Default por cliente
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignMode('package')}
+              class={`pb-2 ${assignMode === 'package' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-800'}`}
+            >
+              Especial por envío
+            </button>
           </div>
-          <p class="mt-2 text-xs text-gray-500">La tarifa por defecto se aplica a los envíos de ese cliente cuando no tiene una especial.</p>
-        </Card>
-      )}
-
-      {canWrite && (
-        <Card>
-          <SectionTitle>Tarifa especial por envío</SectionTitle>
-          <div class="flex flex-wrap items-end gap-3">
-            <Field label="Guía / tracking">
-              <input class={inputCls} value={overrideGuia} placeholder="Ej. 123-4567890" onChange={(e) => setOverrideGuia((e.target as HTMLInputElement).value)} />
-            </Field>
-            <Field label="Tabla">
-              <select class={inputCls} value={overrideTable} onChange={(e) => setOverrideTable((e.target as HTMLSelectElement).value)}>
-                <option value="">(quitar especial)</option>
-                {tables.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} · {FREIGHT_LABELS[t.freightType]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Button onClick={applyOverride} disabled={!overrideGuia.trim()}>
-              Aplicar
-            </Button>
-          </div>
-          <p class="mt-2 text-xs text-gray-500">Sobrescribe la tarifa del paquete individual; el default del cliente queda intacto.</p>
+          {assignMode === 'client' && (
+            <div class="flex flex-wrap items-end gap-3">
+              <Field label="Cliente">
+                <select class={inputCls} value={assignClient} onChange={(e) => setAssignClient((e.target as HTMLSelectElement).value)}>
+                  <option value="">Seleccionar cliente…</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Tabla">
+                <select class={inputCls} value={assignTable} onChange={(e) => setAssignTable((e.target as HTMLSelectElement).value)}>
+                  <option value="">(sin tarifa)</option>
+                  {tables.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · {FREIGHT_LABELS[t.freightType]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Button onClick={assignDefault} disabled={!assignClient}>
+                Aplicar
+              </Button>
+            </div>
+          )}
+          {assignMode === 'package' && (
+            <div class="flex flex-wrap items-end gap-3">
+              <Field label="Guía / tracking">
+                <input class={inputCls} value={overrideGuia} placeholder="Ej. 123-4567890" onChange={(e) => setOverrideGuia((e.target as HTMLInputElement).value)} />
+              </Field>
+              <Field label="Tabla">
+                <select class={inputCls} value={overrideTable} onChange={(e) => setOverrideTable((e.target as HTMLSelectElement).value)}>
+                  <option value="">(quitar especial)</option>
+                  {tables.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · {FREIGHT_LABELS[t.freightType]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Button onClick={applyOverride} disabled={!overrideGuia.trim()}>
+                Aplicar
+              </Button>
+            </div>
+          )}
+          <p class="mt-2 text-xs text-gray-500">
+            {assignMode === 'client'
+              ? 'La tarifa por defecto se aplica a los envíos de ese cliente cuando no tiene una especial.'
+              : 'Sobrescribe la tarifa del paquete individual; el default del cliente queda intacto.'}
+          </p>
         </Card>
       )}
     </div>

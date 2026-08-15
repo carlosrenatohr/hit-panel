@@ -20,6 +20,7 @@ export interface Provider {
 export interface Pkg {
   id: string
   almacen_id: string
+  organization_id: string | null
   tracking_number: string | null
   status: ShipmentStatus
   manual_status: ShipmentStatus | null

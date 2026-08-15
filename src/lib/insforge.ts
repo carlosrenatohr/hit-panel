@@ -8,7 +8,7 @@ export const insforge = createClient({ baseUrl, anonKey })
 
 // Lightweight column set for the list view (skip heavy/internal-only fields).
 const LIST_COLS =
-  'id,almacen_id,tracking_number,status,manual_status,effective_status,service_type,weight_lb,pieces,origin_office,dest_office,referencia_name,photo_ref,received_at,last_event_at,scraped_at,provider_id,providers(code,name,base_url)'
+  'id,almacen_id,organization_id,tracking_number,status,manual_status,effective_status,service_type,weight_lb,pieces,origin_office,dest_office,referencia_name,photo_ref,received_at,last_event_at,scraped_at,provider_id,providers(code,name,base_url)'
 
 // ── Auth ────────────────────────────────────────────────────────────────────────
 export async function signIn(email: string, password: string): Promise<void> {
@@ -46,8 +46,8 @@ export async function currentUser(): Promise<SessionUser | null> {
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
-export async function getStats(): Promise<Stats> {
-  const { data, error } = await insforge.database.rpc('dashboard_stats')
+export async function getStats(organizationId?: string): Promise<Stats> {
+  const { data, error } = await insforge.database.rpc('dashboard_stats', organizationId ? { p_org: organizationId } : {})
   if (error) throw error
   return (data as Stats) ?? { total: 0, by_status: {}, by_provider: {}, last_scraped: {}, delivered_30d: 0 }
 }
@@ -69,6 +69,7 @@ export interface ListFilters {
   ascending?: boolean
   page?: number
   pageSize?: number
+  organizationId?: string  // tenant filter — staff gets pinned; admin/billing can override
 }
 
 export interface ListResult {
@@ -84,6 +85,7 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 
   let q = insforge.database.from('packages').select(LIST_COLS, { count: 'exact' })
 
+  if (f.organizationId) q = q.eq('organization_id', f.organizationId)
   if (f.search && f.search.trim()) {
     const s = f.search.trim().replace(/[(),*]/g, '')
     q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*,referencia_name.ilike.*${s}*`)
@@ -114,15 +116,16 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   return { rows: (data as unknown as Pkg[]) ?? [], count: count ?? 0 }
 }
 
-export async function getPackageDetail(guia: string): Promise<PackageDetail | null> {
-  const { data: pkg, error } = await insforge.database
+export async function getPackageDetail(guia: string, organizationId?: string): Promise<PackageDetail | null> {
+  let q = insforge.database
     .from('packages')
     .select('*, providers(code,name,base_url)')
     .eq('almacen_id', guia)
     // A guide can exist in both provider ledgers. Match the Worker lookup and use the newest row.
     .order('scraped_at', { ascending: false })
     .limit(1)
-    .maybeSingle()
+  if (organizationId) q = q.eq('organization_id', organizationId)
+  const { data: pkg, error } = await q.maybeSingle()
   if (error) throw error
   if (!pkg) return null
 
@@ -143,6 +146,48 @@ export async function getPackageDetail(guia: string): Promise<PackageDetail | nu
 }
 
 // ── Writes (staff-only RPCs) ────────────────────────────────────────────────────
+export async function createPackage(input: {
+  almacenId: string
+  trackingNumber?: string | null
+  serviceType?: 'aereo' | 'maritimo' | null
+  referenciaName?: string | null
+  casillero?: string | null
+  weightLb?: number | null
+  pieces?: number | null
+  volumeCf?: number | null
+  dimensions?: string | null
+  originOffice?: string | null
+  destOffice?: string | null
+  description?: string | null
+  remitente?: string | null
+  declaredValue?: number | null
+  photoRef?: string | null
+  receivedAt?: string | null
+}): Promise<{ id: string; almacenId: string; organizationId: string }> {
+  const { error, data } = await insforge.database.rpc('create_package', {
+    p_almacen_id: input.almacenId,
+    p_tracking_number: input.trackingNumber ?? null,
+    p_service_type: input.serviceType ?? null,
+    p_referencia_name: input.referenciaName ?? null,
+    p_casillero: input.casillero ?? null,
+    p_weight_lb: input.weightLb ?? null,
+    p_pieces: input.pieces ?? null,
+    p_volume_cf: input.volumeCf ?? null,
+    p_dimensions: input.dimensions ?? null,
+    p_origin_office: input.originOffice ?? null,
+    p_dest_office: input.destOffice ?? null,
+    p_description: input.description ?? null,
+    p_remitente: input.remitente ?? null,
+    p_declared_value: input.declaredValue ?? null,
+    p_photo_ref: input.photoRef ?? null,
+    p_received_at: input.receivedAt ?? null,
+  })
+  if (error) throw error
+  const d = data as { id: string; almacen_id: string; organization_id: string } | null
+  if (!d) throw new Error('No se pudo crear el paquete.')
+  return { id: d.id, almacenId: d.almacen_id, organizationId: d.organization_id }
+}
+
 export async function setManualStatus(guia: string, status: string, note?: string): Promise<void> {
   const { error } = await insforge.database.rpc('set_manual_status', {
     p_guia: guia, p_status: status, p_note: note ?? null,

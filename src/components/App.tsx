@@ -59,8 +59,8 @@ export default function App() {
 
   return (
     <Shell user={user} view={view} onView={(v) => navigate({ view: v })} onLogout={logout}>
-      {view === 'overview' && <Overview onOpen={(guia) => navigate({ view, guia })} onGoShipments={() => navigate({ view: 'shipments' })} />}
-      {view === 'shipments' && <Shipments onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
+      {view === 'overview' && <Overview user={user} onOpen={(guia) => navigate({ view, guia })} onGoShipments={() => navigate({ view: 'shipments' })} />}
+      {view === 'shipments' && <Shipments user={user} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
       {view === 'reports' && <Reports />}
       {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
       {view === 'customers' && user.role !== 'viewer' && <Customers role={user.role} />}
@@ -71,7 +71,7 @@ export default function App() {
         />
       )}
       {view === 'configuracion' && user.role !== 'viewer' && <Configuracion user={user} />}
-      {detail && <ShipmentDetail guia={detail} role={user.role} onClose={() => navigate({ view })} />}
+      {detail && <ShipmentDetail guia={detail} user={user} onClose={() => navigate({ view })} />}
     </Shell>
   )
 }

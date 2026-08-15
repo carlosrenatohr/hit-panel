@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, RefreshCw, Search } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, Plus, RefreshCw, Search } from 'lucide-preact'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import {
@@ -14,12 +14,12 @@ import {
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
-import { exportPackages, getProviders, listPackages } from '../lib/insforge'
+import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
-import type { Pkg, Provider, ShipmentStatus } from '../lib/types'
+import type { Pkg, Provider, ShipmentStatus, SessionUser } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
-import { Button, Card, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
+import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
 
 const PAGE_SIZE = 25
 // `dir` is the direction applied when the option is picked. The default (status_rank asc) puts
@@ -55,12 +55,14 @@ function pageWindow(current: number, total: number): (number | '…')[] {
   return out
 }
 
-export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }) {
+export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen: (guia: string) => void }) {
   const colPrefs = useColumnPrefs()
   const visibleCols = colPrefs.columns
     .filter((c) => c.visible)
     .map((c) => COLUMN_DEFS.find((d) => d.key === c.key))
     .filter((d): d is (typeof COLUMN_DEFS)[number] => !!d)
+  const canWrite = user.role === 'admin' || user.role === 'billing'
+  const [selectedOrg, setSelectedOrg] = useState<string>(user.agency)
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<ListFilters>({ sortCol: 'status_rank', ascending: true })
@@ -71,12 +73,24 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
   const [exporting, setExporting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [showCal, setShowCal] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createForm, setCreateForm] = useState({
+    almacenId: '',
+    trackingNumber: '',
+    serviceType: '' as 'aereo' | 'maritimo' | '',
+    referenciaName: '',
+    weightLb: '',
+    pieces: '',
+    receivedAt: '',
+  })
 
   // Calendar: packages received per day in the selected month (received_at).
   const loadRecvMonth = useCallback(async (y: number, m: number): Promise<CalendarEvent[]> => {
     const mm = String(m).padStart(2, '0')
     const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
-    const { rows } = await listPackages({ from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}`, pageSize: 500 })
+    const { rows } = await listPackages({ from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}`, pageSize: 500, organizationId: selectedOrg })
     return rows.filter((p) => p.received_at).map((p) => ({ date: p.received_at as string, kind: 'recibido' }))
   }, [])
 
@@ -97,7 +111,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
     let cancelled = false
     setLoading(true)
     setErr(null)
-    listPackages({ ...filters, page, pageSize: PAGE_SIZE })
+    listPackages({ ...filters, page, pageSize: PAGE_SIZE, organizationId: selectedOrg })
       .then((r) => {
         if (cancelled) return
         setRows(r.rows)
@@ -113,7 +127,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
   function reload() {
     setLoading(true)
     setErr(null)
-    listPackages({ ...filters, page, pageSize: PAGE_SIZE })
+    listPackages({ ...filters, page, pageSize: PAGE_SIZE, organizationId: selectedOrg })
       .then((r) => { setRows(r.rows); setCount(r.count) })
       .catch(() => setErr('No se pudieron cargar los envíos.'))
       .finally(() => setLoading(false))
@@ -127,7 +141,7 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
   async function doExport() {
     setExporting(true)
     try {
-      const data = await exportPackages(filters, 2000)
+      const data = await exportPackages({ ...filters, organizationId: selectedOrg }, 2000)
       const cols = [
         { key: 'almacen_id', label: 'Guia' },
         { key: 'name', label: 'Nombre' },
@@ -157,6 +171,33 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
     }
   }
 
+  const handleCreatePackage = async () => {
+    if (!createForm.almacenId.trim()) {
+      setCreateError('La guía es obligatoria.')
+      return
+    }
+    setCreateError(null)
+    setCreateLoading(true)
+    try {
+      await createPackage({
+        almacenId: createForm.almacenId.trim(),
+        trackingNumber: createForm.trackingNumber || null,
+        serviceType: createForm.serviceType || null,
+        referenciaName: createForm.referenciaName || null,
+        weightLb: createForm.weightLb ? Number(createForm.weightLb) : null,
+        pieces: createForm.pieces ? Number(createForm.pieces) : null,
+        receivedAt: createForm.receivedAt || null,
+      })
+      setShowCreate(false)
+      setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '', weightLb: '', pieces: '', receivedAt: '' })
+      reload()
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   return (
@@ -182,6 +223,12 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
             <Download class="h-4 w-4" aria-hidden="true" />
             {exporting ? 'Exportando…' : 'Exportar CSV'}
           </Button>
+          {canWrite && (
+            <Button variant="primary" onClick={() => setShowCreate(true)}>
+              <Plus class="h-4 w-4" aria-hidden="true" />
+              Crear paquete
+            </Button>
+          )}
         </div>
       </div>
 
@@ -191,6 +238,24 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
           legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
           loadEvents={loadRecvMonth}
         />
+      )}
+
+      {canWrite && (
+        <Card class="p-4">
+          <div class="flex items-end gap-3">
+            <Field label="Organización">
+              <select
+                class={inputCls}
+                value={selectedOrg}
+                onChange={(e) => setSelectedOrg((e.target as HTMLSelectElement).value)}
+              >
+                <option value="hit">HIT Cargo</option>
+                <option value="suite">Suite</option>
+              </select>
+            </Field>
+            <p class="text-xs text-gray-500">Filtrar paquetes por agencia/tenant.</p>
+          </div>
+        </Card>
       )}
 
       {/* Filters */}
@@ -403,6 +468,100 @@ export default function Shipments({ onOpen }: { onOpen: (guia: string) => void }
           </nav>
         </div>
       </Card>
+
+      {/* ── Create Package Modal ── */}
+      {showCreate && (
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div class="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+            <h2 class="text-lg font-semibold text-secondary mb-4">Crear paquete manual</h2>
+
+            {createError && (
+              <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{createError}</div>
+            )}
+
+            <div class="space-y-3">
+              <Field label="Guía (almacén)">
+                <input
+                  class={inputCls}
+                  placeholder="Ej: 25001234"
+                  value={createForm.almacenId}
+                  onInput={(e) => setCreateForm({ ...createForm, almacenId: (e.target as HTMLInputElement).value })}
+                />
+              </Field>
+
+              <Field label="Número de tracking">
+                <input
+                  class={inputCls}
+                  placeholder="Opcional"
+                  value={createForm.trackingNumber}
+                  onInput={(e) => setCreateForm({ ...createForm, trackingNumber: (e.target as HTMLInputElement).value })}
+                />
+              </Field>
+
+              <Field label="Servicio">
+                <select
+                  class={inputCls}
+                  value={createForm.serviceType}
+                  onChange={(e) => setCreateForm({ ...createForm, serviceType: (e.target as HTMLSelectElement).value as 'aereo' | 'maritimo' | '' })}
+                >
+                  <option value="">Seleccionar…</option>
+                  <option value="aereo">Aéreo</option>
+                  <option value="maritimo">Marítimo</option>
+                </select>
+              </Field>
+
+              <Field label="Nombre de referencia">
+                <input
+                  class={inputCls}
+                  placeholder="Nombre del destinatario"
+                  value={createForm.referenciaName}
+                  onInput={(e) => setCreateForm({ ...createForm, referenciaName: (e.target as HTMLInputElement).value })}
+                />
+              </Field>
+
+              <div class="grid grid-cols-2 gap-3">
+                <Field label="Peso (lb)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class={inputCls}
+                    placeholder="0.0"
+                    value={createForm.weightLb}
+                    onInput={(e) => setCreateForm({ ...createForm, weightLb: (e.target as HTMLInputElement).value })}
+                  />
+                </Field>
+
+                <Field label="Piezas">
+                  <input
+                    type="number"
+                    min="1"
+                    class={inputCls}
+                    placeholder="1"
+                    value={createForm.pieces}
+                    onInput={(e) => setCreateForm({ ...createForm, pieces: (e.target as HTMLInputElement).value })}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Fecha de recepción (opcional)">
+                <input
+                  type="date"
+                  class={inputCls}
+                  value={createForm.receivedAt}
+                  onChange={(e) => setCreateForm({ ...createForm, receivedAt: (e.target as HTMLInputElement).value })}
+                />
+              </Field>
+            </div>
+
+            <div class="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null) }}>Cancelar</Button>
+              <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId}>
+                {createLoading ? 'Creando…' : 'Crear'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
