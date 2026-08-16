@@ -1,5 +1,5 @@
 import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, RefreshCw, StickyNote, Tag, X } from 'lucide-preact'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import InvoiceForm from './billing/InvoiceForm'
 import {
   cleanName,
@@ -36,6 +36,8 @@ export default function ShipmentDetail({
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [photoOpen, setPhotoOpen] = useState(false)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const photoUrlRef = useRef<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [cooldownUntil, setCooldownUntil] = useState(() => refreshCooldownUntil(guia))
   const [now, setNow] = useState(() => Date.now())
@@ -58,6 +60,15 @@ export default function ShipmentDetail({
       const det = await getPackageDetail(guia, user.role === 'admin' ? undefined : user.agency)
       setD(det)
       if (!det) setErr('No se encontró el paquete.')
+      // Provider photos are proxied through the worker (blob URL) because the
+      // panel CSP blocks *.cargotrack.net in img-src.
+      const url = det?.pkg.photo_ref ? await configApi.proxyPhotoUrl(det.pkg.photo_ref) : null
+      if (photoUrlRef.current) {
+        URL.revokeObjectURL(photoUrlRef.current)
+        photoUrlRef.current = null
+      }
+      if (url) photoUrlRef.current = url
+      setPhotoUrl(url)
     } catch {
       setErr('Error al cargar el detalle.')
     } finally {
@@ -67,6 +78,12 @@ export default function ShipmentDetail({
 
   useEffect(() => {
     void load()
+    return () => {
+      if (photoUrlRef.current) {
+        URL.revokeObjectURL(photoUrlRef.current)
+        photoUrlRef.current = null
+      }
+    }
   }, [guia])
 
   useEffect(() => {
@@ -305,7 +322,7 @@ export default function ShipmentDetail({
                       onClick={() => setPhotoOpen(true)}
                       class="flex items-center gap-1.5 text-gray-600 hover:text-primary"
                     >
-                      <img src={d.pkg.photo_ref} alt="Foto del paquete" class="h-8 w-8 rounded object-cover ring-1 ring-gray-200" />
+                      <img src={photoUrl ?? undefined} alt="Foto del paquete" class="h-8 w-8 rounded object-cover ring-1 ring-gray-200" />
                       🖼️ Ver foto
                     </button>
                   )}
@@ -523,7 +540,7 @@ export default function ShipmentDetail({
             <X class="h-5 w-5" aria-hidden="true" />
           </button>
           <img
-            src={d.pkg.photo_ref}
+            src={photoUrl ?? undefined}
             alt="Foto del paquete"
             class="max-h-full max-w-full rounded-lg object-contain"
             onClick={(e) => e.stopPropagation()}
