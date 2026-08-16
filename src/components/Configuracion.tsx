@@ -88,8 +88,9 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
     setError(null)
     try {
       const { agencies: rows } = await configApi.branding()
-      // Each user sees only their own tenant's branding — agencies are distinct brands.
-      setAgencies(rows.filter((a) => a.slug === user.agency))
+      // Each user sees only their own tenant's branding — agencies are distinct
+      // brands. Admins see every agency (mini-gallery to compare logos).
+      setAgencies(user.role === 'admin' ? rows : rows.filter((a) => a.slug === user.agency))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el branding.')
     }
@@ -168,18 +169,27 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
         const editable = canWrite && (user.role === 'admin' ? true : a.slug === user.agency)
         return (
           <Card key={a.slug} class="p-4">
-            <div class="flex items-start gap-4">
-              {a.logoUrl ? (
-                <img src={a.logoUrl} alt={a.name} class="h-24 w-24 rounded-lg border border-gray-200 object-contain bg-white" />
-              ) : (
-                <div class="flex h-24 w-24 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
-                  <Building2 class="h-8 w-8" aria-hidden="true" />
-                </div>
-              )}
+            <div class="flex items-center gap-4">
+              <div class="flex flex-col items-center gap-1">
+                {a.logoUrl ? (
+                  <img
+                    src={a.logoUrl}
+                    alt={`Logo de ${a.name}`}
+                    class="h-12 w-12 rounded-md border border-gray-200 object-contain bg-white"
+                  />
+                ) : (
+                  <div class="flex h-12 w-12 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-gray-400">
+                    <Building2 class="h-6 w-6" aria-hidden="true" />
+                  </div>
+                )}
+                <span class="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                  {a.logoUrl ? 'Logo actual' : 'Sin logo'}
+                </span>
+              </div>
               <div class="flex-1">
                 <div class="mb-1 text-lg font-semibold text-gray-800">{a.name}</div>
                 <div class="text-xs text-gray-500">
-                  {a.slug} {a.logoUrl ? '· logo actualizado' : '· sin logo personalizado'}
+                  {a.slug} {a.logoUrl ? '· logo personalizado' : '· sin logo personalizado'}
                 </div>
               </div>
 
