@@ -133,4 +133,25 @@ export const configApi = {
     api<{ ok: boolean }>('/rates/override-package', { method: 'POST', body: JSON.stringify({ guia, rateTableId }) }),
   audit: (filter: AuditFilter = {}) =>
     api<{ organizationId: string; rows: AuditLogEntry[]; count: number }>(`/audit${qs(filter)}`),
+  /**
+   * Proxy a provider photo through the worker (staff-gated) and return a blob
+   * object URL. The panel CSP blocks *.cargotrack.net images, so photos are
+   * fetched with the bearer token and displayed as blob: URLs (already allowed
+   * by img-src). Returns null if the photo can't be fetched.
+   */
+  proxyPhotoUrl: async (rawUrl: string | null): Promise<string | null> => {
+    if (!rawUrl) return null
+    const token = accessToken()
+    if (!token) return null
+    try {
+      const res = await fetch(`${API_BASE}/api/photo?url=${encodeURIComponent(rawUrl)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return null
+      const blob = await res.blob()
+      return URL.createObjectURL(blob)
+    } catch {
+      return null
+    }
+  },
 }
