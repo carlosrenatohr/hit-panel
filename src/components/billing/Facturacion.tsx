@@ -1,9 +1,10 @@
 import { CalendarClock, Download, FileText, Plus, RefreshCw, Search } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
-import { billingApi, type FreightType, type InvoiceFilters, type InvoiceListRow, type InvoiceStatus, type MonthlyClose } from '../../lib/billing'
+import { billingApi, type DateRangeSummary, type FreightType, type InvoiceFilters, type InvoiceListRow, type InvoiceStatus, type MonthlyClose } from '../../lib/billing'
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner } from '../ui'
+import { DateRangePicker } from '../DateRangePicker'
 import { InvoiceDaysBadge } from './badges'
 import BillingReports from './BillingReports'
 import ExceptionsView from './Exceptions'
@@ -54,6 +55,9 @@ export default function Facturacion({ role }: { role: Role }) {
   const [close, setClose] = useState<MonthlyClose | null>(null)
   const [closeBusy, setCloseBusy] = useState(false)
 
+  // Date-range summary
+  const [summary, setSummary] = useState<DateRangeSummary | null>(null)
+
   useEffect(() => {
     const t = setTimeout(() => {
       setFilters((f) => ({ ...f, search: searchInput }))
@@ -81,6 +85,19 @@ export default function Facturacion({ role }: { role: Role }) {
   }
   useEffect(reload, [filters, page])
 
+  // Load summary when date range filters change (debounced with reload)
+  useEffect(() => {
+    const from = filters.from ?? ''
+    const to = filters.to ?? ''
+    if (!from && !to) { setSummary(null); return }
+    let cancelled = false
+    billingApi
+      .summary(from || '2020-01-01', to || new Date().toISOString().slice(0, 10))
+      .then((s) => !cancelled && setSummary(s))
+      .catch(() => !cancelled && setSummary(null))
+    return () => { cancelled = true }
+  }, [filters.from, filters.to])
+
   function patch(p: Partial<InvoiceFilters>) {
     setFilters((f) => ({ ...f, ...p }))
     setPage(1)
@@ -99,7 +116,8 @@ export default function Facturacion({ role }: { role: Role }) {
         { key: 'paidUsd', label: 'Pagado USD' },
         { key: 'outstanding', label: 'Saldo USD' },
       ]
-      downloadCSV(`facturas-hit-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(all as unknown as Record<string, unknown>[], cols))
+      const dateSuffix = filters.from || filters.to ? `-${filters.from ?? 'inicio'}-${filters.to ?? 'fin'}` : ''
+      downloadCSV(`facturas-hit${dateSuffix}-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(all as unknown as Record<string, unknown>[], cols))
     } catch {
       setErr('No se pudo exportar.')
     }
@@ -169,10 +187,7 @@ export default function Facturacion({ role }: { role: Role }) {
             <option value="2025">2025</option>
             <option value="2026">2026</option>
           </select>
-          <div class="flex gap-1">
-            <input type="date" class={`${inputCls} w-full`} value={filters.from ?? ''} onInput={(e) => patch({ from: (e.target as HTMLInputElement).value || undefined })} />
-            <input type="date" class={`${inputCls} w-full`} value={filters.to ?? ''} onInput={(e) => patch({ to: (e.target as HTMLInputElement).value || undefined })} />
-          </div>
+          <DateRangePicker from={filters.from} to={filters.to} onChange={(f, t) => patch({ from: f, to: t })} />
         </div>
       </Card>
 
@@ -196,6 +211,20 @@ export default function Facturacion({ role }: { role: Role }) {
           )}
         </div>
       </Card>
+
+      {/* Date-range summary */}
+      {summary && (
+        <Card class="p-3">
+          <div class="flex flex-wrap items-center gap-6 text-sm">
+            <span class="font-medium text-gray-600">Resumen del periodo</span>
+            <span><span class="text-gray-400">Facturas </span><b>{summary.invoices}</b></span>
+            <span><span class="text-gray-400">Ingresos </span><b>{fmtUsd(summary.revenue)}</b></span>
+            <span><span class="text-gray-400">Ganancia </span><b class="text-green-700">{fmtUsd(summary.profit)}</b></span>
+            <span><span class="text-gray-400">Por cobrar </span><b class="text-yellow-700">{fmtUsd(summary.receivables)}</b></span>
+            <span class="text-gray-400">✈️ {fmtUsd(summary.byFreight.AIR.revenue)} · 🚢 {fmtUsd(summary.byFreight.MAR.revenue)}</span>
+          </div>
+        </Card>
+      )}
 
       {err && <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
 

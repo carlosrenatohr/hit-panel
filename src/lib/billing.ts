@@ -101,6 +101,16 @@ export interface ExceptionRow {
   client: string | null
   detail: string
 }
+export interface DateRangeSummary {
+  from: string
+  to: string
+  invoices: number
+  revenue: number
+  profit: number
+  receivables: number
+  byFreight: Record<FreightType, { revenue: number; profit: number; lbs: number }>
+}
+
 export interface Exceptions {
   offCatalog: ExceptionRow[]
   quarantinedPayments: ExceptionRow[]
@@ -209,6 +219,7 @@ export const billingApi = {
     api<InvoiceView>(`/invoices/${id}/packages/${packageId}`, { method: 'DELETE' }),
   closeMonth: (year: number, month: number) => api<MonthlyClose>(`/close-month${qs({ year, month })}`),
   reports: (year: number) => api<YearReport>(`/reports${qs({ year })}`),
+  summary: (from: string, to: string) => api<DateRangeSummary>(`/summary${qs({ from, to })}`),
   exceptions: () => api<Exceptions>('/exceptions'),
   shareInvoice: (id: string) => api<{ token: string; url: string }>(`/invoices/${id}/share`, { method: 'POST' }),
 }
