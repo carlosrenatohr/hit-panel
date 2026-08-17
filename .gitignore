@@ -18,6 +18,11 @@ ADMIN-CREDENTIALS.local.txt
 
 # Claude Code worktrees / local
 .claude/
+.agents/
+
+# Orbit promo video asset dir + skills lock (not part of the panel repo)
+orbit-hitcargo-video/
+skills-lock.json
 
 
 # graphify knowledge-graph output — keep the portable artifacts (graph.json + report)

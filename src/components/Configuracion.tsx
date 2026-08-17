@@ -87,10 +87,10 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
     setLoading(true)
     setError(null)
     try {
+      // Branding is scoped server-side to the session agency — even admins only
+      // see their own. No client-side filter is needed.
       const { agencies: rows } = await configApi.branding()
-      // Each user sees only their own tenant's branding — agencies are distinct
-      // brands. Admins see every agency (mini-gallery to compare logos).
-      setAgencies(user.role === 'admin' ? rows : rows.filter((a) => a.slug === user.agency))
+      setAgencies(rows)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cargar el branding.')
     }
