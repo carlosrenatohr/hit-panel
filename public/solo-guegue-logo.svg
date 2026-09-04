@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none">
+  <!-- Package icon -->
+  <rect x="4" y="8" width="24" height="22" rx="3" fill="#1e3a5f"/>
+  <rect x="8" y="4" width="16" height="6" rx="2" fill="#d4a843"/>
+  <line x1="16" y1="14" x2="16" y2="26" stroke="#d4a843" stroke-width="2" stroke-linecap="round"/>
+  <line x1="10" y1="20" x2="22" y2="20" stroke="#d4a843" stroke-width="2" stroke-linecap="round"/>
+  <!-- Text: Solo Guegue -->
+  <text x="36" y="28" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" fill="#1e3a5f" letter-spacing="-0.5">Solo Guegue</text>
+  <!-- Tagline line -->
+  <rect x="36" y="32" width="60" height="2" rx="1" fill="#d4a843"/>
+</svg>

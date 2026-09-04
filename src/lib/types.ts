@@ -91,7 +91,7 @@ export interface Stats {
   delivered_30d: number
 }
 
-export type Agency = 'hit' | 'suite'
+export type Agency = 'hit' | 'suite' | 'solo-guegue'
 
 export interface SessionUser {
   id: string

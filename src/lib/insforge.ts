@@ -1,5 +1,5 @@
 import { createClient } from '@insforge/sdk'
-import type { Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, Stats, Tag } from './types'
+import type { Agency, Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, Stats, Tag } from './types'
 
 const baseUrl = import.meta.env.PUBLIC_INSFORGE_URL as string
 const anonKey = import.meta.env.PUBLIC_INSFORGE_ANON_KEY as string
@@ -42,7 +42,8 @@ export async function currentUser(): Promise<SessionUser | null> {
     .eq('id', data.user.id)
     .maybeSingle()
   if (!row || row.active === false) return null
-  return { id: data.user.id, email: row.email ?? data.user.email, role: row.role, name: row.name, agency: row.agency === 'suite' ? 'suite' : 'hit' }
+  const validAgencies: Agency[] = ['hit', 'suite', 'solo-guegue']
+  return { id: data.user.id, email: row.email ?? data.user.email, role: row.role, name: row.name, agency: validAgencies.includes(row.agency) ? row.agency : 'hit' }
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
