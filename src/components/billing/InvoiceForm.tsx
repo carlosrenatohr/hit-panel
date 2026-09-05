@@ -1,6 +1,7 @@
 import { Plus, Trash2, X } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier } from '../../lib/billing'
+import { configApi, type RateTableInfo } from '../../lib/config'
 import { FREIGHT_LABEL, fmtUsd, TIER_LABEL } from '../../lib/format'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner } from '../ui'
 
@@ -12,12 +13,36 @@ interface DraftLine {
 }
 
 const FREIGHTS: FreightType[] = ['AIR', 'MAR']
-const TIERS: PriceTier[] = ['REGULAR', 'ESPECIAL', 'VIP', 'MADRES', 'DARIO']
+// Legacy catalog tiers — fallback when the agency has no rate tables yet.
+const LEGACY_TIERS: PriceTier[] = ['REGULAR', 'ESPECIAL', 'VIP', 'MADRES', 'DARIO']
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
-/** Create-invoice modal. Prices are computed live from the catalog for feedback; the
- *  server recomputes authoritatively on submit. `prefill` seeds it from a package (Stage 5). */
+/** Dynamic tier pricing: the agency's rate tables are the source; the global
+ *  catalog is the fallback. `tier` is free text — the server validates the combo. */
+interface TierPrice {
+  price: number
+  cost: number
+}
+
+function tierPriceFromTables(tables: RateTableInfo[], freightType: FreightType, tier: PriceTier): TierPrice | null {
+  for (const t of tables) {
+    if (t.freightType !== freightType) continue
+    const row = t.rows.find((r) => r.tier === tier)
+    if (row && row.price != null) return { price: row.price, cost: row.cost ?? 0 }
+  }
+  return null
+}
+
+function tierPriceFromCatalog(catalog: CatalogEntry[], freightType: FreightType, tier: PriceTier): TierPrice | null {
+  const entry = catalog.find((c) => c.freightType === freightType)
+  const price = entry?.tiers[tier]
+  if (price == null) return null
+  return { price, cost: entry?.cost ?? 0 }
+}
+
+/** Create-invoice modal. Prices are computed live from the agency's rate tables
+ *  (legacy catalog fallback) for feedback; the server recomputes authoritatively. */
 export default function InvoiceForm({
   prefill,
   onClose,
@@ -27,6 +52,7 @@ export default function InvoiceForm({
   onClose: () => void
   onCreated: (v: InvoiceView) => void
 }) {
+  const [rateTables, setRateTables] = useState<RateTableInfo[]>([])
   const [catalog, setCatalog] = useState<CatalogEntry[]>([])
   const [clientName, setClientName] = useState(prefill?.clientName ?? '')
   const [issueDate, setIssueDate] = useState(prefill?.issueDate ?? new Date().toISOString().slice(0, 10))
@@ -40,19 +66,36 @@ export default function InvoiceForm({
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
+    configApi
+      .listRates()
+      .then(({ tables }) => setRateTables(tables))
+      .catch(() => setRateTables([]))
     billingApi.catalog().then(setCatalog).catch(() => setErr('No se pudo cargar el catálogo.'))
   }, [])
 
-  const catByType = useMemo(() => Object.fromEntries(catalog.map((c) => [c.freightType, c])) as Record<FreightType, CatalogEntry>, [catalog])
+  // Tier options per freight: the agency's rate tables first, legacy tiers as fallback.
+  const tiersByFreight = useMemo(() => {
+    const out: Record<FreightType, PriceTier[]> = { AIR: [], MAR: [] }
+    for (const f of FREIGHTS) {
+      const dynamic = [...new Set(rateTables.filter((t) => t.freightType === f).flatMap((t) => t.rows.map((r) => r.tier)))]
+      const legacy = LEGACY_TIERS.filter((t) => {
+        const fromTables = dynamic.length > 0
+        if (fromTables) return false
+        const entry = catalog.find((c) => c.freightType === f)
+        return entry?.tiers[t] != null
+      })
+      out[f] = dynamic.length > 0 ? dynamic : legacy
+    }
+    return out
+  }, [rateTables, catalog])
 
   function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; profit: number } {
-    const entry = catByType[l.freightType]
     const lbs = Number(l.quantityLbs) || 0
-    const unitPrice = entry?.tiers[l.tier] ?? null
-    if (unitPrice == null) return { unitPrice: null, total: 0, profit: 0 }
-    const total = round2(lbs * unitPrice)
-    const profit = round2(total - lbs * (entry?.cost ?? 0))
-    return { unitPrice, total, profit }
+    const tp = tierPriceFromTables(rateTables, l.freightType, l.tier) ?? tierPriceFromCatalog(catalog, l.freightType, l.tier)
+    if (!tp) return { unitPrice: null, total: 0, profit: 0 }
+    const total = round2(lbs * tp.price)
+    const profit = round2(total - lbs * tp.cost)
+    return { unitPrice: tp.price, total, profit }
   }
 
   const totals = lines.reduce(
@@ -74,10 +117,7 @@ export default function InvoiceForm({
       .map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: Number(l.quantityLbs), description: l.description || null }))
       .filter((l) => l.quantityLbs > 0)
     if (cleanLines.length === 0) return setErr('Agrega al menos una línea con peso.')
-    // Reject a tier the catalog does not offer (e.g. MAR/Madres) before hitting the server.
-    for (const l of cleanLines) {
-      if (catByType[l.freightType]?.tiers[l.tier] == null) return setErr(`El tier ${TIER_LABEL[l.tier]} no aplica a ${FREIGHT_LABEL[l.freightType]}.`)
-    }
+    // The server is authoritative: an unpriced tier fails there with a clear message.
     setSaving(true)
     try {
       const view = await billingApi.createInvoice({
@@ -128,8 +168,11 @@ export default function InvoiceForm({
                   </label>
                   <label class="col-span-3 text-[11px] text-gray-500">
                     Tarifa
-                    <select class={`${inputCls} mt-1 w-full`} value={l.tier} onChange={(e) => setLine(i, { tier: (e.target as HTMLSelectElement).value as PriceTier })}>
-                      {TIERS.map((t) => <option key={t} value={t}>{TIER_LABEL[t]}</option>)}
+                    <select class={`${inputCls} mt-1 w-full`} value={l.tier} onChange={(e) => setLine(i, { tier: (e.target as HTMLSelectElement).value })}>
+                      {(tiersByFreight[l.freightType].includes(l.tier) || tiersByFreight[l.freightType].length === 0
+                        ? tiersByFreight[l.freightType]
+                        : [l.tier, ...tiersByFreight[l.freightType]]
+                      ).map((t) => <option key={t} value={t}>{TIER_LABEL[t] ?? t}</option>)}
                     </select>
                   </label>
                   <label class="col-span-2 text-[11px] text-gray-500">
@@ -146,7 +189,10 @@ export default function InvoiceForm({
                 </div>
               )
             })}
-            <Button variant="ghost" onClick={() => setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '' }])}>
+            <Button variant="ghost" onClick={() => {
+              const f = 'AIR'
+              setLines((ls) => [...ls, { freightType: f, tier: tiersByFreight[f][0] ?? 'REGULAR', quantityLbs: '', description: '' }])
+            }}>
               <Plus class="h-4 w-4" /> Agregar línea
             </Button>
           </div>

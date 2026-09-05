@@ -1,18 +1,28 @@
 import type { InvoiceView } from '../../lib/billing'
 import { FREIGHT_LABEL, fmtDate, fmtUsd, INVOICE_STATUS_LABEL } from '../../lib/format'
 
+export interface InvoiceBrand {
+  name: string
+  logoUrl: string | null
+}
+
+const FALLBACK_BRAND = { name: 'HIT Cargo', logoUrl: '/logo-mark.png' }
+
 // Pluggable print template. Hidden on screen (`hidden print:block`), isolated on
 // print by the `.invoice-print` rule in global.css. Enterprise-simple layout; this
 // is the seam for the owner's future custom format (logo/legal/RUC): swap the markup.
-export default function InvoicePrint({ inv }: { inv: InvoiceView }) {
+// The brand is the issuing agency's (config /branding), not a hardcoded logo.
+export default function InvoicePrint({ inv, brand }: { inv: InvoiceView; brand?: InvoiceBrand }) {
+  const b = brand ?? FALLBACK_BRAND
+  const logo = b.logoUrl || FALLBACK_BRAND.logoUrl
   return (
     <div class="invoice-print hidden bg-white p-10 text-[13px] leading-relaxed text-gray-900 print:block">
       {/* Header */}
       <div class="mb-6 flex items-start justify-between border-b-2 border-gray-900 pb-4">
         <div class="flex items-center gap-3">
-          <img src="/logo-mark.png" alt="HIT Cargo" class="h-12 w-12 object-contain" />
+          <img src={logo} alt={b.name} class="h-12 w-12 object-contain" />
           <div>
-            <div class="text-xl font-extrabold tracking-tight">HIT Cargo</div>
+            <div class="text-xl font-extrabold tracking-tight">{b.name}</div>
             <div class="text-xs text-gray-500">Recibo de venta</div>
           </div>
         </div>
@@ -81,7 +91,7 @@ export default function InvoicePrint({ inv }: { inv: InvoiceView }) {
       </div>
 
       {inv.observations && <div class="mt-6 border-t border-gray-100 pt-3 text-xs text-gray-500">Obs: {inv.observations}</div>}
-      <div class="mt-10 text-center text-[11px] text-gray-400">Gracias por su preferencia · HIT Cargo</div>
+      <div class="mt-10 text-center text-[11px] text-gray-400">Gracias por su preferencia · {b.name}</div>
     </div>
   )
 }
