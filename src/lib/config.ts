@@ -8,6 +8,37 @@ export interface AgencyInfo {
   logoUrl: string | null
 }
 
+/** Agency profile (Config > Información) — drives invoice PDF header and money symbols. */
+export interface AgencyProfile {
+  slug: string
+  name: string
+  ruc: string | null
+  address: string | null
+  phone: string | null
+  currency: CurrencyCode
+  isScrapable: boolean
+}
+
+export type CurrencyCode = 'USD' | 'NIO'
+
+export interface AgencyInfoPatch {
+  ruc?: string | null
+  address?: string | null
+  phone?: string | null
+  currency?: CurrencyCode
+}
+
+export interface PaymentCatalogItem {
+  id: string
+  name: string
+  active: boolean
+}
+
+export interface PaymentCatalogs {
+  methods: PaymentCatalogItem[]
+  banks: PaymentCatalogItem[]
+}
+
 export type FreightType = 'AIR' | 'MAR'
 
 export type PriceTier = string
@@ -87,6 +118,15 @@ export const configApi = {
       method: 'PATCH',
       body: patch,
     }),
+  info: () => api<AgencyProfile>('/info'),
+  updateInfo: (patch: AgencyInfoPatch) => api<AgencyProfile>('/info', { method: 'PATCH', body: patch }),
+  paymentCatalogs: () => api<PaymentCatalogs>('/payments'),
+  createPaymentMethod: (name: string) => api<PaymentCatalogItem>('/payments/methods', { method: 'POST', body: { name } }),
+  updatePaymentMethod: (id: string, patch: { name?: string; active?: boolean }) =>
+    api<{ ok: boolean }>(`/payments/methods/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
+  createPaymentBank: (name: string) => api<PaymentCatalogItem>('/payments/banks', { method: 'POST', body: { name } }),
+  updatePaymentBank: (id: string, patch: { name?: string; active?: boolean }) =>
+    api<{ ok: boolean }>(`/payments/banks/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
   listRates: (organizationId?: string) =>
     api<{ organizationId: string; tables: RateTableInfo[] }>(
       `/rates${organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''}`,

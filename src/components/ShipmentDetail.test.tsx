@@ -56,6 +56,15 @@ vi.mock('../lib/insforge', () => ({
   addNote: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../lib/config', () => ({
+  configApi: {
+    info: vi.fn().mockResolvedValue({ slug: 'hit', name: 'HIT Cargo', ruc: null, address: null, phone: null, currency: 'USD', isScrapable: true }),
+    branding: vi.fn().mockResolvedValue({ agencies: [] }),
+    paymentCatalogs: vi.fn().mockResolvedValue({ methods: [], banks: [] }),
+    proxyPhotoUrl: vi.fn().mockResolvedValue(null),
+  },
+}));
+
 const refreshPackage = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true, provider: 'everest' }));
 
 vi.mock('../lib/refresh', () => ({
