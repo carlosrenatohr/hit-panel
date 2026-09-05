@@ -91,7 +91,10 @@ export interface Stats {
   delivered_30d: number
 }
 
-export type Agency = 'hit' | 'suite' | 'solo-guegue'
+// Agencies are dynamic (rows in the `agencies` table); the type is a plain string so
+// a new agency never requires a panel change. The Worker derives the tenant from the
+// session server-side — this only drives branding and pinned list filters.
+export type Agency = string
 
 export interface SessionUser {
   id: string
