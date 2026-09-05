@@ -3,9 +3,7 @@ import type { ComponentChildren } from 'preact'
 import { Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, X } from 'lucide-preact'
 import type { SessionUser } from '../lib/types'
 import { configApi, TIER_LABELS } from '../lib/config'
-import type { AgencyInfo, AuditLogEntry, FreightType, PriceTier, RateRow, RateTableInfo } from '../lib/config'
-import { customerApi } from '../lib/customer'
-import type { Customer } from '../lib/customer'
+import type { AgencyInfo, AuditLogEntry, FreightType, RateRow, RateTableInfo } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { Button, Card, Field, SectionTitle, Spinner, inputCls } from './ui'
 
@@ -13,27 +11,31 @@ const BRANDING_BUCKET = 'branding'
 
 type Tab = 'branding' | 'rates' | 'audit'
 
-type RowDraft = { tier: PriceTier; price: string; cost: string }
+type RowDraft = { tier: string; price: string; cost: string }
 
-const EMPTY_DRAFTS: RowDraft[] = (
-  Object.keys(TIER_LABELS) as PriceTier[]
-).map((tier) => ({ tier, price: '', cost: '' }))
-
-function toDrafts(rows: RateRow[]): RowDraft[] {
-  if (rows.length === 0) return [...EMPTY_DRAFTS]
-  return rows.map((r) => ({
+/** A brand-new table starts with one empty draft row; the user names the tier
+ *  (any name — tiers are dynamic text now) and fills price/cost. */
+function toDrafts(rows?: RateRow[]): RowDraft[] {
+  const src = rows ?? []
+  if (src.length === 0) return [{ tier: 'REGULAR', price: '', cost: '' }]
+  return src.map((r) => ({
     tier: r.tier,
     price: r.price === 0 ? '' : String(r.price),
     cost: r.cost === null ? '' : String(r.cost),
   }))
 }
 
+/** Only tiers with a name AND a price are saved — empty drafts never become
+ *  0-price rows, and duplicate tier names collapse (last wins) so the upsert
+ *  never hits the same (table, tier) twice in one request. */
 function toRows(drafts: RowDraft[]): RateRow[] {
-  return drafts.map((d) => ({
-    tier: d.tier,
-    price: Number(d.price) || 0,
-    cost: d.cost === '' ? null : Number(d.cost) || 0,
-  }))
+  const byTier = new Map<string, RateRow>()
+  for (const d of drafts) {
+    const tier = d.tier.trim()
+    if (!tier || d.price === '') continue
+    byTier.set(tier, { tier, price: Number(d.price) || 0, cost: d.cost === '' ? null : Number(d.cost) || 0 })
+  }
+  return [...byTier.values()]
 }
 
 export default function Configuracion({ user }: { user: SessionUser }) {
@@ -226,32 +228,24 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
 const FREIGHT_LABELS: Record<FreightType, string> = { AIR: 'Aéreo', MAR: 'Marítimo' }
 
 function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
-  const [orgs, setOrgs] = useState<AgencyInfo[]>([])
-  const [org, setOrg] = useState<string>(user.agency)
   const [tables, setTables] = useState<RateTableInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [clients, setClients] = useState<Customer[]>([])
   const [saving, setSaving] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [newFreight, setNewFreight] = useState<FreightType>('AIR')
   const [editing, setEditing] = useState<Record<string, RowDraft[]>>({})
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
-  const [assignClient, setAssignClient] = useState('')
-  const [assignTable, setAssignTable] = useState('')
-  const [overrideGuia, setOverrideGuia] = useState('')
-  const [overrideTable, setOverrideTable] = useState('')
-  const [assignMode, setAssignMode] = useState<'client' | 'package'>('client')
   const [notice, setNotice] = useState<string | null>(null)
+  // The Worker resolves the organization from the session (never the payload),
+  // so there is no org selector here — each user manages their own agency's rates.
+  const agency = user.agency
 
-  const multiOrg = canWrite // admin|billing — both can manage other orgs via resolveOrg
-
-  const load = useCallback(async (selectedOrg?: string) => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [branding, rates] = await Promise.all([configApi.branding(), configApi.listRates(selectedOrg)])
-      setOrgs(branding.agencies)
+      const rates = await configApi.listRates()
       setTables(rates.tables)
       setEditing({})
     } catch (e) {
@@ -261,15 +255,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   }, [])
 
   useEffect(() => {
-    void load(multiOrg ? org : undefined)
-  }, [org, load, multiOrg])
-
-  useEffect(() => {
-    void customerApi
-      .list({ pageSize: 500 })
-      .then(({ rows }) => setClients(rows))
-      .catch(() => setClients([]))
-  }, [])
+    void load()
+  }, [agency, load])
 
   const showError = (e: unknown) => setError(e instanceof Error ? e.message : 'Ocurrió un error inesperado.')
   const showNotice = (msg: string) => {
@@ -277,7 +264,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     window.setTimeout(() => setNotice(null), 4000)
   }
 
-  function updateDraft(tableId: string, sourceRows: RateRow[], index: number, field: 'price' | 'cost', value: string) {
+  function updateDraft(tableId: string, sourceRows: RateRow[], index: number, field: 'tier' | 'price' | 'cost', value: string) {
     setEditing((prev) => {
       const drafts = prev[tableId] ?? toDrafts(sourceRows)
       const next = [...drafts]
@@ -286,17 +273,31 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     })
   }
 
+  function addDraftRow(tableId: string) {
+    setEditing((prev) => {
+      const drafts = prev[tableId] ?? toDrafts(tables.find((t) => t.id === tableId)?.rows)
+      return { ...prev, [tableId]: [...drafts, { tier: '', price: '', cost: '' }] }
+    })
+  }
+
+  function removeDraftRow(tableId: string, index: number) {
+    setEditing((prev) => {
+      const drafts = prev[tableId] ?? toDrafts(tables.find((t) => t.id === tableId)?.rows)
+      return { ...prev, [tableId]: drafts.filter((_, i) => i !== index) }
+    })
+  }
+
   async function createTable() {
     if (!newName.trim()) return
     setError(null)
     try {
-      const input: { name: string; freightType: FreightType; organizationId?: string } = { name: newName.trim(), freightType: newFreight }
-      if (multiOrg) input.organizationId = org
-      const created = await configApi.createRate(input)
+      const created = await configApi.createRate({ name: newName.trim(), freightType: newFreight })
       setNewName('')
-      setTables((prev) => [created, ...prev])
-      setEditing((prev) => ({ ...prev, [created.id]: toDrafts(created.rows) }))
-      showNotice('Tabla de tarifas creada.')
+      // The created table ships without rows — seed an empty draft row instead of
+      // crashing on undefined (the pre-dynamic-tiers bug).
+      setTables((prev) => [...prev, { ...created, rows: created.rows ?? [] }])
+      setEditing((prev) => ({ ...prev, [created.id]: toDrafts(created.rows ?? []) }))
+      showNotice('Tabla de tarifas creada. Agrega los rangos y guarda.')
     } catch (e) {
       showError(e)
     }
@@ -331,11 +332,15 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   async function saveRows(id: string) {
     const drafts = editing[id]
     if (!drafts) return
+    const rows = toRows(drafts)
+    if (rows.length === 0) {
+      setError('Agrega al menos un rango con nombre y precio antes de guardar.')
+      return
+    }
     if (!window.confirm('¿Guardar los cambios en las tarifas de esta tabla? Esta acción se registra en el historial de auditoría.')) return
     setSaving(id)
     setError(null)
     try {
-      const rows = toRows(drafts)
       await configApi.replaceRows(id, rows)
       setTables((prev) => prev.map((t) => (t.id === id ? { ...t, rows } : t)))
       setEditing((prev) => {
@@ -350,57 +355,12 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     setSaving(null)
   }
 
-  async function assignDefault() {
-    if (!assignClient) return
-    if (!window.confirm('¿Aplicar esta tarifa por defecto al cliente seleccionado?')) return
-    setError(null)
-    try {
-      await configApi.assignClientDefault(assignClient, assignTable || null)
-      showNotice(assignTable ? 'Tarifa por defecto asignada al cliente.' : 'Tarifa por defecto removida.')
-      setAssignClient('')
-      setAssignTable('')
-    } catch (e) {
-      showError(e)
-    }
-  }
-
-  async function applyOverride() {
-    const guia = overrideGuia.trim()
-    if (!guia) return
-    if (!window.confirm(`¿Aplicar esta tarifa especial al paquete ${guia}?`)) return
-    setError(null)
-    try {
-      await configApi.overridePackage(guia, overrideTable || null)
-      showNotice(overrideTable ? `Tarifa especial aplicada a ${guia}.` : `Tarifa especial removida de ${guia}.`)
-      setOverrideGuia('')
-      setOverrideTable('')
-    } catch (e) {
-      showError(e)
-    }
-  }
-
   if (loading && tables.length === 0) return <Spinner label="Cargando tarifas…" />
 
   return (
     <div class="flex flex-col gap-4">
       {error && <p class="text-sm text-red-600">{error}</p>}
       {notice && <p class="text-sm text-green-700">{notice}</p>}
-
-      {multiOrg && (
-        <Card>
-          <div class="flex items-center gap-2">
-            <Field label="Organización">
-              <select class={inputCls} value={org} onChange={(e) => setOrg((e.target as HTMLSelectElement).value)}>
-                {orgs.map((a) => (
-                  <option key={a.slug} value={a.slug}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        </Card>
-      )}
 
       {canWrite && (
         <Card>
@@ -464,17 +424,29 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                  <th class="py-2 pr-3">Rango (lb)</th>
+                  <th class="py-2 pr-3">Tarifa</th>
                   <th class="py-2 pr-3">Precio (USD)</th>
                   <th class="py-2">Costo (USD)</th>
+                  {canWrite && dirty && <th class="py-2 w-8" aria-label="Quitar fila" />}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => {
                   const isEditing = canWrite && dirty
                   return (
-                    <tr key={r.tier} class="border-b border-gray-100">
-                      <td class="py-1.5 pr-3 font-medium text-gray-700">{TIER_LABELS[r.tier]}</td>
+                    <tr key={`${r.tier}-${i}`} class="border-b border-gray-100">
+                      <td class="py-1.5 pr-3 font-medium text-gray-700">
+                        {isEditing ? (
+                          <input
+                            class={inputCls}
+                            value={(r as RowDraft).tier}
+                            placeholder="Ej. VIP"
+                            onChange={(e) => updateDraft(t.id, t.rows, i, 'tier', (e.target as HTMLInputElement).value)}
+                          />
+                        ) : (
+                          <span>{TIER_LABELS[r.tier] ?? r.tier}</span>
+                        )}
+                      </td>
                       <td class="py-1.5 pr-3">
                         {isEditing ? (
                           <input
@@ -523,13 +495,24 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                           <span class="text-gray-500">{(r as RateRow).cost === null ? '—' : `$${Number((r as RateRow).cost).toFixed(2)}`}</span>
                         )}
                       </td>
+                      {isEditing && (
+                        <td class="py-1.5 text-right">
+                          <button type="button" aria-label="Quitar tarifa" class="text-gray-300 hover:text-red-500" onClick={() => removeDraftRow(t.id, i)}>
+                            <Trash2 class="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
               </tbody>
             </table>
             {canWrite && dirty && (
-              <div class="mt-3 flex justify-end">
+              <div class="mt-3 flex justify-between">
+                <Button variant="ghost" onClick={() => addDraftRow(t.id)}>
+                  <Plus class="h-4 w-4" aria-hidden="true" />
+                  Agregar tarifa
+                </Button>
                 <Button onClick={() => saveRows(t.id)} disabled={saving === t.id}>
                   <Save class="h-4 w-4" aria-hidden="true" />
                   {saving === t.id ? 'Guardando…' : 'Guardar tarifas'}
@@ -543,80 +526,6 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       {tables.length === 0 && (
         <Card>
           <p class="text-sm text-gray-500">No hay tablas de tarifas para esta organización.</p>
-        </Card>
-      )}
-
-      {canWrite && (
-        <Card class="p-4">
-          <SectionTitle>Asignaciones de tarifa</SectionTitle>
-          <div class="mb-3 flex gap-4 border-b border-gray-200 text-xs font-medium text-gray-500">
-            <button
-              type="button"
-              onClick={() => setAssignMode('client')}
-              class={`pb-2 ${assignMode === 'client' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-800'}`}
-            >
-              Default por cliente
-            </button>
-            <button
-              type="button"
-              onClick={() => setAssignMode('package')}
-              class={`pb-2 ${assignMode === 'package' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-800'}`}
-            >
-              Especial por envío
-            </button>
-          </div>
-          {assignMode === 'client' && (
-            <div class="flex flex-wrap items-end gap-3">
-              <Field label="Cliente">
-                <select class={inputCls} value={assignClient} onChange={(e) => setAssignClient((e.target as HTMLSelectElement).value)}>
-                  <option value="">Seleccionar cliente…</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Tabla">
-                <select class={inputCls} value={assignTable} onChange={(e) => setAssignTable((e.target as HTMLSelectElement).value)}>
-                  <option value="">(sin tarifa)</option>
-                  {tables.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} · {FREIGHT_LABELS[t.freightType]}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Button onClick={assignDefault} disabled={!assignClient}>
-                Aplicar
-              </Button>
-            </div>
-          )}
-          {assignMode === 'package' && (
-            <div class="flex flex-wrap items-end gap-3">
-              <Field label="Guía / tracking">
-                <input class={inputCls} value={overrideGuia} placeholder="Ej. 123-4567890" onChange={(e) => setOverrideGuia((e.target as HTMLInputElement).value)} />
-              </Field>
-              <Field label="Tabla">
-                <select class={inputCls} value={overrideTable} onChange={(e) => setOverrideTable((e.target as HTMLSelectElement).value)}>
-                  <option value="">(quitar especial)</option>
-                  {tables.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} · {FREIGHT_LABELS[t.freightType]}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Button onClick={applyOverride} disabled={!overrideGuia.trim()}>
-                Aplicar
-              </Button>
-            </div>
-          )}
-          <p class="mt-2 text-xs text-gray-500">
-            {assignMode === 'client'
-              ? 'La tarifa por defecto se aplica a los envíos de ese cliente cuando no tiene una especial.'
-              : 'Sobrescribe la tarifa del paquete individual; el default del cliente queda intacto.'}
-          </p>
         </Card>
       )}
     </div>

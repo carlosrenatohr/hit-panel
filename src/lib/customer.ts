@@ -8,6 +8,9 @@ export interface Customer {
   nameNormalized: string
   casillero: string | null
   toReview: boolean
+  email: string | null
+  phone: string | null
+  address: string | null
 }
 
 export interface CustomerFilters {
@@ -21,6 +24,9 @@ export interface CustomerInput {
   name: string
   casillero?: string | null
   toReview?: boolean
+  email?: string | null
+  phone?: string | null
+  address?: string | null
 }
 
 interface ApiEnvelope<T> {
