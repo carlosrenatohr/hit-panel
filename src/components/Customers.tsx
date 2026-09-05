@@ -1,6 +1,8 @@
 import { Pencil, Plus, Search, Save, Users, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
+import { configApi } from '../lib/config'
 import { customerApi, type Customer, type CustomerInput } from '../lib/customer'
+import type { RateTableInfo } from '../lib/config'
 import type { Role } from '../lib/types'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner } from './ui'
 
@@ -19,6 +21,11 @@ export default function Customers({ role }: { role: Role }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [rateTables, setRateTables] = useState<RateTableInfo[]>([])
+
+  useEffect(() => {
+    configApi.listRates().then(({ tables }) => setRateTables(tables)).catch(() => setRateTables([]))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -43,12 +50,12 @@ export default function Customers({ role }: { role: Role }) {
 
   function openCreate() {
     setSelectedId(null)
-    setForm({ name: '', casillero: '', toReview: false, email: '', phone: '', address: '' })
+    setForm({ name: '', casillero: '', toReview: false, email: '', phone: '', address: '', defaultRateTableId: '' })
   }
 
   function openEdit(customer: Customer) {
     setSelectedId(customer.id)
-    setForm({ id: customer.id, name: customer.name, casillero: customer.casillero ?? '', toReview: customer.toReview, email: customer.email ?? '', phone: customer.phone ?? '', address: customer.address ?? '' })
+    setForm({ id: customer.id, name: customer.name, casillero: customer.casillero ?? '', toReview: customer.toReview, email: customer.email ?? '', phone: customer.phone ?? '', address: customer.address ?? '', defaultRateTableId: customer.defaultRateId ?? '' })
   }
 
   async function save() {
@@ -56,7 +63,7 @@ export default function Customers({ role }: { role: Role }) {
     setSaving(true)
     setError(null)
     try {
-      const payload = { name: form.name, casillero: form.casillero || null, toReview: form.toReview, email: form.email?.trim() || null, phone: form.phone?.trim() || null, address: form.address?.trim() || null }
+      const payload = { name: form.name, casillero: form.casillero || null, toReview: form.toReview, email: form.email?.trim() || null, phone: form.phone?.trim() || null, address: form.address?.trim() || null, defaultRateTableId: form.defaultRateTableId || null }
       if (form.id) await customerApi.update(form.id, payload)
       else await customerApi.create(payload)
       setForm(null)
@@ -98,6 +105,16 @@ export default function Customers({ role }: { role: Role }) {
             </Field>
             <Field label="Dirección">
               <input class={inputCls} value={form.address ?? ''} onInput={(e) => setForm({ ...form, address: (e.target as HTMLInputElement).value })} />
+            </Field>
+            <Field label="Tarifa por defecto">
+              <select class={inputCls} value={form.defaultRateTableId ?? ''} onChange={(e) => setForm({ ...form, defaultRateTableId: (e.target as HTMLSelectElement).value })}>
+                <option value="">(sin tarifa asignada)</option>
+                {rateTables.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} · {t.freightType === 'AIR' ? 'Aéreo' : 'Marítimo'}
+                  </option>
+                ))}
+              </select>
             </Field>
             <label class="flex items-end gap-2 pb-2 text-sm text-gray-600">
               <input type="checkbox" checked={form.toReview ?? false} onChange={(e) => setForm({ ...form, toReview: (e.target as HTMLInputElement).checked })} />
@@ -160,6 +177,7 @@ export default function Customers({ role }: { role: Role }) {
               {selected.email && <p class="text-sm text-gray-500">Email: {selected.email}</p>}
               {selected.phone && <p class="text-sm text-gray-500">Teléfono: {selected.phone}</p>}
               {selected.address && <p class="text-sm text-gray-500">Dirección: {selected.address}</p>}
+              {selected.defaultRateId && <p class="text-sm text-gray-500">Tarifa asignada ✓</p>}
             </div>
             {canWrite && <Button variant="ghost" onClick={() => openEdit(selected)}><Pencil class="h-4 w-4" /> Editar</Button>}
           </div>

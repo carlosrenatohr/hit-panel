@@ -184,4 +184,6 @@ export const billingApi = {
   summary: (from: string, to: string) => workerApi<DateRangeSummary>(`${API_BASE}/api/billing/summary${qs({ from, to })}`),
   exceptions: () => workerApi<Exceptions>(`${API_BASE}/api/billing/exceptions`),
   shareInvoice: (id: string) => workerApi<{ token: string; url: string }>(`${API_BASE}/api/billing/invoices/${id}/share`, { method: 'POST' }),
+  invoiceEvents: (id: string) =>
+    workerApi<{ events: Array<{ action: string; detail: string | null; actor: string | null; createdAt: string }> }>(`${API_BASE}/api/billing/invoices/${id}/events`),
 }
