@@ -14,8 +14,8 @@ export type FreightType = 'AIR' | 'MAR'
 // resolves prices per-org and rejects unoffered tiers. This is just a label type.
 export type PriceTier = string
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'PAID' | 'VOID'
-export type PaymentMethod = 'BANK_TRANSFER' | 'CASH' | 'CREDIT_BALANCE'
-export type PaymentBank = 'BAC' | 'LAFISE' | 'BANPRO'
+export type PaymentMethod = string
+export type PaymentBank = string
 export type Currency = 'USD' | 'NIO'
 
 export interface CatalogEntry {
@@ -75,6 +75,8 @@ export interface InvoiceView extends InvoiceListRow {
     paidAt: string | null
     raw: string | null
     quarantined: boolean
+    reference: string | null
+    comments: string | null
   }>
   packages: Array<{ packageId: string; source: 'auto' | 'manual'; matchedOc: string | null }>
 }
@@ -146,6 +148,8 @@ export interface ApplyPaymentInput {
   amount: number
   fxRate?: number | null
   paidAt?: string
+  reference?: string | null
+  comments?: string | null
 }
 
 function qs(params: Record<string, unknown>): string {

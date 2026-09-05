@@ -3,13 +3,209 @@ import type { ComponentChildren } from 'preact'
 import { Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, X } from 'lucide-preact'
 import type { SessionUser } from '../lib/types'
 import { configApi, TIER_LABELS } from '../lib/config'
-import type { AgencyInfo, AuditLogEntry, FreightType, RateRow, RateTableInfo } from '../lib/config'
+import type { AgencyInfo, AuditLogEntry, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateRow, RateTableInfo } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { Button, Card, Field, SectionTitle, Spinner, inputCls } from './ui'
 
 const BRANDING_BUCKET = 'branding'
 
-type Tab = 'branding' | 'rates' | 'audit'
+type Tab = 'info' | 'branding' | 'rates' | 'payments' | 'audit'
+
+// ─── Config > Información: agency profile + working currency ───────────────────
+function InfoTab({ canWrite }: { canWrite: boolean }) {
+  const [profile, setProfile] = useState<AgencyProfile | null>(null)
+  const [ruc, setRuc] = useState('')
+  const [address, setAddress] = useState('')
+  const [phone, setPhone] = useState('')
+  const [currency, setCurrency] = useState<CurrencyCode>('USD')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    configApi
+      .info()
+      .then((p) => {
+        setProfile(p)
+        setRuc(p.ruc ?? '')
+        setAddress(p.address ?? '')
+        setPhone(p.phone ?? '')
+        setCurrency(p.currency)
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar la información.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const showNotice = (msg: string) => {
+    setNotice(msg)
+    window.setTimeout(() => setNotice(null), 4000)
+  }
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await configApi.updateInfo({ ruc: ruc.trim() || null, address: address.trim() || null, phone: phone.trim() || null, currency })
+      setProfile(updated)
+      showNotice('Información guardada.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <Spinner label="Cargando información…" />
+
+  return (
+    <div class="flex flex-col gap-4">
+      {error && <p class="text-sm text-red-600">{error}</p>}
+      {notice && <p class="text-sm text-green-700">{notice}</p>}
+      <Card class="p-5">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <Field label="RUC">
+            <input class={inputCls} value={ruc} disabled={!canWrite} placeholder="Ej. J0310000123" onChange={(e) => setRuc((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Teléfono">
+            <input class={inputCls} value={phone} disabled={!canWrite} placeholder="Ej. 5555-1234" onChange={(e) => setPhone((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Dirección">
+            <input class={inputCls} value={address} disabled={!canWrite} placeholder="Calle, ciudad" onChange={(e) => setAddress((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Moneda">
+            <div class="flex gap-2">
+              {(['USD', 'NIO'] as CurrencyCode[]).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  disabled={!canWrite}
+                  onClick={() => setCurrency(c)}
+                  aria-pressed={currency === c}
+                  class={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+                    currency === c ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {c === 'USD' ? '$ USD' : 'C$ NIO'}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        <p class="mt-3 text-xs text-gray-400">
+          RUC, dirección y teléfono (opcionales) aparecen bajo el nombre de la agencia en cada factura. La moneda define el símbolo de los montos: $ para USD, C$ para NIO.
+        </p>
+        {canWrite && (
+          <div class="mt-4 flex justify-end">
+            <Button onClick={save} disabled={saving}>
+              <Save class="h-4 w-4" aria-hidden="true" />
+              {saving ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ─── Config > Pagos: dynamic methods + banks catalogs ──────────────────────────
+function CatalogList({
+  items,
+  canWrite,
+  onToggle,
+  onCreate,
+  placeholder,
+}: {
+  items: PaymentCatalogItem[]
+  canWrite: boolean
+  onToggle: (item: PaymentCatalogItem) => void
+  onCreate: (name: string) => void
+  placeholder: string
+}) {
+  const [newName, setNewName] = useState('')
+  return (
+    <div>
+      <ul class="divide-y divide-gray-100">
+        {items.map((it) => (
+          <li key={it.id} class="flex items-center justify-between py-2">
+            <span class={`text-sm ${it.active ? 'font-medium text-gray-800' : 'text-gray-400 line-through'}`}>{it.name}</span>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => onToggle(it)}
+                class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${it.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+              >
+                {it.active ? 'Activo' : 'Inactivo'}
+              </button>
+            )}
+          </li>
+        ))}
+        {items.length === 0 && <li class="py-2 text-sm text-gray-400">Sin elementos.</li>}
+      </ul>
+      {canWrite && (
+        <div class="mt-3 flex items-end gap-2">
+          <Field label="Agregar">
+            <input class={inputCls} value={newName} placeholder={placeholder} onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Button
+            variant="ghost"
+            disabled={!newName.trim()}
+            onClick={() => {
+              onCreate(newName.trim())
+              setNewName('')
+            }}
+          >
+            <Plus class="h-4 w-4" aria-hidden="true" />
+            Agregar
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PaymentsTab({ canWrite }: { canWrite: boolean }) {
+  const [catalogs, setCatalogs] = useState<PaymentCatalogs | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () => {
+    configApi
+      .paymentCatalogs()
+      .then(setCatalogs)
+      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los catálogos de pago.'))
+  }
+  useEffect(load, [])
+
+  if (error) return <p class="text-sm text-red-600">{error}</p>
+  if (!catalogs) return <Spinner label="Cargando métodos de pago…" />
+
+  return (
+    <div class="grid gap-4 lg:grid-cols-2">
+      <Card class="p-5">
+        <SectionTitle>Métodos de pago</SectionTitle>
+        <CatalogList
+          items={catalogs.methods}
+          canWrite={canWrite}
+          placeholder="Ej. Sinpe móvil"
+          onToggle={(it) =>
+            configApi.updatePaymentMethod(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))
+          }
+          onCreate={(name) => configApi.createPaymentMethod(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
+        />
+      </Card>
+      <Card class="p-5">
+        <SectionTitle>Bancos</SectionTitle>
+        <CatalogList
+          items={catalogs.banks}
+          canWrite={canWrite}
+          placeholder="Ej. BAC"
+          onToggle={(it) => configApi.updatePaymentBank(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
+          onCreate={(name) => configApi.createPaymentBank(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
+        />
+      </Card>
+    </div>
+  )
+}
 
 type RowDraft = { tier: string; price: string; cost: string }
 
@@ -39,12 +235,14 @@ function toRows(drafts: RowDraft[]): RateRow[] {
 }
 
 export default function Configuracion({ user }: { user: SessionUser }) {
-  const [tab, setTab] = useState<Tab>('branding')
+  const [tab, setTab] = useState<Tab>('info')
   const canWrite = user.role === 'admin' || user.role === 'billing'
 
   const tabs: { key: Tab; label: string; icon: typeof Building2 }[] = [
+    { key: 'info', label: 'Información', icon: Building2 },
     { key: 'branding', label: 'Branding', icon: Building2 },
     { key: 'rates', label: 'Tarifas', icon: Table2 },
+    { key: 'payments', label: 'Pagos', icon: ScrollText },
     { key: 'audit', label: 'Auditoría', icon: ScrollText },
   ]
 
@@ -70,8 +268,10 @@ export default function Configuracion({ user }: { user: SessionUser }) {
           )
         })}
       </div>
+      {tab === 'info' && <InfoTab canWrite={canWrite} />}
       {tab === 'branding' && <BrandingTab user={user} canWrite={canWrite} />}
       {tab === 'rates' && <RatesTab user={user} canWrite={canWrite} />}
+      {tab === 'payments' && <PaymentsTab canWrite={canWrite} />}
       {tab === 'audit' && <AuditTab user={user} />}
     </div>
   )

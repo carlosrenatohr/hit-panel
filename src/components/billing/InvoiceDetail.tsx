@@ -8,8 +8,8 @@ import {
   type PaymentBank,
   type PaymentMethod,
 } from '../../lib/billing'
-import { FREIGHT_LABEL, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
-import { configApi, type AgencyInfo } from '../../lib/config'
+import { FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
+import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
 import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
@@ -18,9 +18,16 @@ function StatusPill({ s }: { s: string }) {
   return <span class={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${INVOICE_STATUS_SOFT[s] ?? 'bg-gray-100 text-gray-600'}`}>{INVOICE_STATUS_LABEL[s] ?? s}</span>
 }
 
-const METHODS: PaymentMethod[] = ['BANK_TRANSFER', 'CASH', 'CREDIT_BALANCE']
-const METHOD_LABEL: Record<PaymentMethod, string> = { BANK_TRANSFER: 'Transferencia', CASH: 'Efectivo', CREDIT_BALANCE: 'Saldo a favor' }
-const BANKS: PaymentBank[] = ['BAC', 'LAFISE', 'BANPRO']
+// Legacy payments stored enum codes; dynamic catalogs store display names.
+const METHOD_LABEL: Record<string, string> = { BANK_TRANSFER: 'Transferencia', CASH: 'Efectivo', CREDIT_BALANCE: 'Saldo a favor' }
+const FALLBACK_METHODS = ['Transferencia', 'Efectivo', 'Saldo a favor']
+const FALLBACK_BANKS = ['BAC', 'LAFISE', 'BANPRO']
+
+/** Money formatter honoring the agency's working currency ($ USD / C$ NIO). */
+function fmtMoney(amount: number | null | undefined, currency: 'USD' | 'NIO' | undefined): string {
+  const sym = currency === 'NIO' ? 'C$' : '$'
+  return `${sym}${Number(amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 
 export default function InvoiceDetail({
   id,
@@ -39,8 +46,10 @@ export default function InvoiceDetail({
   const [busy, setBusy] = useState(false)
 
   // Payment form
-  const [pm, setPm] = useState<PaymentMethod>('BANK_TRANSFER')
-  const [bank, setBank] = useState<PaymentBank>('BAC')
+  const [pm, setPm] = useState<PaymentMethod>('')
+  const [bank, setBank] = useState<PaymentBank>('')
+  const [reference, setReference] = useState('')
+  const [comments, setComments] = useState('')
   const [cur, setCur] = useState<Currency>('USD')
   const [amount, setAmount] = useState('')
   const [fx, setFx] = useState('')
@@ -48,6 +57,8 @@ export default function InvoiceDetail({
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [brand, setBrand] = useState<InvoiceBrand | null>(null)
+  const [catalogs, setCatalogs] = useState<PaymentCatalogs | null>(null)
+  const [profile, setProfile] = useState<AgencyProfile | null>(null)
 
   // Issuing agency's brand for the printable receipt (cosmetic — never blocks).
   useEffect(() => {
@@ -60,10 +71,34 @@ export default function InvoiceDetail({
         if (a) setBrand({ name: a.name, logoUrl: a.logoUrl })
       })
       .catch(() => {})
+    configApi
+      .info()
+      .then((p) => alive && setProfile(p))
+      .catch(() => {})
+    configApi
+      .paymentCatalogs()
+      .then((c) => alive && setCatalogs(c))
+      .catch(() => {})
     return () => {
       alive = false
     }
   }, [])
+
+  // Dynamic catalogs (agency-managed); fall back to the classic lists when empty —
+  // an empty catalog never bricks the payment form (the Worker accepts free text then).
+  const methods = catalogs?.methods.filter((m) => m.active).map((m) => m.name).length
+    ? catalogs!.methods.filter((m) => m.active).map((m) => m.name)
+    : FALLBACK_METHODS
+  const banks = catalogs?.banks.filter((b) => b.active).map((b) => b.name).length
+    ? catalogs!.banks.filter((b) => b.active).map((b) => b.name)
+    : FALLBACK_BANKS
+
+  // Preselect the first active entries once the catalogs arrive (or on fallback).
+  useEffect(() => {
+    setPm((v) => (methods.includes(v) ? v : methods[0] ?? ''))
+    setBank((v) => (banks.includes(v) ? v : ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogs])
 
   async function load() {
     setLoading(true)
@@ -96,16 +131,21 @@ export default function InvoiceDetail({
   function addPayment() {
     const amt = Number(amount)
     if (!(amt > 0)) return setErr('Monto inválido.')
+    if (!pm) return setErr('Selecciona un método de pago.')
     const input: ApplyPaymentInput = {
       method: pm,
-      bank: pm === 'BANK_TRANSFER' ? bank : null,
+      bank: bank || null,
       currency: cur,
       amount: amt,
       fxRate: cur === 'NIO' && fx ? Number(fx) : null,
+      reference: reference.trim() || null,
+      comments: comments.trim() || null,
     }
     void run(() => billingApi.applyPayment(id, input)).then(() => {
       setAmount('')
       setFx('')
+      setReference('')
+      setComments('')
     })
   }
 
@@ -164,10 +204,10 @@ export default function InvoiceDetail({
                 </div>
                 {inv.status === 'PAID' && inv.paidAt && <div class="text-[11px] text-gray-400">Pagada el {fmtDate(inv.paidAt)}</div>}
                 <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div><span class="text-gray-400">Total</span><div class="text-lg font-bold text-secondary">{fmtUsd(inv.total)}</div></div>
-                  <div><span class="text-gray-400">Ganancia</span><div class="font-semibold text-green-700">{fmtUsd(inv.profit)}{inv.margin != null && <span class="ml-1 text-xs text-gray-400">({Math.round(inv.margin * 100)}%)</span>}</div></div>
-                  <div><span class="text-gray-400">Pagado</span><div class="font-medium">{fmtUsd(inv.paidUsd)}</div></div>
-                  <div><span class="text-gray-400">Saldo</span><div class="font-medium">{fmtUsd(inv.outstanding)}</div></div>
+                  <div><span class="text-gray-400">Total</span><div class="text-lg font-bold text-secondary">{fmtMoney(inv.total, profile?.currency)}</div></div>
+                  <div><span class="text-gray-400">Ganancia</span><div class="font-semibold text-green-700">{fmtMoney(inv.profit, profile?.currency)}{inv.margin != null && <span class="ml-1 text-xs text-gray-400">({Math.round(inv.margin * 100)}%)</span>}</div></div>
+                  <div><span class="text-gray-400">Pagado</span><div class="font-medium">{fmtMoney(inv.paidUsd, profile?.currency)}</div></div>
+                  <div><span class="text-gray-400">Saldo</span><div class="font-medium">{fmtMoney(inv.outstanding, profile?.currency)}</div></div>
                 </div>
               </Card>
 
@@ -190,7 +230,7 @@ export default function InvoiceDetail({
                           <div>{l.description ?? FREIGHT_LABEL[l.freightType]}</div>
                           <div class="text-[11px] text-gray-400">{FREIGHT_LABEL[l.freightType]} · {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : 'fuera de catálogo'} · {l.quantityLbs} lb</div>
                         </td>
-                        <td class="px-4 py-2 text-right font-medium">{fmtUsd(l.total)}</td>
+                        <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -205,12 +245,14 @@ export default function InvoiceDetail({
                   {inv.payments.map((p, i) => (
                     <div key={i} class="flex items-center justify-between px-4 py-2 text-sm">
                       <div>
-                        <span class="font-medium">{p.method ?? p.raw ?? '—'}</span>
+                        <span class="font-medium">{p.method ? (METHOD_LABEL[p.method] ?? p.method) : (p.raw ?? '—')}</span>
                         {p.bank && <span class="text-gray-400"> · {p.bank}</span>}
+                        {p.reference && <span class="text-gray-400"> · Ref: {p.reference}</span>}
+                        {p.comments && <span class="text-gray-400"> · {p.comments}</span>}
                         {p.quarantined && <span class="ml-1 rounded bg-yellow-50 px-1 text-[10px] text-yellow-700">revisar</span>}
                         <div class="text-[11px] text-gray-400">{fmtDate(p.paidAt)}{p.currency ? ` · ${p.currency}` : ''}</div>
                       </div>
-                      <div class="text-right">{p.amountUsd != null ? fmtUsd(p.amountUsd) : '—'}</div>
+                      <div class="text-right">{p.amountUsd != null ? fmtMoney(p.amountUsd, profile?.currency) : '—'}</div>
                     </div>
                   ))}
                 </div>
@@ -218,8 +260,8 @@ export default function InvoiceDetail({
                   <div class="space-y-2 border-t border-gray-100 bg-gray-50/60 p-3">
                     <div class="grid grid-cols-2 gap-2">
                       <Field label="Método">
-                        <select class={inputCls} value={pm} onChange={(e) => setPm((e.target as HTMLSelectElement).value as PaymentMethod)}>
-                          {METHODS.map((m) => <option key={m} value={m}>{METHOD_LABEL[m]}</option>)}
+                        <select class={inputCls} value={pm} onChange={(e) => setPm((e.target as HTMLSelectElement).value)}>
+                          {methods.map((m) => <option key={m} value={m}>{METHOD_LABEL[m] ?? m}</option>)}
                         </select>
                       </Field>
                       <Field label="Moneda">
@@ -228,13 +270,15 @@ export default function InvoiceDetail({
                           <option value="NIO">NIO (córdobas)</option>
                         </select>
                       </Field>
-                      {pm === 'BANK_TRANSFER' && (
-                        <Field label="Banco">
-                          <select class={inputCls} value={bank} onChange={(e) => setBank((e.target as HTMLSelectElement).value as PaymentBank)}>
-                            {BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
-                          </select>
-                        </Field>
-                      )}
+                      <Field label="Banco (opcional)">
+                        <select class={inputCls} value={bank} onChange={(e) => setBank((e.target as HTMLSelectElement).value)}>
+                          <option value="">—</option>
+                          {banks.map((b) => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Referencia (opcional)">
+                        <input class={inputCls} value={reference} placeholder="N.º de transferencia" onInput={(e) => setReference((e.target as HTMLInputElement).value)} />
+                      </Field>
                       <Field label={cur === 'NIO' ? 'Monto (NIO)' : 'Monto (USD)'}>
                         <input type="number" min="0" step="0.01" class={inputCls} value={amount} onInput={(e) => setAmount((e.target as HTMLInputElement).value)} />
                       </Field>
@@ -243,8 +287,11 @@ export default function InvoiceDetail({
                           <input type="number" min="0" step="0.01" class={inputCls} value={fx} onInput={(e) => setFx((e.target as HTMLInputElement).value)} placeholder="36.5" />
                         </Field>
                       )}
+                      <Field label="Comentarios (opcional)">
+                        <input class={inputCls} value={comments} placeholder="Nota sobre el pago" onInput={(e) => setComments((e.target as HTMLInputElement).value)} />
+                      </Field>
                     </div>
-                    <Button onClick={addPayment} disabled={busy}>Registrar pago</Button>
+                    <Button onClick={addPayment} disabled={busy || !pm}>Registrar pago</Button>
                   </div>
                 )}
               </Card>

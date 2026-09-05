@@ -48,10 +48,23 @@ export default function ShipmentDetail({
   const [tagValue, setTagValue] = useState('')
   const [noteBody, setNoteBody] = useState('')
   const [showInvoice, setShowInvoice] = useState(false)
+  // Agencies with is_scrapable = false work manual-only: no re-scrape affordance.
+  const [scrapable, setScrapable] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    configApi
+      .info()
+      .then((info) => alive && setScrapable(info.isScrapable))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const canWrite = user.role === 'admin' || user.role === 'staff'
   const canBill = user.role === 'admin' || user.role === 'billing'
-  const canRefresh = user.role === 'admin'
+  const canRefresh = user.role === 'admin' && scrapable
   const isAdmin = user.role === 'admin'
 
   async function load() {
