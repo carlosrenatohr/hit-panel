@@ -43,12 +43,12 @@ export default function Customers({ role }: { role: Role }) {
 
   function openCreate() {
     setSelectedId(null)
-    setForm({ name: '', casillero: '', toReview: false })
+    setForm({ name: '', casillero: '', toReview: false, email: '', phone: '', address: '' })
   }
 
   function openEdit(customer: Customer) {
     setSelectedId(customer.id)
-    setForm({ id: customer.id, name: customer.name, casillero: customer.casillero ?? '', toReview: customer.toReview })
+    setForm({ id: customer.id, name: customer.name, casillero: customer.casillero ?? '', toReview: customer.toReview, email: customer.email ?? '', phone: customer.phone ?? '', address: customer.address ?? '' })
   }
 
   async function save() {
@@ -56,8 +56,9 @@ export default function Customers({ role }: { role: Role }) {
     setSaving(true)
     setError(null)
     try {
-      if (form.id) await customerApi.update(form.id, { name: form.name, casillero: form.casillero, toReview: form.toReview })
-      else await customerApi.create({ name: form.name, casillero: form.casillero, toReview: form.toReview })
+      const payload = { name: form.name, casillero: form.casillero || null, toReview: form.toReview, email: form.email?.trim() || null, phone: form.phone?.trim() || null, address: form.address?.trim() || null }
+      if (form.id) await customerApi.update(form.id, payload)
+      else await customerApi.create(payload)
       setForm(null)
       setRevision((value) => value + 1)
     } catch (e) {
@@ -88,6 +89,15 @@ export default function Customers({ role }: { role: Role }) {
             </Field>
             <Field label="Casillero">
               <input class={inputCls} value={form.casillero ?? ''} onInput={(e) => setForm({ ...form, casillero: (e.target as HTMLInputElement).value })} />
+            </Field>
+            <Field label="Email">
+              <input type="email" class={inputCls} value={form.email ?? ''} onInput={(e) => setForm({ ...form, email: (e.target as HTMLInputElement).value })} />
+            </Field>
+            <Field label="Teléfono">
+              <input class={inputCls} value={form.phone ?? ''} onInput={(e) => setForm({ ...form, phone: (e.target as HTMLInputElement).value })} />
+            </Field>
+            <Field label="Dirección">
+              <input class={inputCls} value={form.address ?? ''} onInput={(e) => setForm({ ...form, address: (e.target as HTMLInputElement).value })} />
             </Field>
             <label class="flex items-end gap-2 pb-2 text-sm text-gray-600">
               <input type="checkbox" checked={form.toReview ?? false} onChange={(e) => setForm({ ...form, toReview: (e.target as HTMLInputElement).checked })} />
@@ -142,7 +152,17 @@ export default function Customers({ role }: { role: Role }) {
 
       {selected && !form && (
         <Card class="p-4">
-          <div class="flex items-start justify-between"><div><h2 class="font-semibold text-secondary">{selected.name}</h2><p class="mt-1 text-sm text-gray-500">Normalizado: {selected.nameNormalized}</p><p class="text-sm text-gray-500">Casillero: {selected.casillero || '—'}</p></div>{canWrite && <Button variant="ghost" onClick={() => openEdit(selected)}><Pencil class="h-4 w-4" /> Editar</Button>}</div>
+          <div class="flex items-start justify-between">
+            <div>
+              <h2 class="font-semibold text-secondary">{selected.name}</h2>
+              <p class="mt-1 text-sm text-gray-500">Normalizado: {selected.nameNormalized}</p>
+              <p class="text-sm text-gray-500">Casillero: {selected.casillero || '—'}</p>
+              {selected.email && <p class="text-sm text-gray-500">Email: {selected.email}</p>}
+              {selected.phone && <p class="text-sm text-gray-500">Teléfono: {selected.phone}</p>}
+              {selected.address && <p class="text-sm text-gray-500">Dirección: {selected.address}</p>}
+            </div>
+            {canWrite && <Button variant="ghost" onClick={() => openEdit(selected)}><Pencil class="h-4 w-4" /> Editar</Button>}
+          </div>
         </Card>
       )}
     </div>
