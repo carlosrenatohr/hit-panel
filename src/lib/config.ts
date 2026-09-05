@@ -85,23 +85,23 @@ export const configApi = {
    updateBranding: (slug: string, patch: { logoKey?: string | null }) =>
      api<{ slug: string; logoUrl: string | null }>(`/branding/${encodeURIComponent(slug)}`, {
       method: 'PATCH',
-      body: JSON.stringify(patch),
+      body: patch,
     }),
   listRates: (organizationId?: string) =>
     api<{ organizationId: string; tables: RateTableInfo[] }>(
       `/rates${organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''}`,
     ),
   createRate: (input: { name: string; freightType: FreightType; organizationId?: string }) =>
-    api<RateTableInfo>('/rates', { method: 'POST', body: JSON.stringify(input) }),
+    api<RateTableInfo>('/rates', { method: 'POST', body: input }),
    renameRate: (id: string, name: string) =>
-     api<RateTableInfo>(`/rates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+     api<RateTableInfo>(`/rates/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } }),
    deleteRate: (id: string) => api<{ ok: boolean }>(`/rates/${encodeURIComponent(id)}`, { method: 'DELETE' }),
    replaceRows: (id: string, rows: RateRow[]) =>
-     api<{ id: string; rows: RateRow[] }>(`/rates/${encodeURIComponent(id)}/rows`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+     api<{ id: string; rows: RateRow[] }>(`/rates/${encodeURIComponent(id)}/rows`, { method: 'PUT', body: { rows } }),
   assignClientDefault: (clientId: string, rateTableId: string | null) =>
-    api<{ ok: boolean }>('/rates/assign-client', { method: 'POST', body: JSON.stringify({ clientId, rateTableId }) }),
+    api<{ ok: boolean }>('/rates/assign-client', { method: 'POST', body: { clientId, rateTableId } }),
   overridePackage: (guia: string, rateTableId: string | null) =>
-    api<{ ok: boolean }>('/rates/override-package', { method: 'POST', body: JSON.stringify({ guia, rateTableId }) }),
+    api<{ ok: boolean }>('/rates/override-package', { method: 'POST', body: { guia, rateTableId } }),
   audit: (filter: AuditFilter = {}) =>
     api<{ organizationId: string; rows: AuditLogEntry[]; count: number }>(`/audit${qs(filter)}`),
   /**
