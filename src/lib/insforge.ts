@@ -1,5 +1,5 @@
 import { createClient } from '@insforge/sdk'
-import type { Agency, Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, Stats, Tag } from './types'
+import type { Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, Stats, Tag } from './types'
 
 const baseUrl = import.meta.env.PUBLIC_INSFORGE_URL as string
 const anonKey = import.meta.env.PUBLIC_INSFORGE_ANON_KEY as string
@@ -42,8 +42,8 @@ export async function currentUser(): Promise<SessionUser | null> {
     .eq('id', data.user.id)
     .maybeSingle()
   if (!row || row.active === false) return null
-  const validAgencies: Agency[] = ['hit', 'suite', 'solo-guegue']
-  return { id: data.user.id, email: row.email ?? data.user.email, role: row.role, name: row.name, agency: validAgencies.includes(row.agency) ? row.agency : 'hit' }
+  // agency is an FK to agencies.slug (validated server-side); no client-side allowlist.
+  return { id: data.user.id, email: row.email ?? data.user.email, role: row.role, name: row.name, agency: row.agency ?? 'hit' }
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
@@ -53,14 +53,22 @@ export async function getStats(organizationId?: string): Promise<Stats> {
   return (data as Stats) ?? { total: 0, by_status: {}, by_provider: {}, last_scraped: {}, delivered_30d: 0 }
 }
 
-// Providers are tenant-scoped via providers.organization_id: a user only sees
-// the providers of their own agency (hit → everest + global_connection, suite → suite_demo).
+// Providers are tenant-scoped via the provider_agencies junction (M:N): a user only
+// sees the providers linked to their own agency. providers.organization_id is deprecated.
 export async function getProviders(agency?: string): Promise<Provider[]> {
-  let q = insforge.database.from('providers').select('id,code,name').order('code')
-  if (agency) q = q.eq('organization_id', agency)
-  const { data, error } = await q
+  if (!agency) {
+    const { data, error } = await insforge.database.from('providers').select('id,code,name').order('code')
+    if (error) throw error
+    return (data as Provider[]) ?? []
+  }
+  const { data, error } = await insforge.database
+    .from('provider_agencies')
+    .select('providers(id,code,name)')
+    .eq('agency_slug', agency)
   if (error) throw error
-  return (data as Provider[]) ?? []
+  // PostgREST returns a to-one embed as an object per junction row.
+  const rows = (data ?? []) as unknown as { providers: Provider | null }[]
+  return rows.map((r) => r.providers).filter((p): p is Provider => !!p).sort((a, b) => a.code.localeCompare(b.code))
 }
 
 export interface ListFilters {
