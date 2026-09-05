@@ -2,10 +2,10 @@
 // Billing API client — talks to the hit-ever2 Worker (/api/billing/*).
 // ============================================================================
 // Billing lives in the Worker (not InsForge-direct) so the money logic and its
-// auth stay in one place. We send the signed-in user's InsForge access token as a
-// bearer; the Worker verifies it and checks the caller's role/permission.
+// auth stay in one place. Calls go through the shared workerApi helper (SDK
+// HTTP client + session-refresh retry on 401).
 
-import { insforge } from './insforge'
+import { workerApi } from './apiClient'
 
 const API_BASE = (import.meta.env.PUBLIC_API_URL as string) || 'https://hit-ever-scraper.nativerse.workers.dev'
 
@@ -148,52 +148,6 @@ export interface ApplyPaymentInput {
   paidAt?: string
 }
 
-interface ApiEnvelope<T> {
-  ok: boolean
-  data?: T
-  error?: { code: string; message: string }
-}
-
-// The SDK keeps the live access token in the client's (private) TokenManager —
-// `insforge.tokenManager.getAccessToken()`. `.auth` does NOT expose it publicly, so
-// read it through a minimal interface (private at the type level, present at runtime).
-// TokenManager is the shared instance the SDK updates on refresh, so this stays live.
-interface TokenSource {
-  getAccessToken?: () => string | null
-  getSession?: () => { accessToken?: string | null } | null
-}
-interface ClientWithToken {
-  tokenManager?: TokenSource
-  auth?: TokenSource
-}
-function accessToken(): string | null {
-  const c = insforge as unknown as ClientWithToken
-  return (
-    c.tokenManager?.getAccessToken?.() ??
-    c.auth?.getAccessToken?.() ??
-    c.auth?.getSession?.()?.accessToken ??
-    null
-  )
-}
-
-async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = accessToken()
-  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.')
-  const res = await fetch(`${API_BASE}/api/billing${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init.headers ?? {}),
-    },
-  })
-  const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null
-  if (!res.ok || !body?.ok) {
-    throw new Error(body?.error?.message ?? `Error ${res.status}`)
-  }
-  return body.data as T
-}
-
 function qs(params: Record<string, unknown>): string {
   const p = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
@@ -204,24 +158,24 @@ function qs(params: Record<string, unknown>): string {
 }
 
 export const billingApi = {
-  health: () => api<{ module: string; user: { role: string; name: string | null } }>('/health'),
-  catalog: () => api<CatalogEntry[]>('/catalog'),
+  health: () => workerApi<{ module: string; user: { role: string; name: string | null } }>(`${API_BASE}/api/billing/health`),
+  catalog: () => workerApi<CatalogEntry[]>(`${API_BASE}/api/billing/catalog`),
   quote: (freightType: FreightType, tier: PriceTier, lbs: number) =>
-    api<Quote>(`/quote${qs({ freightType, tier, lbs })}`),
-  listInvoices: (f: InvoiceFilters) => api<{ rows: InvoiceListRow[]; count: number }>(`/invoices${qs({ ...f })}`),
-  getInvoice: (id: string) => api<InvoiceView>(`/invoices/${id}`),
-  createInvoice: (input: CreateInvoiceInput) => api<InvoiceView>('/invoices', { method: 'POST', body: JSON.stringify(input) }),
+    workerApi<Quote>(`${API_BASE}/api/billing/quote${qs({ freightType, tier, lbs })}`),
+  listInvoices: (f: InvoiceFilters) => workerApi<{ rows: InvoiceListRow[]; count: number }>(`${API_BASE}/api/billing/invoices${qs({ ...f })}`),
+  getInvoice: (id: string) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}`),
+  createInvoice: (input: CreateInvoiceInput) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices`, { method: 'POST', body: input }),
   applyPayment: (id: string, input: ApplyPaymentInput) =>
-    api<InvoiceView>(`/invoices/${id}/payments`, { method: 'POST', body: JSON.stringify(input) }),
+    workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/payments`, { method: 'POST', body: input }),
   voidInvoice: (id: string, reason?: string) =>
-    api<InvoiceView>(`/invoices/${id}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/void`, { method: 'POST', body: { reason } }),
   linkPackage: (id: string, ref: { packageId?: string; guia?: string }) =>
-    api<InvoiceView>(`/invoices/${id}/packages`, { method: 'POST', body: JSON.stringify(ref) }),
+    workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/packages`, { method: 'POST', body: ref }),
   unlinkPackage: (id: string, packageId: string) =>
-    api<InvoiceView>(`/invoices/${id}/packages/${packageId}`, { method: 'DELETE' }),
-  closeMonth: (year: number, month: number) => api<MonthlyClose>(`/close-month${qs({ year, month })}`),
-  reports: (year: number) => api<YearReport>(`/reports${qs({ year })}`),
-  summary: (from: string, to: string) => api<DateRangeSummary>(`/summary${qs({ from, to })}`),
-  exceptions: () => api<Exceptions>('/exceptions'),
-  shareInvoice: (id: string) => api<{ token: string; url: string }>(`/invoices/${id}/share`, { method: 'POST' }),
+    workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/packages/${packageId}`, { method: 'DELETE' }),
+  closeMonth: (year: number, month: number) => workerApi<MonthlyClose>(`${API_BASE}/api/billing/close-month${qs({ year, month })}`),
+  reports: (year: number) => workerApi<YearReport>(`${API_BASE}/api/billing/reports${qs({ year })}`),
+  summary: (from: string, to: string) => workerApi<DateRangeSummary>(`${API_BASE}/api/billing/summary${qs({ from, to })}`),
+  exceptions: () => workerApi<Exceptions>(`${API_BASE}/api/billing/exceptions`),
+  shareInvoice: (id: string) => workerApi<{ token: string; url: string }>(`${API_BASE}/api/billing/invoices/${id}/share`, { method: 'POST' }),
 }

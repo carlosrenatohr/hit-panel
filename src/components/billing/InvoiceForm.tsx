@@ -118,6 +118,7 @@ export default function InvoiceForm({
       .filter((l) => l.quantityLbs > 0)
     if (cleanLines.length === 0) return setErr('Agrega al menos una línea con peso.')
     // The server is authoritative: an unpriced tier fails there with a clear message.
+    if (!window.confirm('¿Generar la factura? Se creará con los datos ingresados.')) return
     setSaving(true)
     try {
       const view = await billingApi.createInvoice({
@@ -127,6 +128,7 @@ export default function InvoiceForm({
         lines: cleanLines,
         packageIds: prefill?.packageIds,
       })
+      window.alert(`Factura #${view.invoiceNumber} creada exitosamente.`)
       onCreated(view)
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo crear la factura.')
