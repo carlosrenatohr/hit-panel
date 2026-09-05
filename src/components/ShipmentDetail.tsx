@@ -220,9 +220,15 @@ export default function ShipmentDetail({
           </div>
           {d && <StatusPill s={d.pkg.effective_status as ShipmentStatus} class="shrink-0" />}
           {canBill && d && (
-            <IconButton label="Crear factura para este paquete" onClick={() => setShowInvoice(true)}>
+            <button
+              type="button"
+              onClick={() => setShowInvoice(true)}
+              title="Generar o ver la factura de este paquete"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+            >
               <FileText class="h-4 w-4" aria-hidden="true" />
-            </IconButton>
+              Factura
+            </button>
           )}
           <IconButton label="Cerrar" onClick={onClose}>
             <X class="h-4 w-4" aria-hidden="true" />

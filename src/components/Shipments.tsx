@@ -1,6 +1,7 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Pencil, Plus, RefreshCw, Search } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Pencil, Plus, RefreshCw, Search } from 'lucide-preact'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
+import InvoiceDetail from './billing/InvoiceDetail'
 import {
   cleanName,
   daysAgo,
@@ -77,6 +78,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
   const [showCreate, setShowCreate] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [invoiceId, setInvoiceId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState({
     almacenId: '',
     trackingNumber: '',
@@ -335,6 +337,11 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                     <span class="truncate">{cleanName(p.referencia_name)}</span>
                     {isHazmat(p.referencia_name) && <HazmatBadge />}
                     {p.photo_ref && <span title="Tiene foto">🖼️</span>}
+                    {p.invoice_packages?.length ? (
+                      <span title="Tiene factura" class="text-primary/70">
+                        <FileText class="h-3.5 w-3.5" />
+                      </span>
+                    ) : null}
                   </div>
                   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                     <span>{providerLabel(p.providers?.code)}</span>
@@ -400,7 +407,24 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                     onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen(p.almacen_id))}
                     class="cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                   >
-                    <td class="px-4 py-3 font-semibold text-secondary">{p.almacen_id}</td>
+                    <td class="px-4 py-3 font-semibold text-secondary">
+                      <span class="inline-flex items-center gap-1.5">
+                        {p.almacen_id}
+                        {p.invoice_packages?.[0]?.invoice_id && (
+                          <button
+                            type="button"
+                            title="Ver factura"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setInvoiceId(p.invoice_packages?.[0]?.invoice_id ?? null)
+                            }}
+                            class="text-primary/70 hover:text-primary"
+                          >
+                            <FileText class="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    </td>
                     {visibleCols.map((c) => (
                       <td key={c.key} class="px-4 py-3">
                         {c.render(p)}
@@ -551,6 +575,15 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
             </div>
           </div>
         </div>
+      )}
+
+      {invoiceId && (
+        <InvoiceDetail
+          id={invoiceId}
+          canWrite={user.role === 'admin' || user.role === 'billing'}
+          onClose={() => setInvoiceId(null)}
+          onChanged={reload}
+        />
       )}
     </div>
   )
