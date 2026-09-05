@@ -10,7 +10,9 @@ import { insforge } from './insforge'
 const API_BASE = (import.meta.env.PUBLIC_API_URL as string) || 'https://hit-ever-scraper.nativerse.workers.dev'
 
 export type FreightType = 'AIR' | 'MAR'
-export type PriceTier = 'REGULAR' | 'ESPECIAL' | 'VIP' | 'MADRES' | 'DARIO'
+// Tiers are dynamic (each agency creates its own via the rate tables); the Worker
+// resolves prices per-org and rejects unoffered tiers. This is just a label type.
+export type PriceTier = string
 export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'PAID' | 'VOID'
 export type PaymentMethod = 'BANK_TRANSFER' | 'CASH' | 'CREDIT_BALANCE'
 export type PaymentBank = 'BAC' | 'LAFISE' | 'BANPRO'
@@ -19,7 +21,7 @@ export type Currency = 'USD' | 'NIO'
 export interface CatalogEntry {
   freightType: FreightType
   cost: number
-  tiers: Record<PriceTier, number | null>
+  tiers: Record<string, number | null>
 }
 export interface Quote {
   freightType: FreightType

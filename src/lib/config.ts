@@ -10,9 +10,9 @@ export interface AgencyInfo {
 
 export type FreightType = 'AIR' | 'MAR'
 
-export type PriceTier = 'REGULAR' | 'ESPECIAL' | 'VIP' | 'MADRES' | 'DARIO'
+export type PriceTier = string
 
-export const TIER_LABELS: Record<PriceTier, string> = {
+export const TIER_LABELS: Record<string, string> = {
   REGULAR: 'Regular',
   ESPECIAL: 'Especial',
   VIP: 'VIP',

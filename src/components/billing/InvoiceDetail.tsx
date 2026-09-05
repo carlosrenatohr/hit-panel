@@ -9,9 +9,10 @@ import {
   type PaymentMethod,
 } from '../../lib/billing'
 import { FREIGHT_LABEL, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
+import { configApi, type AgencyInfo } from '../../lib/config'
 import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
-import InvoicePrint from './InvoicePrint'
+import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
 
 function StatusPill({ s }: { s: string }) {
   return <span class={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${INVOICE_STATUS_SOFT[s] ?? 'bg-gray-100 text-gray-600'}`}>{INVOICE_STATUS_LABEL[s] ?? s}</span>
@@ -46,6 +47,23 @@ export default function InvoiceDetail({
   const [guia, setGuia] = useState('')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [brand, setBrand] = useState<InvoiceBrand | null>(null)
+
+  // Issuing agency's brand for the printable receipt (cosmetic — never blocks).
+  useEffect(() => {
+    let alive = true
+    configApi
+      .branding()
+      .then(({ agencies }) => {
+        if (!alive) return
+        const a: AgencyInfo | undefined = agencies[0]
+        if (a) setBrand({ name: a.name, logoUrl: a.logoUrl })
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -170,7 +188,7 @@ export default function InvoiceDetail({
                       <tr key={l.lineNo} class="border-b border-gray-50 last:border-0">
                         <td class="px-4 py-2">
                           <div>{l.description ?? FREIGHT_LABEL[l.freightType]}</div>
-                          <div class="text-[11px] text-gray-400">{FREIGHT_LABEL[l.freightType]} · {l.priceTier ? TIER_LABEL[l.priceTier] : 'fuera de catálogo'} · {l.quantityLbs} lb</div>
+                          <div class="text-[11px] text-gray-400">{FREIGHT_LABEL[l.freightType]} · {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : 'fuera de catálogo'} · {l.quantityLbs} lb</div>
                         </td>
                         <td class="px-4 py-2 text-right font-medium">{fmtUsd(l.total)}</td>
                       </tr>
@@ -274,7 +292,7 @@ export default function InvoiceDetail({
       </div>
 
       {/* Print-only rendering (isolated by .invoice-print in global.css). */}
-      {inv && <InvoicePrint inv={inv} />}
+      {inv && <InvoicePrint inv={inv} brand={brand ?? undefined} />}
     </div>
   )
 }
