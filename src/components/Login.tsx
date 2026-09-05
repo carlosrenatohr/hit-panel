@@ -56,7 +56,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
               class={inputCls}
               value={email}
               onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
-              placeholder="tu@hit-cargo.com"
+              placeholder="tu@email.com"
               autocomplete="username"
             />
           </Field>
