@@ -2,7 +2,7 @@ import { BarChart3, FileText, LayoutDashboard, LogOut, PackageSearch, Plug, Sett
 import { useEffect, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
 import { configApi } from '../lib/config'
-import type { Agency, Role, SessionUser } from '../lib/types'
+import type { Role, SessionUser } from '../lib/types'
 import type { View } from '../lib/router'
 
 // `roles` (when present) restricts a nav item to those roles — billing is money, so
@@ -17,7 +17,9 @@ const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Rol
   { key: 'configuracion', label: 'Configuración', icon: Settings, roles: ['admin', 'billing', 'staff'] },
 ]
 
-const BRANDS: Record<Agency, { logo: string; name: string }> = {
+// Static fallback + initial paint for the known agencies; the dynamic list comes
+// from the Worker (/api/config/branding) so a new agency needs no panel change.
+const BRANDS: Record<string, { logo: string; name: string }> = {
   hit: { logo: '/logo-mark.png', name: 'HIT Cargo' },
   suite: { logo: '/suite-cargo-demo-logo.png', name: 'Suite Cargo' },
   'solo-guegue': { logo: '/solo-guegue-logo.svg', name: 'Solo Guegue' },
