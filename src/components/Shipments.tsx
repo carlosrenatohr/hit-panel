@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Plus, RefreshCw, Search } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, Pencil, Plus, RefreshCw, Search } from 'lucide-preact'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import {
@@ -118,7 +118,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
         setRows(r.rows)
         setCount(r.count)
       })
-      .catch(() => !cancelled && setErr('No se pudieron cargar los envíos.'))
+      .catch(() => !cancelled && setErr('No se pudieron cargar los paquetes.'))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
@@ -130,7 +130,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     setErr(null)
     listPackages({ ...filters, page, pageSize: PAGE_SIZE, organizationId: selectedOrg })
       .then((r) => { setRows(r.rows); setCount(r.count) })
-      .catch(() => setErr('No se pudieron cargar los envíos.'))
+      .catch(() => setErr('No se pudieron cargar los paquetes.'))
       .finally(() => setLoading(false))
   }
 
@@ -164,7 +164,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
         name: cleanName(p.referencia_name),
         hazmat: isHazmat(p.referencia_name) ? 'si' : '',
       }))
-      downloadCSV(`envios-hit-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(flat, cols))
+      downloadCSV(`paquetes-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(flat, cols))
     } catch {
       setErr('No se pudo exportar.')
     } finally {
@@ -205,7 +205,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     <div class="mx-auto max-w-7xl space-y-4">
       <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 class="text-2xl font-bold tracking-tight text-secondary">Envíos</h1>
+          <h1 class="text-2xl font-bold tracking-tight text-secondary">Paquetería</h1>
           <p class="text-sm text-gray-500">{count} resultados</p>
         </div>
         <div class="flex gap-2">
@@ -322,7 +322,14 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                 >
                   <div class="flex items-center justify-between gap-2">
                     <span class="font-semibold text-secondary">{p.almacen_id}</span>
-                    <StatusDot s={p.effective_status as ShipmentStatus} />
+                    <span class="flex items-center gap-1.5">
+                      <StatusDot s={p.effective_status as ShipmentStatus} />
+                      {p.manual_status && (
+                        <span title={`Estado manual: ${p.manual_status}`} class="text-orange-500" aria-label="Estado manual">
+                          <Pencil class="h-3 w-3" />
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div class="flex items-center gap-1.5 text-sm text-gray-700">
                     <span class="truncate">{cleanName(p.referencia_name)}</span>

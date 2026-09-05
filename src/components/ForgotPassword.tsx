@@ -140,7 +140,7 @@ export default function ForgotPassword({
           </button>
         </div>
       </form>
-      <p class="text-xs font-medium tracking-wide text-white/50">HIT CARGO · Envíos que conectan.</p>
+      <p class="text-xs font-medium tracking-wide text-white/50">ORBIT · Envíos que conectan.</p>
     </div>
   )
 }
