@@ -8,7 +8,7 @@ import {
   type PaymentBank,
   type PaymentMethod,
 } from '../../lib/billing'
-import { FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
+import { fmtMoney, FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
 import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
@@ -22,12 +22,6 @@ function StatusPill({ s }: { s: string }) {
 const METHOD_LABEL: Record<string, string> = { BANK_TRANSFER: 'Transferencia', CASH: 'Efectivo', CREDIT_BALANCE: 'Saldo a favor' }
 const FALLBACK_METHODS = ['Transferencia', 'Efectivo', 'Saldo a favor']
 const FALLBACK_BANKS = ['BAC', 'LAFISE', 'BANPRO']
-
-/** Money formatter honoring the agency's working currency ($ USD / C$ NIO). */
-function fmtMoney(amount: number | null | undefined, currency: 'USD' | 'NIO' | undefined): string {
-  const sym = currency === 'NIO' ? 'C$' : '$'
-  return `${sym}${Number(amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 export default function InvoiceDetail({
   id,
@@ -339,7 +333,13 @@ export default function InvoiceDetail({
       </div>
 
       {/* Print-only rendering (isolated by .invoice-print in global.css). */}
-      {inv && <InvoicePrint inv={inv} brand={brand ?? undefined} />}
+      {inv && (
+        <InvoicePrint
+          inv={inv}
+          brand={brand ?? undefined}
+          profile={profile ? { ruc: profile.ruc, address: profile.address, phone: profile.phone, currency: profile.currency } : undefined}
+        />
+      )}
     </div>
   )
 }

@@ -36,6 +36,10 @@ h1, h2, h3, h4, h5, h6 {
   .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
   .avoid-break { break-inside: avoid; page-break-inside: avoid; }
 
+  /* Zero page margin removes the browser's native print header/footer (title, URL,
+     date) entirely — each print template carries its own padded header instead. */
+  @page { margin: 0; }
+
   /* Single-invoice printing: when a .invoice-print block is present, isolate it —
      hide the whole app and render only that block. The block is otherwise hidden
      on screen (Tailwind `hidden print:block`). This is the seam a future custom

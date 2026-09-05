@@ -1,20 +1,39 @@
 import type { InvoiceView } from '../../lib/billing'
-import { FREIGHT_LABEL, fmtDate, fmtUsd, INVOICE_STATUS_LABEL } from '../../lib/format'
+import { fmtMoney, FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL } from '../../lib/format'
 
 export interface InvoiceBrand {
   name: string
   logoUrl: string | null
 }
 
+/** Agency profile bits printed under the agency title (all optional). */
+export interface InvoiceProfile {
+  ruc: string | null
+  address: string | null
+  phone: string | null
+  currency: 'USD' | 'NIO'
+}
+
 const FALLBACK_BRAND = { name: 'HIT Cargo', logoUrl: '/logo-mark.png' }
 
 // Pluggable print template. Hidden on screen (`hidden print:block`), isolated on
-// print by the `.invoice-print` rule in global.css. Enterprise-simple layout; this
-// is the seam for the owner's future custom format (logo/legal/RUC): swap the markup.
-// The brand is the issuing agency's (config /branding), not a hardcoded logo.
-export default function InvoicePrint({ inv, brand }: { inv: InvoiceView; brand?: InvoiceBrand }) {
+// print by the `.invoice-print` rule in global.css. The brand and profile are the
+// issuing agency's (config endpoints) — never a hardcoded logo. Totals render as
+// Subtotal (sum of lines) + Total (grand total, includes "otros" charges).
+export default function InvoicePrint({
+  inv,
+  brand,
+  profile,
+}: {
+  inv: InvoiceView
+  brand?: InvoiceBrand
+  profile?: InvoiceProfile
+}) {
   const b = brand ?? FALLBACK_BRAND
   const logo = b.logoUrl || FALLBACK_BRAND.logoUrl
+  const currency = profile?.currency ?? 'USD'
+  const subtotal = inv.lines.reduce((s, l) => s + (l.total || 0), 0)
+  const infoLines = [profile?.ruc && `RUC: ${profile.ruc}`, profile?.address, profile?.phone].filter(Boolean) as string[]
   return (
     <div class="invoice-print hidden bg-white p-10 text-[13px] leading-relaxed text-gray-900 print:block">
       {/* Header */}
@@ -24,6 +43,16 @@ export default function InvoicePrint({ inv, brand }: { inv: InvoiceView; brand?:
           <div>
             <div class="text-xl font-extrabold tracking-tight">{b.name}</div>
             <div class="text-xs text-gray-500">Recibo de venta</div>
+            {infoLines.length > 0 && (
+              <div class="mt-1 text-[11px] text-gray-500">
+                {infoLines.map((line, i) => (
+                  <span key={i}>
+                    {i > 0 && ' · '}
+                    {line}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div class="text-right">
@@ -63,29 +92,28 @@ export default function InvoicePrint({ inv, brand }: { inv: InvoiceView; brand?:
               <td class="py-2">{l.description ?? FREIGHT_LABEL[l.freightType]}</td>
               <td class="py-2">{FREIGHT_LABEL[l.freightType]}</td>
               <td class="py-2 text-right">{l.quantityLbs}</td>
-              <td class="py-2 text-right">{fmtUsd(l.unitPrice)}</td>
-              <td class="py-2 text-right font-medium">{fmtUsd(l.total)}</td>
+              <td class="py-2 text-right">{fmtMoney(l.unitPrice, currency)}</td>
+              <td class="py-2 text-right font-medium">{fmtMoney(l.total, currency)}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      {/* Totals */}
+      {/* Totals: Subtotal (sum of lines) → Total (grand, includes future "otros"
+          charges) → Pagado as secondary info. No saldo-pendiente row. */}
       <div class="ml-auto w-64">
+        <div class="flex justify-between border-t border-gray-300 pt-2 text-sm text-gray-700">
+          <span>Subtotal</span>
+          <span>{fmtMoney(subtotal, currency)}</span>
+        </div>
         <div class="flex justify-between border-t-2 border-gray-900 pt-2 text-lg font-extrabold">
           <span>Total</span>
-          <span>{fmtUsd(inv.total)}</span>
+          <span>{fmtMoney(inv.total, currency)}</span>
         </div>
         {inv.paidUsd > 0 && (
-          <div class="flex justify-between pt-1 text-gray-600">
+          <div class="flex justify-between pt-1 text-xs text-gray-500">
             <span>Pagado</span>
-            <span>{fmtUsd(inv.paidUsd)}</span>
-          </div>
-        )}
-        {inv.outstanding > 0 && (
-          <div class="flex justify-between pt-1 font-semibold">
-            <span>Saldo pendiente</span>
-            <span>{fmtUsd(inv.outstanding)}</span>
+            <span>{fmtMoney(inv.paidUsd, currency)}</span>
           </div>
         )}
       </div>
