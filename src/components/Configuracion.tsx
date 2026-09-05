@@ -3,13 +3,13 @@ import type { ComponentChildren } from 'preact'
 import { Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, X } from 'lucide-preact'
 import type { SessionUser } from '../lib/types'
 import { configApi, TIER_LABELS } from '../lib/config'
-import type { AgencyInfo, AuditLogEntry, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateRow, RateTableInfo } from '../lib/config'
+import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateRow, RateTableInfo } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { Button, Card, Field, SectionTitle, Spinner, inputCls } from './ui'
 
 const BRANDING_BUCKET = 'branding'
 
-type Tab = 'info' | 'branding' | 'rates' | 'payments' | 'audit'
+type Tab = 'info' | 'branding' | 'rates' | 'payments' | 'concepts' | 'audit'
 
 // ─── Config > Información: agency profile + working currency ───────────────────
 function InfoTab({ canWrite }: { canWrite: boolean }) {
@@ -164,6 +164,91 @@ function CatalogList({
   )
 }
 
+// ─── Config > Conceptos: templates for custom extra invoice charges ─────────────
+function ConceptosTab({ canWrite }: { canWrite: boolean }) {
+  const [concepts, setConcepts] = useState<ChargeConcept[]>([])
+  const [newName, setNewName] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () => {
+    configApi
+      .chargeConcepts()
+      .then(setConcepts)
+      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los conceptos.'))
+  }
+  useEffect(load, [])
+
+  async function create() {
+    if (!newName.trim()) return
+    const price = newPrice.trim() === '' ? null : Number(newPrice)
+    if (price != null && !(price >= 0)) return setError('El valor sugerido debe ser un número positivo.')
+    try {
+      await configApi.createChargeConcept(newName.trim(), price)
+      setNewName('')
+      setNewPrice('')
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo crear el concepto.')
+    }
+  }
+
+  async function toggle(it: ChargeConcept) {
+    try {
+      await configApi.updateChargeConcept(it.id, { active: !it.active })
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error')
+    }
+  }
+
+  if (error && concepts.length === 0) return <p class="text-sm text-red-600">{error}</p>
+
+  return (
+    <Card class="p-5">
+      <SectionTitle>Conceptos para "Otros" cargos</SectionTitle>
+      <p class="mb-3 text-xs text-gray-400">
+        Plantillas de cargos extra (ej. Delivery). El valor sugerido solo precarga el monto en la factura: el admin siempre puede ajustarlo. Solo aparecen en la factura si están activos.
+      </p>
+      {error && <p class="mb-2 text-sm text-red-600">{error}</p>}
+      <ul class="divide-y divide-gray-100">
+        {concepts.map((c) => (
+          <li key={c.id} class="flex items-center justify-between py-2">
+            <span class={`text-sm ${c.active ? 'font-medium text-gray-800' : 'text-gray-400 line-through'}`}>
+              {c.name}
+              {c.suggestedPrice != null && <span class="ml-2 text-xs text-gray-400">sugerido: {c.suggestedPrice.toFixed(2)}</span>}
+            </span>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => toggle(c)}
+                class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+              >
+                {c.active ? 'Activo' : 'Inactivo'}
+              </button>
+            )}
+          </li>
+        ))}
+        {concepts.length === 0 && <li class="py-2 text-sm text-gray-400">Sin conceptos todavía.</li>}
+      </ul>
+      {canWrite && (
+        <div class="mt-3 flex items-end gap-2">
+          <Field label="Nombre">
+            <input class={inputCls} value={newName} placeholder="Ej. Delivery" onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Field label="Valor sugerido (opcional)">
+            <input type="number" min="0" step="0.01" class={inputCls} value={newPrice} placeholder="Ej. 3.00" onChange={(e) => setNewPrice((e.target as HTMLInputElement).value)} />
+          </Field>
+          <Button variant="ghost" disabled={!newName.trim()} onClick={create}>
+            <Plus class="h-4 w-4" aria-hidden="true" />
+            Agregar
+          </Button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function PaymentsTab({ canWrite }: { canWrite: boolean }) {
   const [catalogs, setCatalogs] = useState<PaymentCatalogs | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -243,6 +328,7 @@ export default function Configuracion({ user }: { user: SessionUser }) {
     { key: 'branding', label: 'Branding', icon: Building2 },
     { key: 'rates', label: 'Tarifas', icon: Table2 },
     { key: 'payments', label: 'Pagos', icon: ScrollText },
+    { key: 'concepts', label: 'Conceptos', icon: Table2 },
     { key: 'audit', label: 'Auditoría', icon: ScrollText },
   ]
 
@@ -272,6 +358,7 @@ export default function Configuracion({ user }: { user: SessionUser }) {
       {tab === 'branding' && <BrandingTab user={user} canWrite={canWrite} />}
       {tab === 'rates' && <RatesTab user={user} canWrite={canWrite} />}
       {tab === 'payments' && <PaymentsTab canWrite={canWrite} />}
+      {tab === 'concepts' && <ConceptosTab canWrite={canWrite} />}
       {tab === 'audit' && <AuditTab user={user} />}
     </div>
   )

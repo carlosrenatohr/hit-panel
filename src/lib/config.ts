@@ -39,6 +39,14 @@ export interface PaymentCatalogs {
   banks: PaymentCatalogItem[]
 }
 
+/** Template for custom extra invoice charges — suggestedPrice only prefills. */
+export interface ChargeConcept {
+  id: string
+  name: string
+  suggestedPrice: number | null
+  active: boolean
+}
+
 export type FreightType = 'AIR' | 'MAR'
 
 export type PriceTier = string
@@ -127,6 +135,11 @@ export const configApi = {
   createPaymentBank: (name: string) => api<PaymentCatalogItem>('/payments/banks', { method: 'POST', body: { name } }),
   updatePaymentBank: (id: string, patch: { name?: string; active?: boolean }) =>
     api<{ ok: boolean }>(`/payments/banks/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
+  chargeConcepts: () => api<ChargeConcept[]>('/concepts'),
+  createChargeConcept: (name: string, suggestedPrice: number | null) =>
+    api<ChargeConcept>('/concepts', { method: 'POST', body: { name, suggestedPrice } }),
+  updateChargeConcept: (id: string, patch: { name?: string; active?: boolean; suggestedPrice?: number | null }) =>
+    api<{ ok: boolean }>(`/concepts/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
   listRates: (organizationId?: string) =>
     api<{ organizationId: string; tables: RateTableInfo[] }>(
       `/rates${organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''}`,

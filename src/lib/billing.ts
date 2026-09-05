@@ -56,8 +56,9 @@ export interface InvoiceView extends InvoiceListRow {
   lines: Array<{
     lineNo: number
     description: string | null
-    freightType: FreightType
-    quantityLbs: number
+    freightType: FreightType | null
+    lineType: 'freight' | 'other'
+    quantityLbs: number | null
     unitPrice: number
     total: number
     freightCost: number
@@ -138,7 +139,8 @@ export interface CreateInvoiceInput {
   address?: string | null
   specialPrice?: boolean
   observations?: string | null
-  lines: Array<{ freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null }>
+  lines: Array<{ freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null }>
+  otherLines?: Array<{ conceptId?: string | null; description?: string | null; amount: number }>
   packageIds?: string[]
 }
 export interface ApplyPaymentInput {
