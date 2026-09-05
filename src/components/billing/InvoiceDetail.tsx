@@ -221,8 +221,12 @@ export default function InvoiceDetail({
                     {inv.lines.map((l) => (
                       <tr key={l.lineNo} class="border-b border-gray-50 last:border-0">
                         <td class="px-4 py-2">
-                          <div>{l.description ?? FREIGHT_LABEL[l.freightType]}</div>
-                          <div class="text-[11px] text-gray-400">{FREIGHT_LABEL[l.freightType]} · {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : 'fuera de catálogo'} · {l.quantityLbs} lb</div>
+                          <div>{l.description ?? (l.freightType ? FREIGHT_LABEL[l.freightType] : 'Otro cargo')}</div>
+                          <div class="text-[11px] text-gray-400">
+                            {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
+                            {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
+                            {l.quantityLbs != null ? ` · ${l.quantityLbs} lb` : ''}
+                          </div>
                         </td>
                         <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
                       </tr>

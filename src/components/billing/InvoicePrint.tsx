@@ -89,9 +89,9 @@ export default function InvoicePrint({
         <tbody>
           {inv.lines.map((l) => (
             <tr key={l.lineNo} class="border-b border-gray-100">
-              <td class="py-2">{l.description ?? FREIGHT_LABEL[l.freightType]}</td>
-              <td class="py-2">{FREIGHT_LABEL[l.freightType]}</td>
-              <td class="py-2 text-right">{l.quantityLbs}</td>
+              <td class="py-2">{l.description ?? (l.freightType ? FREIGHT_LABEL[l.freightType] : 'Otro cargo')}</td>
+              <td class="py-2">{l.freightType ? FREIGHT_LABEL[l.freightType] : '—'}</td>
+              <td class="py-2 text-right">{l.quantityLbs ?? '—'}</td>
               <td class="py-2 text-right">{fmtMoney(l.unitPrice, currency)}</td>
               <td class="py-2 text-right font-medium">{fmtMoney(l.total, currency)}</td>
             </tr>
