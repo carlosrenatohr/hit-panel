@@ -2,6 +2,7 @@ import type { ChartConfiguration } from 'chart.js'
 import { Download, Printer, RefreshCw, Search, TrendingDown, TrendingUp } from 'lucide-preact'
 import type { ComponentChildren } from 'preact'
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
+import { configApi } from '../lib/config'
 import {
   BRAND_HEX,
   downloadCSV,
@@ -31,12 +32,27 @@ const EXPORT_CAP = 5000
 
 export default function Reports({ user }: { user: SessionUser }) {
   const organizationId = user.agency // tenant is pinned: a user only sees their own agency
+  const [printBrand, setPrintBrand] = useState<{ name: string; logoUrl: string | null } | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<ListFilters>({})
   const [rows, setRows] = useState<Pkg[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+
+  // Agency brand for the printed PDF header (cosmetic — never blocks).
+  useEffect(() => {
+    let alive = true
+    configApi
+      .branding()
+      .then(({ agencies }) => {
+        if (alive && agencies[0]) setPrintBrand({ name: agencies[0].name, logoUrl: agencies[0].logoUrl })
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     getProviders(user.agency).then(setProviders).catch(() => {})
@@ -270,7 +286,7 @@ export default function Reports({ user }: { user: SessionUser }) {
   }, [])
 
   return (
-    <div class="mx-auto max-w-6xl space-y-5">
+    <div class="mx-auto max-w-6xl space-y-5 print:p-8">
       {/* Screen header + filters (hidden when printing) */}
       <div class="space-y-3 print:hidden">
         <div class="flex flex-wrap items-end justify-between gap-3">
@@ -331,12 +347,22 @@ export default function Reports({ user }: { user: SessionUser }) {
         </Card>
       </div>
 
-      {/* Printed-only header: gives the PDF a title, the applied filters, and a generation timestamp */}
-      <div class="hidden print:block">
-        <h1 class="text-xl font-bold text-secondary">Reporte de paquetes</h1>
-        <p class="text-sm text-gray-600">
-          {filterSummary || 'Sin filtros'} · {rows.length} paquetes · Generado {fmtDateTime(new Date().toISOString())}
-        </p>
+      {/* Printed-only header: agency brand at left (same format as the invoice PDF),
+          then title, applied filters and a generation timestamp. */}
+      <div class="hidden print:block pb-4">
+        <div class="mb-4 flex items-start justify-between border-b-2 border-gray-900 pb-4">
+          <div class="flex items-center gap-3">
+            <img src={printBrand?.logoUrl || '/logo-mark.png'} alt={printBrand?.name ?? 'Logo'} class="h-12 w-12 object-contain" />
+            <div>
+              <div class="text-xl font-extrabold tracking-tight">{printBrand?.name ?? 'Reporte'}</div>
+              <div class="text-xs text-gray-500">Reporte de paquetes</div>
+            </div>
+          </div>
+          <div class="text-right text-xs text-gray-500">
+            {filterSummary || 'Sin filtros'} · {rows.length} paquetes
+            <div>Generado {fmtDateTime(new Date().toISOString())}</div>
+          </div>
+        </div>
       </div>
 
       {err && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
@@ -345,7 +371,7 @@ export default function Reports({ user }: { user: SessionUser }) {
       ) : (
         <>
           {/* KPI strip */}
-          <div class="avoid-break grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div class="avoid-break grid grid-cols-2 gap-4 print:px-8 lg:grid-cols-4">
             <Kpi label="Total" value={rows.length} trend={prev && <Trend current={rows.length} previous={prev.total} />} />
             <Kpi
               label="Entregados"

@@ -167,6 +167,13 @@ export function fmtUsd(n?: number | null): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
+/** Money with the agency's working currency symbol: $ for USD, C$ for NIO (córdobas). */
+export function fmtMoney(n: number | null | undefined, currency: 'USD' | 'NIO' | undefined): string {
+  if (n == null || isNaN(n)) return '—'
+  const sym = currency === 'NIO' ? 'C$' : '$'
+  return `${sym}${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 export const INVOICE_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
   ISSUED: 'Emitida',
