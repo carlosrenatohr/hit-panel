@@ -70,9 +70,10 @@ export default function BillingReports() {
 
       {rep && (
         <>
-          <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Kpi label="Ingresos" value={fmtUsd(rep.revenue)} />
             <Kpi label="Ganancia" value={fmtUsd(rep.profit)} accent="text-green-700" />
+            <Kpi label="Margen" value={rep.revenue > 0 ? `${Math.round((rep.profit / rep.revenue) * 100)}%` : '—'} accent="text-green-700" />
             <Kpi label="Por cobrar" value={fmtUsd(rep.receivables)} accent="text-yellow-700" />
             <Kpi label="Facturas" value={String(rep.invoices)} />
           </div>
@@ -97,22 +98,41 @@ export default function BillingReports() {
             </div>
           </Card>
 
-          <Card>
-            <SectionTitle>Ingresos por tipo de flete</SectionTitle>
-            <div class="p-4">
-              <ChartCanvas
-                height={240}
-                config={{
-                  type: 'doughnut',
-                  data: {
-                    labels: ['Aéreo', 'Marítimo'],
-                    datasets: [{ data: [rep.byFreight.AIR.revenue, rep.byFreight.MAR.revenue], backgroundColor: [BRAND_HEX.primary, BRAND_HEX.accentBlue] }],
-                  },
-                  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
-                }}
-              />
-            </div>
-          </Card>
+          <div class="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <SectionTitle>Ingresos por tipo de flete</SectionTitle>
+              <div class="p-4">
+                <ChartCanvas
+                  height={240}
+                  config={{
+                    type: 'doughnut',
+                    data: {
+                      labels: ['Aéreo', 'Marítimo'],
+                      datasets: [{ data: [rep.byFreight.AIR.revenue, rep.byFreight.MAR.revenue], backgroundColor: [BRAND_HEX.primary, BRAND_HEX.accentBlue] }],
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+                  }}
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <SectionTitle>Ganancia por tipo de flete</SectionTitle>
+              <div class="p-4">
+                <ChartCanvas
+                  height={240}
+                  config={{
+                    type: 'doughnut',
+                    data: {
+                      labels: ['Aéreo', 'Marítimo'],
+                      datasets: [{ data: [rep.byFreight.AIR.profit, rep.byFreight.MAR.profit], backgroundColor: [BRAND_HEX.primary, BRAND_HEX.accentBlue] }],
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+                  }}
+                />
+              </div>
+            </Card>
+          </div>
         </>
       )}
 
