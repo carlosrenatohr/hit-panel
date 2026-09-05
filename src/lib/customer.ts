@@ -11,6 +11,8 @@ export interface Customer {
   email: string | null
   phone: string | null
   address: string | null
+  /** Default rate table (preselects pricing on this client's next invoice). */
+  defaultRateId: string | null
 }
 
 export interface CustomerFilters {
@@ -27,6 +29,7 @@ export interface CustomerInput {
   email?: string | null
   phone?: string | null
   address?: string | null
+  defaultRateTableId?: string | null
 }
 
 function qs(params: object): string {

@@ -8,7 +8,7 @@ import {
   type PaymentBank,
   type PaymentMethod,
 } from '../../lib/billing'
-import { fmtMoney, FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
+import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
 import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
@@ -53,6 +53,7 @@ export default function InvoiceDetail({
   const [brand, setBrand] = useState<InvoiceBrand | null>(null)
   const [catalogs, setCatalogs] = useState<PaymentCatalogs | null>(null)
   const [profile, setProfile] = useState<AgencyProfile | null>(null)
+  const [events, setEvents] = useState<Array<{ action: string; detail: string | null; actor: string | null; createdAt: string }>>([])
 
   // Issuing agency's brand for the printable receipt (cosmetic — never blocks).
   useEffect(() => {
@@ -99,6 +100,10 @@ export default function InvoiceDetail({
     setErr(null)
     try {
       setInv(await billingApi.getInvoice(id))
+      billingApi
+        .invoiceEvents(id)
+        .then((r) => setEvents(r.events))
+        .catch(() => setEvents([]))
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo cargar la factura.')
     } finally {
@@ -293,6 +298,29 @@ export default function InvoiceDetail({
                   </div>
                 )}
               </Card>
+
+              {/* Linear history: every action from generation to payment */}
+              {events.length > 0 && (
+                <Card>
+                  <div class="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Historial</div>
+                  <ol class="px-4 py-3">
+                    {events.map((ev, i) => (
+                      <li key={i} class="relative flex gap-3 pb-3 last:pb-0">
+                        {i < events.length - 1 && <span class="absolute left-[5px] top-3 h-full w-px bg-gray-200" aria-hidden="true" />}
+                        <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                        <div class="min-w-0">
+                          <div class="text-sm font-medium text-secondary">{ev.action}</div>
+                          {ev.detail && <div class="text-xs text-gray-500">{ev.detail}</div>}
+                          <div class="text-[11px] text-gray-400">
+                            {fmtDateTime(ev.createdAt)}
+                            {ev.actor ? ` · ${ev.actor}` : ''}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </Card>
+              )}
 
               {/* Linked packages */}
               <Card>

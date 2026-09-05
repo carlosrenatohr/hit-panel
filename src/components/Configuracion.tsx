@@ -3,8 +3,11 @@ import type { ComponentChildren } from 'preact'
 import { Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, X } from 'lucide-preact'
 import type { SessionUser } from '../lib/types'
 import { configApi, TIER_LABELS } from '../lib/config'
+import { customerApi } from '../lib/customer'
+import type { Customer } from '../lib/customer'
 import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateRow, RateTableInfo } from '../lib/config'
 import { insforge } from '../lib/insforge'
+import { fmtMoney } from '../lib/format'
 import { Button, Card, Field, SectionTitle, Spinner, inputCls } from './ui'
 
 const BRANDING_BUCKET = 'branding'
@@ -516,13 +519,18 @@ const FREIGHT_LABELS: Record<FreightType, string> = { AIR: 'Aéreo', MAR: 'Marí
 
 function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   const [tables, setTables] = useState<RateTableInfo[]>([])
+  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD')
+  const [clients, setClients] = useState<Customer[]>([])
+  const [assignClient, setAssignClient] = useState('')
+  const [assignTable, setAssignTable] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [newFreight, setNewFreight] = useState<FreightType>('AIR')
+  /** tableId → drafts; presence also means that table is in edit mode. */
   const [editing, setEditing] = useState<Record<string, RowDraft[]>>({})
-  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
+  const [renaming, setRenaming] = useState<{ ids: string[]; name: string; label: string } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   // The Worker resolves the organization from the session (never the payload),
   // so there is no org selector here — each user manages their own agency's rates.
@@ -532,9 +540,15 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     setLoading(true)
     setError(null)
     try {
-      const rates = await configApi.listRates()
+      const [rates, info, clientsPage] = await Promise.all([
+        configApi.listRates(),
+        configApi.info().catch(() => null),
+        customerApi.list({ pageSize: 500 }).catch(() => ({ rows: [] as Customer[], count: 0 })),
+      ])
       setTables(rates.tables)
       setEditing({})
+      if (info) setCurrency(info.currency)
+      setClients(clientsPage.rows)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar las tarifas.')
     }
@@ -560,17 +574,29 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     })
   }
 
-  function addDraftRow(tableId: string) {
+  function startEdit(t: RateTableInfo) {
+    setEditing((prev) => ({ ...prev, [t.id]: toDrafts(t.rows) }))
+  }
+
+  function cancelEdit(t: RateTableInfo) {
     setEditing((prev) => {
-      const drafts = prev[tableId] ?? toDrafts(tables.find((t) => t.id === tableId)?.rows)
-      return { ...prev, [tableId]: [...drafts, { tier: '', price: '', cost: '' }] }
+      const next = { ...prev }
+      delete next[t.id]
+      return next
     })
   }
 
-  function removeDraftRow(tableId: string, index: number) {
+  function addDraftRow(t: RateTableInfo) {
     setEditing((prev) => {
-      const drafts = prev[tableId] ?? toDrafts(tables.find((t) => t.id === tableId)?.rows)
-      return { ...prev, [tableId]: drafts.filter((_, i) => i !== index) }
+      const drafts = prev[t.id] ?? toDrafts(t.rows)
+      return { ...prev, [t.id]: [...drafts, { tier: '', price: '', cost: '' }] }
+    })
+  }
+
+  function removeDraftRow(t: RateTableInfo, index: number) {
+    setEditing((prev) => {
+      const drafts = prev[t.id] ?? toDrafts(t.rows)
+      return { ...prev, [t.id]: drafts.filter((_, i) => i !== index) }
     })
   }
 
@@ -580,8 +606,6 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     try {
       const created = await configApi.createRate({ name: newName.trim(), freightType: newFreight })
       setNewName('')
-      // The created table ships without rows — seed an empty draft row instead of
-      // crashing on undefined (the pre-dynamic-tiers bug).
       setTables((prev) => [...prev, { ...created, rows: created.rows ?? [] }])
       setEditing((prev) => ({ ...prev, [created.id]: toDrafts(created.rows ?? []) }))
       showNotice('Tabla de tarifas creada. Agrega los rangos y guarda.')
@@ -590,14 +614,14 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     }
   }
 
-  async function renameTable(id: string) {
+  async function renameTables(ids: string[], name: string) {
     if (!renaming || !renaming.name.trim()) return
-    if (!window.confirm(`¿Renombrar "${renaming.name}"? Esta acción se registra en el historial de auditoría.`)) return
+    if (!window.confirm(`¿Renombrar "${renaming.label}"? Esta acción se registra en el historial de auditoría.`)) return
     setError(null)
     try {
-      await configApi.renameRate(id, renaming.name.trim())
+      for (const id of ids) await configApi.renameRate(id, name)
       setRenaming(null)
-      setTables((prev) => prev.map((t) => (t.id === id ? { ...t, name: renaming.name.trim() } : t)))
+      setTables((prev) => prev.map((t) => (ids.includes(t.id) ? { ...t, name } : t)))
       showNotice('Tabla renombrada.')
     } catch (e) {
       showError(e)
@@ -642,7 +666,33 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     setSaving(null)
   }
 
+  async function assignDefault() {
+    if (!assignClient) return
+    if (!window.confirm('¿Aplicar esta tarifa por defecto al cliente seleccionado?')) return
+    setError(null)
+    try {
+      await configApi.assignClientDefault(assignClient, assignTable || null)
+      showNotice(assignTable ? 'Tarifa por defecto asignada al cliente.' : 'Tarifa por defecto removida.')
+      setAssignClient('')
+      setAssignTable('')
+    } catch (e) {
+      showError(e)
+    }
+  }
+
   if (loading && tables.length === 0) return <Spinner label="Cargando tarifas…" />
+
+  // Group tables by name: "Estándar" renders as ONE card with its Aéreo and
+  // Marítimo blocks side by side.
+  const groups = useMemo(() => {
+    const g = new Map<string, RateTableInfo[]>()
+    for (const t of tables) {
+      const arr = g.get(t.name) ?? []
+      arr.push(t)
+      g.set(t.name, arr)
+    }
+    return [...g.entries()]
+  }, [tables])
 
   return (
     <div class="flex flex-col gap-4">
@@ -653,7 +703,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         <Card>
           <div class="flex flex-wrap items-end gap-3">
             <Field label="Nueva tabla">
-              <input class={inputCls} value={newName} placeholder="Ej. Tarifas 2026" onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
+              <input class={inputCls} value={newName} placeholder="Ej. Estándar" onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
             </Field>
             <Field label="Tipo">
               <select class={inputCls} value={newFreight} onChange={(e) => setNewFreight((e.target as HTMLSelectElement).value as FreightType)}>
@@ -669,21 +719,15 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         </Card>
       )}
 
-      {tables.map((t) => {
-        const drafts = editing[t.id]
-        const dirty = drafts !== undefined
-        const rows = dirty ? drafts : t.rows
+      {groups.map(([name, groupTables]) => {
+        const ids = groupTables.map((t) => t.id)
         return (
-          <Card key={t.id}>
+          <Card key={ids.join('-')}>
             <div class="mb-3 flex items-center justify-between gap-2">
-              {renaming?.id === t.id ? (
+              {renaming && renaming.ids.join('-') === ids.join('-') ? (
                 <div class="flex items-center gap-2">
-                  <input
-                    class={inputCls}
-                    value={renaming.name}
-                    onChange={(e) => setRenaming({ id: t.id, name: (e.target as HTMLInputElement).value })}
-                  />
-                  <Button onClick={() => renameTable(t.id)} disabled={!renaming.name.trim()}>
+                  <input class={inputCls} value={renaming.name} onChange={(e) => setRenaming({ ids, name: (e.target as HTMLInputElement).value, label: renaming.label })} />
+                  <Button onClick={() => renameTables(ids, renaming.name.trim())} disabled={!renaming.name.trim()}>
                     Guardar
                   </Button>
                   <Button variant="ghost" onClick={() => setRenaming(null)}>
@@ -691,121 +735,111 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                   </Button>
                 </div>
               ) : (
-                <div class="text-sm font-semibold text-gray-800">
-                  {t.name} <span class="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{FREIGHT_LABELS[t.freightType]}</span>
-                </div>
+                <div class="text-sm font-semibold text-gray-800">{name}</div>
               )}
               <div class="flex items-center gap-2">
                 {canWrite && !renaming && (
                   <>
-                    <IconButtonSmall label="Renombrar" onClick={() => setRenaming({ id: t.id, name: t.name })}>
+                    <IconButtonSmall label="Renombrar" onClick={() => setRenaming({ ids, name, label: name })}>
                       <Pencil class="h-4 w-4" />
                     </IconButtonSmall>
-                    <IconButtonSmall label="Eliminar" onClick={() => removeTable(t.id)} danger>
-                      <Trash2 class="h-4 w-4" />
-                    </IconButtonSmall>
+                    {groupTables.length === 1 && (
+                      <IconButtonSmall label="Eliminar" onClick={() => removeTable(groupTables[0].id)} danger>
+                        <Trash2 class="h-4 w-4" />
+                      </IconButtonSmall>
+                    )}
                   </>
                 )}
               </div>
             </div>
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                  <th class="py-2 pr-3">Tarifa</th>
-                  <th class="py-2 pr-3">Precio (USD)</th>
-                  <th class="py-2">Costo (USD)</th>
-                  {canWrite && dirty && <th class="py-2 w-8" aria-label="Quitar fila" />}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => {
-                  const isEditing = canWrite && dirty
-                  return (
-                    <tr key={`${r.tier}-${i}`} class="border-b border-gray-100">
-                      <td class="py-1.5 pr-3 font-medium text-gray-700">
-                        {isEditing ? (
-                          <input
-                            class={inputCls}
-                            value={(r as RowDraft).tier}
-                            placeholder="Ej. VIP"
-                            onChange={(e) => updateDraft(t.id, t.rows, i, 'tier', (e.target as HTMLInputElement).value)}
-                          />
-                        ) : (
-                          <span>{TIER_LABELS[r.tier] ?? r.tier}</span>
-                        )}
-                      </td>
-                      <td class="py-1.5 pr-3">
-                        {isEditing ? (
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            class={inputCls}
-                            value={(r as RowDraft).price}
-                            onChange={(e) => updateDraft(t.id, t.rows, i, 'price', (e.target as HTMLInputElement).value)}
-                          />
-                        ) : canWrite ? (
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            class={inputCls}
-                            value={(r as RateRow).price === 0 ? '' : String((r as RateRow).price)}
-                            onChange={(e) => updateDraft(t.id, t.rows, i, 'price', (e.target as HTMLInputElement).value)}
-                          />
-                        ) : (
-                          <span class="text-gray-700">${Number((r as RateRow).price).toFixed(2)}</span>
-                        )}
-                      </td>
-                      <td class="py-1.5">
-                        {isEditing ? (
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            class={inputCls}
-                            value={(r as RowDraft).cost}
-                            placeholder="—"
-                            onChange={(e) => updateDraft(t.id, t.rows, i, 'cost', (e.target as HTMLInputElement).value)}
-                          />
-                        ) : canWrite ? (
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            class={inputCls}
-                            value={(r as RateRow).cost ?? ''}
-                            placeholder="—"
-                            onChange={(e) => updateDraft(t.id, t.rows, i, 'cost', (e.target as HTMLInputElement).value)}
-                          />
-                        ) : (
-                          <span class="text-gray-500">{(r as RateRow).cost === null ? '—' : `$${Number((r as RateRow).cost).toFixed(2)}`}</span>
-                        )}
-                      </td>
-                      {isEditing && (
-                        <td class="py-1.5 text-right">
-                          <button type="button" aria-label="Quitar tarifa" class="text-gray-300 hover:text-red-500" onClick={() => removeDraftRow(t.id, i)}>
-                            <Trash2 class="h-3.5 w-3.5" />
-                          </button>
-                        </td>
+            <div class="grid gap-4 lg:grid-cols-2">
+              {groupTables.map((t) => {
+                const drafts = editing[t.id]
+                const isEditing = canWrite && drafts !== undefined
+                const rows = isEditing ? drafts : t.rows
+                return (
+                  <div key={t.id} class="rounded-lg border border-gray-100 p-3">
+                    <div class="mb-2 flex items-center justify-between">
+                      <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{FREIGHT_LABELS[t.freightType]}</span>
+                      {canWrite && !isEditing && (
+                        <Button variant="ghost" onClick={() => startEdit(t)}>
+                          <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+                          Editar
+                        </Button>
                       )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            {canWrite && dirty && (
-              <div class="mt-3 flex justify-between">
-                <Button variant="ghost" onClick={() => addDraftRow(t.id)}>
-                  <Plus class="h-4 w-4" aria-hidden="true" />
-                  Agregar tarifa
-                </Button>
-                <Button onClick={() => saveRows(t.id)} disabled={saving === t.id}>
-                  <Save class="h-4 w-4" aria-hidden="true" />
-                  {saving === t.id ? 'Guardando…' : 'Guardar tarifas'}
-                </Button>
-              </div>
-            )}
+                    </div>
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                          <th class="py-2 pr-3">Tarifa</th>
+                          <th class="py-2 pr-3">Precio ({currency})</th>
+                          <th class="py-2">Costo ({currency})</th>
+                          {isEditing && <th class="py-2 w-8" aria-label="Quitar fila" />}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((r, i) => (
+                          <tr key={`${r.tier}-${i}`} class="border-b border-gray-100">
+                            <td class="py-1.5 pr-3 font-medium text-gray-700">
+                              {isEditing ? (
+                                <input class={inputCls} value={(r as RowDraft).tier} placeholder="Ej. VIP" onChange={(e) => updateDraft(t.id, t.rows, i, 'tier', (e.target as HTMLInputElement).value)} />
+                              ) : (
+                                <span>{TIER_LABELS[r.tier] ?? r.tier}</span>
+                              )}
+                            </td>
+                            <td class="py-1.5 pr-3">
+                              {isEditing ? (
+                                <input type="number" min="0" step="0.01" class={inputCls} value={(r as RowDraft).price} onChange={(e) => updateDraft(t.id, t.rows, i, 'price', (e.target as HTMLInputElement).value)} />
+                              ) : (
+                                <span class="text-gray-700">{fmtMoney(Number((r as RateRow).price), currency)}</span>
+                              )}
+                            </td>
+                            <td class="py-1.5">
+                              {isEditing ? (
+                                <input type="number" min="0" step="0.01" class={inputCls} value={(r as RowDraft).cost} placeholder="—" onChange={(e) => updateDraft(t.id, t.rows, i, 'cost', (e.target as HTMLInputElement).value)} />
+                              ) : (
+                                <span class="text-gray-500">{(r as RateRow).cost === null ? '—' : fmtMoney(Number((r as RateRow).cost), currency)}</span>
+                              )}
+                            </td>
+                            {isEditing && (
+                              <td class="py-1.5 text-right">
+                                <button type="button" aria-label="Quitar tarifa" class="text-gray-300 hover:text-red-500" onClick={() => removeDraftRow(t, i)}>
+                                  <Trash2 class="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                        {rows.length === 0 && (
+                          <tr>
+                            <td colspan={isEditing ? 4 : 3} class="py-2 text-sm text-gray-400">
+                              Sin rangos todavía.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                    {isEditing && (
+                      <div class="mt-2 flex items-center justify-between">
+                        <Button variant="ghost" onClick={() => addDraftRow(t)}>
+                          <Plus class="h-4 w-4" aria-hidden="true" />
+                          Agregar tarifa
+                        </Button>
+                        <div class="flex gap-2">
+                          <Button variant="ghost" onClick={() => cancelEdit(t)}>
+                            Cancelar
+                          </Button>
+                          <Button onClick={() => saveRows(t.id)} disabled={saving === t.id}>
+                            <Save class="h-4 w-4" aria-hidden="true" />
+                            {saving === t.id ? 'Guardando…' : 'Guardar'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </Card>
         )
       })}
@@ -813,6 +847,40 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       {tables.length === 0 && (
         <Card>
           <p class="text-sm text-gray-500">No hay tablas de tarifas para esta organización.</p>
+        </Card>
+      )}
+
+      {canWrite && (
+        <Card class="p-4">
+          <SectionTitle>Tarifa por defecto de un cliente</SectionTitle>
+          <div class="flex flex-wrap items-end gap-3">
+            <Field label="Cliente">
+              <select class={inputCls} value={assignClient} onChange={(e) => setAssignClient((e.target as HTMLSelectElement).value)}>
+                <option value="">Seleccionar cliente…</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Tabla">
+              <select class={inputCls} value={assignTable} onChange={(e) => setAssignTable((e.target as HTMLSelectElement).value)}>
+                <option value="">(sin tarifa)</option>
+                {tables.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} · {FREIGHT_LABELS[t.freightType]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Button onClick={assignDefault} disabled={!assignClient}>
+              Aplicar
+            </Button>
+          </div>
+          <p class="mt-2 text-xs text-gray-500">
+            Precarga la tarifa del cliente al facturarle de nuevo (el admin puede cambiarla en cada factura). No afecta paquetes existentes.
+          </p>
         </Card>
       )}
     </div>
