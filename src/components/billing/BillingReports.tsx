@@ -13,6 +13,9 @@ function monthRange(y: number, m: number): { from: string; to: string } {
 
 const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
+// Current year and the two before it — no hardcoded list to bump every January.
+const YEAR_OPTIONS = Array.from({ length: 3 }, (_, i) => new Date().getUTCFullYear() - i)
+
 function Kpi({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
     <Card class="p-4">
@@ -58,7 +61,7 @@ export default function BillingReports() {
       <div class="flex items-center gap-2">
         <span class="text-sm font-medium text-gray-600">Año</span>
         <select class="rounded-lg border border-gray-200 px-2 py-1 text-sm" value={year} onChange={(e) => setYear(Number((e.target as HTMLSelectElement).value))}>
-          {[2025, 2026].map((y) => <option key={y} value={y}>{y}</option>)}
+          {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
 

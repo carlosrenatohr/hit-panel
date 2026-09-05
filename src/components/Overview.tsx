@@ -56,7 +56,7 @@ export default function Overview({
             <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </IconButton>
           <Button variant="ghost" onClick={onGoShipments}>
-            Ver envíos <ChevronRight class="h-4 w-4" aria-hidden="true" />
+            Ver paquetes <ChevronRight class="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
       </div>

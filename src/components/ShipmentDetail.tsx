@@ -132,14 +132,14 @@ export default function ShipmentDetail({
     try {
       const out = await refreshPackage(guia)
       if (!out.ok) {
-        setErr(out.message ?? 'El re-scrape falló.')
+        setErr(out.message ?? 'No se pudo actualizar el paquete.')
       } else {
         await load()
       }
       setCooldownUntil(refreshCooldownUntil(guia))
       setNow(Date.now())
     } catch {
-      setErr('El re-scrape falló.')
+      setErr('No se pudo actualizar el paquete.')
     } finally {
       setRefreshing(false)
     }
@@ -428,7 +428,7 @@ export default function ShipmentDetail({
                 <Fact k="Volumen (cf)" v={d.pkg.volume_cf} />
                 <Fact k="Origen" v={d.pkg.origin_office} />
                 <Fact k="Destino" v={d.pkg.dest_office} />
-                <Fact k="Estado scrapeado" v={statusLabel(d.pkg.status)} />
+                <Fact k="Estado del proveedor" v={statusLabel(d.pkg.status)} />
                 <Fact k="Recibido" v={fmtDate(d.pkg.received_at)} />
                 <Fact k="Actualizado" v={fmtDateTime(d.pkg.scraped_at)} />
               </dl>
@@ -456,7 +456,7 @@ export default function ShipmentDetail({
                               : 'Refrescar ahora'}
                         </Button>
                         <span class="text-xs text-gray-400">
-                          Re-scrapea el paquete en Cargotrack (máx. 1 vez cada 5 min)
+                          Actualiza el paquete en Cargotrack (máx. 1 vez cada 5 min)
                         </span>
                       </div>
                     </div>

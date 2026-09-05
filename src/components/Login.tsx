@@ -46,7 +46,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
       <form onSubmit={submit} class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl ring-1 ring-black/5">
         <div class="mb-6 text-center">
           <img src="/orbit-logo-version-finalv2.png" alt="Orbit" class="mx-auto mb-2 h-16 w-auto object-contain" />
-          <p class="mt-1 text-sm text-gray-500">Panel interno del equipo</p>
+          <p class="mt-1 text-sm text-gray-500">Orbit — plataforma logística</p>
         </div>
         <div class="flex flex-col gap-4">
           <Field label="Correo">
@@ -99,7 +99,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
           </button>
         </div>
       </form>
-      <p class="text-xs font-medium tracking-wide text-white/50">HIT CARGO · Envíos que conectan.</p>
+      <p class="text-xs font-medium tracking-wide text-white/50">ORBIT · Envíos que conectan.</p>
     </div>
   )
 }

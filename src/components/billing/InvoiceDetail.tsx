@@ -159,7 +159,7 @@ export default function InvoiceDetail({
               <Card class="p-4">
                 <div class="mb-2 text-sm font-medium text-gray-700">{inv.clientName ?? '—'}</div>
                 <div class="flex items-center gap-1.5 text-xs text-gray-500">
-                  {fmtDate(inv.issueDate)} · año fiscal {inv.fiscalYear}
+                  {fmtDate(inv.issueDate)} · Año {inv.fiscalYear}
                   <InvoiceDaysBadge issueDate={inv.issueDate} paidAt={inv.paidAt} status={inv.status} />
                 </div>
                 {inv.status === 'PAID' && inv.paidAt && <div class="text-[11px] text-gray-400">Pagada el {fmtDate(inv.paidAt)}</div>}
