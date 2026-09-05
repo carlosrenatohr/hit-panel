@@ -47,8 +47,13 @@ export async function currentUser(): Promise<SessionUser | null> {
 }
 
 // ── Reads ─────────────────────────────────────────────────────────────────────
-export async function getStats(organizationId?: string): Promise<Stats> {
-  const { data, error } = await insforge.database.rpc('dashboard_stats', organizationId ? { p_org: organizationId } : {})
+export async function getStats(organizationId?: string, from?: string, to?: string, status?: string): Promise<Stats> {
+  const args: Record<string, string> = {}
+  if (organizationId) args.p_org = organizationId
+  if (from) args.p_from = from
+  if (to) args.p_to = to
+  if (status) args.p_status = status
+  const { data, error } = await insforge.database.rpc('dashboard_stats', args)
   if (error) throw error
   return (data as Stats) ?? { total: 0, by_status: {}, by_provider: {}, last_scraped: {}, delivered_30d: 0 }
 }

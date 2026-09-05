@@ -20,6 +20,10 @@ const TABS: { key: Tab; label: string }[] = [
 
 const PAGE_SIZE = 25
 
+// Year options: the current year and the two before it — no hardcoded list to
+// bump every January.
+const YEAR_OPTIONS = Array.from({ length: 3 }, (_, i) => new Date().getUTCFullYear() - i)
+
 function pageWindow(current: number, total: number): (number | '…')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const keep = new Set([1, total, current, current - 1, current + 1])
@@ -117,7 +121,7 @@ export default function Facturacion({ role }: { role: Role }) {
         { key: 'outstanding', label: 'Saldo USD' },
       ]
       const dateSuffix = filters.from || filters.to ? `-${filters.from ?? 'inicio'}-${filters.to ?? 'fin'}` : ''
-      downloadCSV(`facturas-hit${dateSuffix}-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(all as unknown as Record<string, unknown>[], cols))
+      downloadCSV(`facturas${dateSuffix}-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(all as unknown as Record<string, unknown>[], cols))
     } catch {
       setErr('No se pudo exportar.')
     }
@@ -184,8 +188,7 @@ export default function Facturacion({ role }: { role: Role }) {
           </select>
           <select class={inputCls} value={filters.fiscalYear ?? ''} onChange={(e) => patch({ fiscalYear: (e.target as HTMLSelectElement).value ? Number((e.target as HTMLSelectElement).value) : undefined })}>
             <option value="">Todo año</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
+            {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
           <DateRangePicker from={filters.from} to={filters.to} onChange={(f, t) => patch({ from: f, to: t })} />
         </div>

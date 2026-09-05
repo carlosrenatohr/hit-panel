@@ -9,7 +9,7 @@ import type { View } from '../lib/router'
 // it's admin/billing/staff only; viewer never sees the tab. Backend still enforces this.
 const NAV: { key: View; label: string; icon: typeof LayoutDashboard; roles?: Role[] }[] = [
   { key: 'overview', label: 'Resumen', icon: LayoutDashboard },
-  { key: 'shipments', label: 'Envíos', icon: PackageSearch },
+  { key: 'shipments', label: 'Paquetería', icon: PackageSearch },
   { key: 'reports', label: 'Reportes', icon: BarChart3 },
   { key: 'facturacion', label: 'Facturación', icon: FileText, roles: ['admin', 'billing', 'staff'] },
   { key: 'customers', label: 'Clientes', icon: Users, roles: ['admin', 'billing', 'staff'] },
@@ -73,7 +73,7 @@ export default function Shell({
           <img src={brand.logo} alt={brand.name} class="h-9 w-9 object-contain" />
           <div>
             <div class="text-sm font-bold leading-tight tracking-tight">{brand.name}</div>
-            <div class="text-[11px] text-gray-400">Panel interno</div>
+            <div class="text-[11px] text-gray-400">Orbit</div>
           </div>
         </div>
         <nav class="flex flex-col gap-1">

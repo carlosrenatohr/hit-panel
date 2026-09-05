@@ -333,7 +333,7 @@ export default function Reports({ user }: { user: SessionUser }) {
 
       {/* Printed-only header: gives the PDF a title, the applied filters, and a generation timestamp */}
       <div class="hidden print:block">
-        <h1 class="text-xl font-bold text-secondary">Reporte de envíos — HIT Cargo</h1>
+        <h1 class="text-xl font-bold text-secondary">Reporte de paquetes</h1>
         <p class="text-sm text-gray-600">
           {filterSummary || 'Sin filtros'} · {rows.length} paquetes · Generado {fmtDateTime(new Date().toISOString())}
         </p>

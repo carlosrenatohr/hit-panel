@@ -1,9 +1,10 @@
 import { CheckCircle2, ChevronRight, Package, Radio, RefreshCw } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
-import { fmtDateTime, providerLabel, STATUS_ORDER } from '../lib/format'
+import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
 import { getProviders, getStats } from '../lib/insforge'
 import type { Provider, ShipmentStatus, Stats, SessionUser } from '../lib/types'
-import { Button, Card, IconButton, SectionTitle, Spinner, StatusDot } from './ui'
+import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
+import { DateRangePicker } from './DateRangePicker'
 
 function hoursAgo(s?: string | null): number | null {
   if (!s) return null
@@ -12,6 +13,8 @@ function hoursAgo(s?: string | null): number | null {
   return Math.floor((Date.now() - +d) / 3600000)
 }
 
+// All-time by default; the filter card narrows the aggregates by reception date
+// and effective status (the RPC applies them server-side).
 export default function Overview({
   user,
   onOpen,
@@ -25,12 +28,18 @@ export default function Overview({
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [status, setStatus] = useState('')
 
   async function load() {
     setLoading(true)
     setErr(null)
     try {
-      const [s, p] = await Promise.all([getStats(user.agency), getProviders(user.agency)])
+      const [s, p] = await Promise.all([
+        getStats(user.agency, from || undefined, to || undefined, status || undefined),
+        getProviders(user.agency),
+      ])
       setStats(s)
       setProviders(p)
     } catch {
@@ -40,12 +49,16 @@ export default function Overview({
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to, status])
 
   if (err) return <p class="text-red-600">{err}</p>
   if (!stats) return <Spinner label="Cargando resumen…" />
 
   const maxCount = Math.max(1, ...STATUS_ORDER.map((s) => stats.by_status[s] ?? 0))
+  const hasFilters = from || to || status
 
   return (
     <div class="mx-auto max-w-6xl space-y-6">
@@ -56,10 +69,30 @@ export default function Overview({
             <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </IconButton>
           <Button variant="ghost" onClick={onGoShipments}>
-            Ver envíos <ChevronRight class="h-4 w-4" aria-hidden="true" />
+            Ver paquetes <ChevronRight class="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
       </div>
+
+      {/* Filters */}
+      <Card class="p-3">
+        <div class="flex flex-wrap items-end gap-2">
+          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f ?? ''); setTo(t ?? '') }} />
+          <select class={inputCls} value={status} onChange={(e) => setStatus((e.target as HTMLSelectElement).value)}>
+            <option value="">Todos los estados</option>
+            {STATUS_ORDER.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
+          {hasFilters && (
+            <Button variant="ghost" onClick={() => { setFrom(''); setTo(''); setStatus('') }}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+      </Card>
 
       {/* KPIs */}
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">

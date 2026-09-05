@@ -1,5 +1,6 @@
 import type { JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
+import { Pencil } from 'lucide-preact'
 import {
   cleanName,
   daysAgo,
@@ -38,7 +39,16 @@ export const COLUMN_DEFS: ColumnDef[] = [
     render: (p) => <div class="max-w-[160px] truncate font-mono text-xs text-gray-500">{p.tracking_number ?? '—'}</div>,
   },
   { key: 'provider', label: 'Proveedor', render: (p) => <span class="text-gray-600">{providerLabel(p.providers?.code)}</span> },
-  { key: 'status', label: 'Estado', render: (p) => <StatusDot s={p.effective_status as ShipmentStatus} /> },
+  { key: 'status', label: 'Estado', render: (p) => (
+    <span class="flex items-center gap-1.5">
+      <StatusDot s={p.effective_status as ShipmentStatus} />
+      {p.manual_status && (
+        <span title={`Estado manual: ${p.manual_status}`} class="text-orange-500" aria-label="Estado manual">
+          <Pencil class="h-3 w-3" />
+        </span>
+      )}
+    </span>
+  ) },
   {
     key: 'service',
     label: 'Servicio',
