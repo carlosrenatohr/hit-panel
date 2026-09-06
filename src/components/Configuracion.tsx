@@ -5,7 +5,7 @@ import type { SessionUser } from '../lib/types'
 import { configApi, TIER_LABELS } from '../lib/config'
 import { customerApi } from '../lib/customer'
 import type { Customer } from '../lib/customer'
-import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateRow, RateTableInfo } from '../lib/config'
+import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateRow, RateTableInfo, PriceModel } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { fmtMoney } from '../lib/format'
 import { Button, Card, Field, SectionTitle, Spinner, inputCls } from './ui'
@@ -295,17 +295,18 @@ function PaymentsTab({ canWrite }: { canWrite: boolean }) {
   )
 }
 
-type RowDraft = { tier: string; price: string; cost: string }
+type RowDraft = { tier: string; price: string; cost: string; priceModel: string }
 
 /** A brand-new table starts with one empty draft row; the user names the tier
  *  (any name — tiers are dynamic text now) and fills price/cost. */
 function toDrafts(rows?: RateRow[]): RowDraft[] {
   const src = rows ?? []
-  if (src.length === 0) return [{ tier: 'REGULAR', price: '', cost: '' }]
+  if (src.length === 0) return [{ tier: 'REGULAR', price: '', cost: '', priceModel: 'weight' }]
   return src.map((r) => ({
     tier: r.tier,
     price: r.price === 0 ? '' : String(r.price),
     cost: r.cost === null ? '' : String(r.cost),
+    priceModel: r.priceModel ?? 'weight',
   }))
 }
 
@@ -317,7 +318,7 @@ function toRows(drafts: RowDraft[]): RateRow[] {
   for (const d of drafts) {
     const tier = d.tier.trim()
     if (!tier || d.price === '') continue
-    byTier.set(tier, { tier, price: Number(d.price) || 0, cost: d.cost === '' ? null : Number(d.cost) || 0 })
+    byTier.set(tier, { tier, price: Number(d.price) || 0, cost: d.cost === '' ? null : Number(d.cost) || 0, priceModel: (d.priceModel ?? 'weight') as PriceModel })
   }
   return [...byTier.values()]
 }
@@ -565,7 +566,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     window.setTimeout(() => setNotice(null), 4000)
   }
 
-  function updateDraft(tableId: string, sourceRows: RateRow[], index: number, field: 'tier' | 'price' | 'cost', value: string) {
+  function updateDraft(tableId: string, sourceRows: RateRow[], index: number, field: 'tier' | 'price' | 'cost' | 'priceModel', value: string) {
     setEditing((prev) => {
       const drafts = prev[tableId] ?? toDrafts(sourceRows)
       const next = [...drafts]
@@ -589,7 +590,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   function addDraftRow(t: RateTableInfo) {
     setEditing((prev) => {
       const drafts = prev[t.id] ?? toDrafts(t.rows)
-      return { ...prev, [t.id]: [...drafts, { tier: '', price: '', cost: '' }] }
+      return { ...prev, [t.id]: [...drafts, { tier: '', price: '', cost: '', priceModel: 'weight' }] }
     })
   }
 
@@ -772,6 +773,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                       <thead>
                         <tr class="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                           <th class="py-2 pr-3">Tarifa</th>
+                          <th class="py-2 pr-3">Modelo</th>
                           <th class="py-2 pr-3">Precio ({currency})</th>
                           <th class="py-2">Costo ({currency})</th>
                           {isEditing && <th class="py-2 w-8" aria-label="Quitar fila" />}
@@ -785,6 +787,17 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                                 <input class={inputCls} value={(r as RowDraft).tier} placeholder="Ej. VIP" onChange={(e) => updateDraft(t.id, t.rows, i, 'tier', (e.target as HTMLInputElement).value)} />
                               ) : (
                                 <span>{TIER_LABELS[r.tier] ?? r.tier}</span>
+                              )}
+                            </td>
+                            <td class="py-1.5 pr-3">
+                              {isEditing ? (
+                                <select class={inputCls} value={(r as RowDraft).priceModel ?? 'weight'} onChange={(e) => updateDraft(t.id, t.rows, i, 'priceModel', (e.target as HTMLSelectElement).value)}>
+                                  <option value="weight">Por lb</option>
+                                  <option value="volume">Por ft³</option>
+                                  <option value="fixed">Fijo</option>
+                                </select>
+                              ) : (
+                                <span class="text-gray-500 text-xs">{((r as RateRow).priceModel ?? 'weight') === 'weight' ? 'lb' : (r as RateRow).priceModel === 'volume' ? 'ft³' : 'fijo'}</span>
                               )}
                             </td>
                             <td class="py-1.5 pr-3">

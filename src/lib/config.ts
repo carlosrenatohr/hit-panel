@@ -59,10 +59,13 @@ export const TIER_LABELS: Record<string, string> = {
   DARIO: 'Dario',
 }
 
+export type PriceModel = 'weight' | 'volume' | 'fixed'
+
 export interface RateRow {
   tier: PriceTier
   price: number
   cost: number | null
+  priceModel: PriceModel
 }
 
 export interface RateTableInfo {
