@@ -1,10 +1,11 @@
-import { Pencil, Plus, Search, Save, Users, X } from 'lucide-preact'
+import { Pencil, Plus, Save, Users, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi } from '../lib/config'
 import { customerApi, type Customer, type CustomerInput } from '../lib/customer'
 import type { RateTableInfo } from '../lib/config'
 import type { Role } from '../lib/types'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner } from './ui'
+import ClientSearch from './ui/ClientSearch'
 
 const PAGE_SIZE = 25
 
@@ -130,10 +131,13 @@ export default function Customers({ role }: { role: Role }) {
 
       <Card class="p-3">
         <div class="flex flex-wrap gap-2">
-          <div class="relative min-w-64 flex-1">
-            <Search class="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-            <input class={`${inputCls} w-full pl-8`} placeholder="Buscar cliente…" value={search} onInput={(e) => { setSearch((e.target as HTMLInputElement).value); setPage(1) }} />
-          </div>
+          <ClientSearch
+            value={search}
+            onSelect={(c) => { setSearch(c.name); setPage(1) }}
+            onClear={() => { setSearch(''); setPage(1) }}
+            placeholder="Buscar cliente…"
+            class="min-w-64 flex-1"
+          />
           <label class="flex items-center gap-2 px-2 text-sm text-gray-600">
             <input type="checkbox" checked={reviewOnly} onChange={(e) => { setReviewOnly((e.target as HTMLInputElement).checked); setPage(1) }} />
             Solo revisión
