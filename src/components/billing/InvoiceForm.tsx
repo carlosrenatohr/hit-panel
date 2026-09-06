@@ -2,8 +2,10 @@ import { Plus, Trash2, X } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier } from '../../lib/billing'
 import { configApi, type ChargeConcept, type RateTableInfo } from '../../lib/config'
+import type { Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, FREIGHT_LABEL as FL, TIER_LABEL } from '../../lib/format'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner } from '../ui'
+import ClientSearch from '../ui/ClientSearch'
 
 interface DraftLine {
   freightType: FreightType
@@ -185,7 +187,13 @@ export default function InvoiceForm({
         <div class="space-y-4 p-5">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Cliente">
-              <input class={inputCls} value={clientName} onInput={(e) => setClientName((e.target as HTMLInputElement).value)} placeholder="Nombre del cliente" />
+              <ClientSearch
+                value={clientName}
+                onSelect={(c: Customer) => setClientName(c.name)}
+                onClear={() => setClientName('')}
+                allowCreate
+                placeholder="Nombre del cliente"
+              />
             </Field>
             <Field label="Fecha de emisión">
               <input type="date" class={inputCls} value={issueDate} onInput={(e) => setIssueDate((e.target as HTMLInputElement).value)} />
