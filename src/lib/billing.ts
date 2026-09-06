@@ -45,6 +45,8 @@ export interface InvoiceListRow {
   profit: number
   paidUsd: number
   outstanding: number
+  closedAt: string | null
+  closedBy: string | null
 }
 export interface InvoiceView extends InvoiceListRow {
   clientId: string | null
@@ -65,6 +67,9 @@ export interface InvoiceView extends InvoiceListRow {
     profit: number
     priceTier: PriceTier | null
     priceOffCatalog: boolean
+    packageId: string | null
+    packageGuia: string | null
+    packageTracking: string | null
   }>
   payments: Array<{
     method: string | null
@@ -142,6 +147,35 @@ export interface CreateInvoiceInput {
   lines: Array<{ freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null }>
   otherLines?: Array<{ conceptId?: string | null; description?: string | null; amount: number }>
   packageIds?: string[]
+  status?: InvoiceStatus
+}
+export interface BulkPreviewInput {
+  packageIds: string[]
+}
+export interface BulkPreviewLine {
+  packageId: string
+  guia: string
+  tracking: string | null
+  serviceType: string | null
+  freightType: FreightType
+  weightLb: number | null
+  tier: string
+  unitPrice: number
+  total: number
+  freightCost: number
+  profit: number
+}
+export interface BulkPreviewOutput {
+  clientName: string
+  clientId: string | null
+  lines: BulkPreviewLine[]
+  total: number
+  profit: number
+}
+export interface BulkCreateInput {
+  packageIds: string[]
+  observations?: string | null
+  issueDate?: string | null
 }
 export interface ApplyPaymentInput {
   method: PaymentMethod
@@ -180,6 +214,9 @@ export const billingApi = {
   unlinkPackage: (id: string, packageId: string) =>
     workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/packages/${packageId}`, { method: 'DELETE' }),
   closeMonth: (year: number, month: number) => workerApi<MonthlyClose>(`${API_BASE}/api/billing/close-month${qs({ year, month })}`),
+  closeInvoice: (id: string) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/close`, { method: 'POST' }),
+  bulkPreview: (input: BulkPreviewInput) => workerApi<BulkPreviewOutput>(`${API_BASE}/api/billing/invoices/bulk/preview`, { method: 'POST', body: input }),
+  bulkCreate: (input: BulkCreateInput) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/bulk/create`, { method: 'POST', body: input }),
   reports: (year: number) => workerApi<YearReport>(`${API_BASE}/api/billing/reports${qs({ year })}`),
   summary: (from: string, to: string) => workerApi<DateRangeSummary>(`${API_BASE}/api/billing/summary${qs({ from, to })}`),
   exceptions: () => workerApi<Exceptions>(`${API_BASE}/api/billing/exceptions`),

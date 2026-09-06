@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Pencil, Plus, RefreshCw, Search } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Pencil, Plus, RefreshCw, Search, SquareCheck, Square } from 'lucide-preact'
 import { useCallback, useEffect, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -21,6 +21,7 @@ import type { Pkg, Provider, ShipmentStatus, SessionUser } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
 import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
+import { billingApi, type BulkPreviewOutput } from '../lib/billing'
 
 const PAGE_SIZE = 25
 // `dir` is the direction applied when the option is picked. The default (status_rank asc) puts
@@ -88,6 +89,58 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     pieces: '',
     receivedAt: '',
   })
+
+  // Bulk invoicing selection (persists across pagination/filter changes).
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkPreview, setBulkPreview] = useState<BulkPreviewOutput | null>(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkErr, setBulkErr] = useState<string | null>(null)
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelected(new Set())
+    setBulkPreview(null)
+    setBulkErr(null)
+  }
+
+  async function openBulkPreview() {
+    if (selected.size === 0) return
+    setBulkBusy(true)
+    setBulkErr(null)
+    setBulkPreview(null)
+    try {
+      const preview = await billingApi.bulkPreview({ packageIds: [...selected] })
+      setBulkPreview(preview)
+    } catch (e) {
+      setBulkErr(e instanceof Error ? e.message : 'No se pudo generar la vista previa.')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function createBulkInvoice() {
+    if (!bulkPreview) return
+    setBulkBusy(true)
+    setBulkErr(null)
+    try {
+      const inv = await billingApi.bulkCreate({ packageIds: [...selected] })
+      setInvoiceId(inv.id)
+      clearSelection()
+      reload()
+    } catch (e) {
+      setBulkErr(e instanceof Error ? e.message : 'No se pudo crear la factura.')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   // Calendar: packages received per day in the selected month (received_at).
   const loadRecvMonth = useCallback(async (y: number, m: number): Promise<CalendarEvent[]> => {
@@ -226,7 +279,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
             <Download class="h-4 w-4" aria-hidden="true" />
             {exporting ? 'Exportando…' : 'Exportar CSV'}
           </Button>
-          {canWrite && (
+          {canWrite && user.role !== 'viewer' && (
             <Button variant="primary" onClick={() => setShowCreate(true)}>
               <Plus class="h-4 w-4" aria-hidden="true" />
               Crear paquete
@@ -405,10 +458,18 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                     role="button"
                     onClick={() => onOpen(p.almacen_id)}
                     onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen(p.almacen_id))}
-                    class="cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                    class={`cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${selected.has(p.id) ? 'bg-primary/5' : ''}`}
                   >
                     <td class="px-4 py-3 font-semibold text-secondary">
                       <span class="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); toggleSelect(p.id) }}
+                          aria-label={selected.has(p.id) ? 'Deseleccionar' : 'Seleccionar'}
+                          class={`rounded transition-colors ${selected.has(p.id) ? 'text-primary' : 'text-gray-300 hover:text-gray-500'}`}
+                        >
+                          {selected.has(p.id) ? <SquareCheck class="h-4 w-4" /> : <Square class="h-4 w-4" />}
+                        </button>
                         {p.almacen_id}
                         {p.invoice_packages?.[0]?.invoice_id && (
                           <button
@@ -584,6 +645,63 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
           onClose={() => setInvoiceId(null)}
           onChanged={reload}
         />
+      )}
+
+      {/* ── Bulk preview modal ── */}
+      {bulkPreview && (
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div class="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
+            <h2 class="text-lg font-semibold text-secondary mb-4">Vista previa — Factura bulk</h2>
+            {bulkErr && <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{bulkErr}</div>}
+            <div class="mb-4 text-sm text-gray-600">
+              <span class="font-medium">{bulkPreview.clientName}</span> · {bulkPreview.lines.length} paquetes
+            </div>
+            <div class="scroll-thin max-h-64 overflow-y-auto">
+              <table class="w-full text-left text-sm">
+                <thead>
+                  <tr class="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-500">
+                    <th class="px-3 py-2">Guía</th>
+                    <th class="px-3 py-2">Servicio</th>
+                    <th class="px-3 py-2">Peso</th>
+                    <th class="px-3 py-2 text-right">Precio</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                  {bulkPreview.lines.map((l) => (
+                    <tr key={l.packageId}>
+                      <td class="px-3 py-2 font-mono text-xs">{l.guia}</td>
+                      <td class="px-3 py-2">{l.serviceType ?? '—'}</td>
+                      <td class="px-3 py-2">{l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
+                      <td class="px-3 py-2 text-right font-medium">${l.total.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-4 flex items-center justify-between border-t border-gray-100 pt-4">
+              <div class="text-lg font-bold text-secondary">Total: ${bulkPreview.total.toFixed(2)}</div>
+              <div class="flex gap-2">
+                <Button variant="ghost" onClick={clearSelection}>Cancelar</Button>
+                <Button onClick={createBulkInvoice} disabled={bulkBusy}>
+                  {bulkBusy ? 'Creando…' : 'Crear factura DRAFT'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk selection floating bar ── */}
+      {selected.size > 0 && !bulkPreview && (
+        <div class="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-xl bg-secondary px-4 py-3 text-sm text-white shadow-2xl">
+          <div class="flex items-center gap-4">
+            <span class="font-medium">{selected.size} paquete{selected.size > 1 ? 's' : ''} seleccionado{selected.size > 1 ? 's' : ''}</span>
+            <Button variant="primary" onClick={openBulkPreview} disabled={bulkBusy}>
+              {bulkBusy ? 'Calculando…' : 'Facturar seleccionados'}
+            </Button>
+            <button onClick={clearSelection} class="rounded-lg p-1.5 text-gray-300 hover:text-white">✕</button>
+          </div>
+        </div>
       )}
     </div>
   )

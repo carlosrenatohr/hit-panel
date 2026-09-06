@@ -1,4 +1,4 @@
-import { Ban, Check, Copy, Link2, Package, Printer, Share2, Trash2, X } from 'lucide-preact'
+import { Ban, Check, Copy, Link2, Lock, Package, Printer, Share2, Trash2, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import {
   billingApi,
@@ -156,6 +156,11 @@ export default function InvoiceDetail({
           <div class="flex items-center gap-3">
             <span class="text-lg font-bold text-secondary">Factura #{inv?.invoiceNumber ?? '…'}</span>
             {inv && <StatusPill s={inv.status} />}
+            {inv?.closedAt && (
+              <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700" title={`Cerrada ${fmtDate(inv.closedAt)} por ${inv.closedBy ?? '—'}`}>
+                <Lock class="h-3 w-3" /> cerrada
+              </span>
+            )}
           </div>
           <div class="flex items-center gap-1">
             {inv && canWrite && (
@@ -261,40 +266,50 @@ export default function InvoiceDetail({
                 </div>
                 {canWrite && inv.status !== 'VOID' && (
                   <div class="space-y-2 border-t border-gray-100 bg-gray-50/60 p-3">
-                    <div class="grid grid-cols-2 gap-2">
-                      <Field label="Método">
-                        <select class={inputCls} value={pm} onChange={(e) => setPm((e.target as HTMLSelectElement).value)}>
-                          {methods.map((m) => <option key={m} value={m}>{METHOD_LABEL[m] ?? m}</option>)}
-                        </select>
-                      </Field>
-                      <Field label="Moneda">
-                        <select class={inputCls} value={cur} onChange={(e) => setCur((e.target as HTMLSelectElement).value as Currency)}>
-                          <option value="USD">USD</option>
-                          <option value="NIO">NIO (córdobas)</option>
-                        </select>
-                      </Field>
-                      <Field label="Banco (opcional)">
-                        <select class={inputCls} value={bank} onChange={(e) => setBank((e.target as HTMLSelectElement).value)}>
-                          <option value="">—</option>
-                          {banks.map((b) => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      </Field>
-                      <Field label="Referencia (opcional)">
-                        <input class={inputCls} value={reference} placeholder="N.º de transferencia" onInput={(e) => setReference((e.target as HTMLInputElement).value)} />
-                      </Field>
-                      <Field label={cur === 'NIO' ? 'Monto (NIO)' : 'Monto (USD)'}>
-                        <input type="number" min="0" step="0.01" class={inputCls} value={amount} onInput={(e) => setAmount((e.target as HTMLInputElement).value)} />
-                      </Field>
-                      {cur === 'NIO' && (
-                        <Field label="Tasa (NIO por USD)">
-                          <input type="number" min="0" step="0.01" class={inputCls} value={fx} onInput={(e) => setFx((e.target as HTMLInputElement).value)} placeholder="36.5" />
-                        </Field>
-                      )}
-                      <Field label="Comentarios (opcional)">
-                        <input class={inputCls} value={comments} placeholder="Nota sobre el pago" onInput={(e) => setComments((e.target as HTMLInputElement).value)} />
-                      </Field>
-                    </div>
-                    <Button onClick={addPayment} disabled={busy || !pm}>Registrar pago</Button>
+                    {!inv.closedAt && (
+                      <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-600">
+                        <Lock class="h-3.5 w-3.5 shrink-0" />
+                        Cierre la factura antes de registrar pagos.
+                      </div>
+                    )}
+                    {inv.closedAt && (
+                      <>
+                        <div class="grid grid-cols-2 gap-2">
+                          <Field label="Método">
+                            <select class={inputCls} value={pm} onChange={(e) => setPm((e.target as HTMLSelectElement).value)}>
+                              {methods.map((m) => <option key={m} value={m}>{METHOD_LABEL[m] ?? m}</option>)}
+                            </select>
+                          </Field>
+                          <Field label="Moneda">
+                            <select class={inputCls} value={cur} onChange={(e) => setCur((e.target as HTMLSelectElement).value as Currency)}>
+                              <option value="USD">USD</option>
+                              <option value="NIO">NIO (córdobas)</option>
+                            </select>
+                          </Field>
+                          <Field label="Banco (opcional)">
+                            <select class={inputCls} value={bank} onChange={(e) => setBank((e.target as HTMLSelectElement).value)}>
+                              <option value="">—</option>
+                              {banks.map((b) => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                          </Field>
+                          <Field label="Referencia (opcional)">
+                            <input class={inputCls} value={reference} placeholder="N.º de transferencia" onInput={(e) => setReference((e.target as HTMLInputElement).value)} />
+                          </Field>
+                          <Field label={cur === 'NIO' ? 'Monto (NIO)' : 'Monto (USD)'}>
+                            <input type="number" min="0" step="0.01" class={inputCls} value={amount} onInput={(e) => setAmount((e.target as HTMLInputElement).value)} />
+                          </Field>
+                          {cur === 'NIO' && (
+                            <Field label="Tasa (NIO por USD)">
+                              <input type="number" min="0" step="0.01" class={inputCls} value={fx} onInput={(e) => setFx((e.target as HTMLInputElement).value)} placeholder="36.5" />
+                            </Field>
+                          )}
+                          <Field label="Comentarios (opcional)">
+                            <input class={inputCls} value={comments} placeholder="Nota sobre el pago" onInput={(e) => setComments((e.target as HTMLInputElement).value)} />
+                          </Field>
+                        </div>
+                        <Button onClick={addPayment} disabled={busy || !pm}>Registrar pago</Button>
+                      </>
+                    )}
                   </div>
                 )}
               </Card>
@@ -330,7 +345,7 @@ export default function InvoiceDetail({
                   {inv.packages.map((p) => (
                     <div key={p.packageId} class="flex items-center justify-between px-4 py-2 text-sm">
                       <span class="flex items-center gap-2"><Package class="h-3.5 w-3.5 text-gray-400" /> {p.matchedOc ?? p.packageId.slice(0, 8)} <span class="text-[10px] text-gray-400">({p.source})</span></span>
-                      {canWrite && (
+                      {canWrite && !inv.closedAt && (
                         <button aria-label="Desenlazar" onClick={() => run(() => billingApi.unlinkPackage(id, p.packageId))} class="text-gray-300 hover:text-red-500">
                           <Trash2 class="h-3.5 w-3.5" />
                         </button>
@@ -338,7 +353,7 @@ export default function InvoiceDetail({
                     </div>
                   ))}
                 </div>
-                {canWrite && (
+                {canWrite && !inv.closedAt && (
                   <div class="flex items-end gap-2 border-t border-gray-100 p-3">
                     <div class="flex-1">
                       <Field label="Enlazar por guía">
@@ -354,10 +369,16 @@ export default function InvoiceDetail({
 
               {inv.observations && <div class="rounded-lg bg-white p-3 text-sm text-gray-600 ring-1 ring-gray-100">{inv.observations}</div>}
 
-              {canWrite && inv.status !== 'VOID' && (
+              {canWrite && inv.status !== 'VOID' && !inv.closedAt && (
                 <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
                   <Ban class="h-4 w-4" /> Anular factura
                 </Button>
+              )}
+              {canWrite && inv.closedAt && inv.status !== 'VOID' && inv.status !== 'PAID' && (
+                <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  <Lock class="h-4 w-4 shrink-0" />
+                  Factura cerrada — no se puede editar ni desenlazar paquetes. Los pagos siguen habilitados.
+                </div>
               )}
             </>
           )}
