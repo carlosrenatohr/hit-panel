@@ -16,12 +16,13 @@ export interface InvoiceProfile {
 
 const FALLBACK_BRAND = { name: 'HIT Cargo', logoUrl: '/logo-mark.png' }
 
-// Normalize service type descriptions to proper Spanish labels.
-// Bulk invoices store lowercase service_type (aereo/maritimo) as description.
-const SERVICE_LABEL: Record<string, string> = { aereo: 'Aéreo', maritimo: 'Marítimo', paquete: 'Flete' }
-function normalizeDescription(desc: string | null, freightType: string | null): string {
-  if (!desc) return freightType ? FREIGHT_LABEL[freightType] : 'Otro cargo'
-  return SERVICE_LABEL[desc.toLowerCase()] ?? desc
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`
+  if (digits.length === 11 && digits.startsWith('505')) return `+505 ${digits.slice(3, 7)}-${digits.slice(7)}`
+  if (digits.length === 11 && digits.startsWith('1')) return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  return phone
 }
 
 // Pluggable print template. Hidden on screen (`hidden print:block`), isolated on
@@ -49,10 +50,9 @@ export default function InvoicePrint({
           <img src={logo} alt={b.name} class="h-12 w-12 object-contain" />
           <div>
             <div class="text-xl font-extrabold tracking-tight">{b.name}</div>
-            <div class="text-xs text-gray-500">Factura</div>
             {profile?.ruc && <div class="mt-1 text-[12px] font-bold text-gray-800">RUC: {profile.ruc}</div>}
             {profile?.address && <div class="text-[11px] text-gray-500">{profile.address}</div>}
-            {profile?.phone && <div class="text-[11px] text-gray-500">{profile.phone}</div>}
+            {profile?.phone && <div class="text-[11px] text-gray-500">No de Telefono: {formatPhone(profile.phone)}</div>}
           </div>
         </div>
         <div class="text-right">
@@ -100,7 +100,7 @@ export default function InvoicePrint({
                 <td class="py-2">
                   {l.lineType === 'freight' ? (
                     <>
-                      <div class="font-semibold">{guia ? `Guía ${guia}` : normalizeDescription(l.description, l.freightType)}</div>
+                      <div class="font-semibold">{guia ?? ''}</div>
                       {tracking && <div class="text-[10px] text-gray-500">Tracking {tracking}</div>}
                     </>
                   ) : (

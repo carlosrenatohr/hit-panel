@@ -65,6 +65,7 @@ export default function InvoiceForm({
   const [clientName, setClientName] = useState(prefill?.clientName ?? '')
   const [issueDate, setIssueDate] = useState(prefill?.issueDate ?? new Date().toISOString().slice(0, 10))
   const [observations, setObservations] = useState('')
+  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD')
   const [lines, setLines] = useState<DraftLine[]>(
     prefill?.lines?.map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: String(l.quantityLbs), description: l.description ?? '', rateTableId: l.rateTableId ?? null, guia: l.guia ?? null, tracking: l.tracking ?? null })) ?? [
       { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null },
@@ -84,6 +85,7 @@ export default function InvoiceForm({
       .chargeConcepts()
       .then((cs) => setConcepts(cs.filter((c) => c.active)))
       .catch(() => setConcepts([]))
+    configApi.info().then((p) => setCurrency(p.currency)).catch(() => {})
     billingApi.catalog().then(setCatalog).catch(() => setErr('No se pudo cargar el catálogo.'))
     // Load existing invoice for edit mode
     if (isEdit && invoiceId) {
@@ -313,8 +315,8 @@ export default function InvoiceForm({
                       <input type="number" min="0" step="0.01" class={`${inputCls} mt-1 w-full`} value={l.quantityLbs} onInput={(e) => setLine(i, { quantityLbs: (e.target as HTMLInputElement).value })} />
                     </label>
                     <div class="col-span-2 pb-2 text-right text-sm">
-                      <div class="font-semibold text-secondary">{a.unitPrice == null ? 'N/A' : fmtMoney(a.total, 'USD')}</div>
-                      <div class="text-[11px] text-gray-400">{a.unitPrice == null ? 'tarifa no aplica' : `${fmtMoney(a.unitPrice, 'USD')}/lb`}</div>
+                      <div class="font-semibold text-secondary">{a.unitPrice == null ? 'N/A' : fmtMoney(a.total, currency)}</div>
+                      <div class="text-[11px] text-gray-400">{a.unitPrice == null ? 'tarifa no aplica' : `${fmtMoney(a.unitPrice, currency)}/lb`}</div>
                     </div>
                     <button class="col-span-1 pb-2 text-gray-300 hover:text-red-500" aria-label="Quitar línea" onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}>
                       <Trash2 class="h-4 w-4" />
@@ -379,9 +381,9 @@ export default function InvoiceForm({
           <div class="flex items-center justify-between border-t border-gray-100 pt-3">
             <div class="text-sm">
               <span class="text-gray-500">Total </span>
-              <span class="text-lg font-bold text-secondary">{fmtMoney(totals.total, 'USD')}</span>
+              <span class="text-lg font-bold text-secondary">{fmtMoney(totals.total, currency)}</span>
               <span class="ml-3 text-gray-500">Ganancia </span>
-              <span class="font-semibold text-green-700">{fmtMoney(totals.profit, 'USD')}</span>
+              <span class="font-semibold text-green-700">{fmtMoney(totals.profit, currency)}</span>
             </div>
             <div class="flex gap-2">
               <Button variant="ghost" onClick={onClose}>Cancelar</Button>

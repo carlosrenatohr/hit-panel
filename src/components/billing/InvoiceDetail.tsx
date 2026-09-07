@@ -14,12 +14,6 @@ import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
 
-const SVC_LABEL: Record<string, string> = { aereo: 'Aéreo', maritimo: 'Marítimo', paquete: 'Flete' }
-function normDesc(desc: string | null, ft: string | null): string {
-  if (!desc) return ft ? FREIGHT_LABEL[ft] : 'Otro cargo'
-  return SVC_LABEL[desc.toLowerCase()] ?? desc
-}
-
 function StatusPill({ s }: { s: string }) {
   return <span class={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${INVOICE_STATUS_SOFT[s] ?? 'bg-gray-100 text-gray-600'}`}>{INVOICE_STATUS_LABEL[s] ?? s}</span>
 }
@@ -284,7 +278,7 @@ export default function InvoiceDetail({
                         <tr key={l.lineNo} class="border-b border-gray-50 last:border-0">
                           <td class="px-4 py-2">
                             {l.lineType === 'freight' ? (
-                              <div class="font-medium text-gray-800">{guia ? `Guía ${guia}` : normDesc(l.description, l.freightType)}</div>
+                              <div class="font-medium text-gray-800">{guia ?? ''}</div>
                             ) : (
                               <div>{l.description ?? 'Otro cargo'}</div>
                             )}
