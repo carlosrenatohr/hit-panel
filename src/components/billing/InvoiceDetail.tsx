@@ -260,25 +260,30 @@ export default function InvoiceDetail({
                 <div class="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Líneas</div>
                 <table class="w-full text-left text-sm">
                   <tbody>
-                    {inv.lines.map((l) => (
-                      <tr key={l.lineNo} class="border-b border-gray-50 last:border-0">
-                        <td class="px-4 py-2">
-                          <div>{normDesc(l.description, l.freightType)}</div>
-                          <div class="text-[11px] text-gray-400">
-                            {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
-                            {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
-                            {l.quantityLbs != null ? ` · ${l.quantityLbs} lb` : ''}
-                          </div>
-                          {l.packageGuia && (
-                            <div class="text-[11px] text-gray-500">
-                              Guía {l.packageGuia}
-                              {l.packageTracking ? ` · Tracking ${l.packageTracking}` : ''}
+                    {inv.lines.map((l) => {
+                      const pkg = l.packageId ? inv.packages.find((p) => p.packageId === l.packageId) : null
+                      const guia = l.packageGuia ?? pkg?.guia ?? null
+                      const tracking = l.packageTracking ?? pkg?.tracking ?? null
+                      return (
+                        <tr key={l.lineNo} class="border-b border-gray-50 last:border-0">
+                          <td class="px-4 py-2">
+                            <div>{normDesc(l.description, l.freightType)}</div>
+                            <div class="text-[11px] text-gray-400">
+                              {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
+                              {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
+                              {l.quantityLbs != null ? ` · ${l.quantityLbs} lb` : ''}
                             </div>
-                          )}
-                        </td>
-                        <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
-                      </tr>
-                    ))}
+                            {guia && (
+                              <div class="text-[11px] text-gray-500">
+                                Guía {guia}
+                                {tracking ? ` · Tracking ${tracking}` : ''}
+                              </div>
+                            )}
+                          </td>
+                          <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </Card>
