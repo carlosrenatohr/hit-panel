@@ -27,14 +27,15 @@ const PAGE_SIZE = 25
 
 // Translate common worker error messages to user-friendly Spanish.
 function translateBulkError(msg: string): string {
-  if (/already invoiced/i.test(msg)) return 'Uno o más paquetes ya tienen una factura asociada.'
-  if (/different clients/i.test(msg)) return 'Los paquetes seleccionados pertenecen a diferentes clientes.'
-  if (/not invoiceable/i.test(msg)) return 'Uno o más paquetes no están en estado facturable.'
-  if (/no client assigned/i.test(msg)) return 'Uno o más paquetes no tienen cliente asignado.'
+  if (/already invoiced/i.test(msg)) return 'Uno o más paquetes ya tienen una factura activa. Si la factura fue anulada, espera unos segundos e intenta de nuevo.'
+  if (/different clients/i.test(msg)) return 'Los paquetes seleccionados pertenecen a diferentes clientes. Selecciona paquetes de un solo cliente.'
+  if (/not invoiceable/i.test(msg)) return 'Uno o más paquetes no están en estado facturable. Solo se pueden facturar paquetes en destino o entregados.'
+  if (/no client assigned/i.test(msg)) return 'Uno o más paquetes no tienen cliente asignado. Asigna un cliente antes de facturar.'
   if (/not found in your agency/i.test(msg)) return 'Uno o más paquetes no se encontraron en tu agencia.'
   if (/No packages/i.test(msg)) return 'No se encontraron los paquetes seleccionados.'
   if (/Too many/i.test(msg)) return 'Se pueden facturar máximo 100 paquetes a la vez.'
-  return msg
+  if (/an unexpected error/i.test(msg)) return 'Ocurrió un error inesperado. Intenta de nuevo.'
+  return msg || 'Ocurrió un error. Intenta de nuevo.'
 }
 // `dir` is the direction applied when the option is picked. The default (status_rank asc) puts
 // packages ready for pickup in Nicaragua at the top; insforge.ts adds oldest-reception-first as a
@@ -139,12 +140,13 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     const localReasons: Array<{ packageId: string; guia: string | null; code: string; message: string }> = []
     const clients = new Set(selectedRows.map((r) => (r.referencia_name ?? '').trim()).filter(Boolean))
     const invoiceable = new Set(['en_destino', 'entregado'])
+    const statusLabels: Record<string, string> = { en_almacen: 'En bodega Miami', parcial: 'Parcial', en_transito: 'En tránsito', en_destino: 'En destino', entregado: 'Entregado', excepcion: 'Excepción', desconocido: 'Desconocido' }
     for (const r of selectedRows) {
       if (r.invoice_packages?.length) {
         localReasons.push({ packageId: r.id, guia: r.almacen_id, code: 'PACKAGE_ALREADY_INVOICED', message: `La guía ${r.almacen_id} ya tiene una factura asociada.` })
       }
       if (!invoiceable.has(r.effective_status)) {
-        localReasons.push({ packageId: r.id, guia: r.almacen_id, code: 'PACKAGE_NOT_INVOICEABLE', message: `La guía ${r.almacen_id} no es facturable (estado: ${r.effective_status}).` })
+        localReasons.push({ packageId: r.id, guia: r.almacen_id, code: 'PACKAGE_NOT_INVOICEABLE', message: `La guía ${r.almacen_id} no es facturable — estado actual: ${statusLabels[r.effective_status] ?? r.effective_status}.` })
       }
       if (!r.referencia_name?.trim()) {
         localReasons.push({ packageId: r.id, guia: r.almacen_id, code: 'PACKAGE_CLIENT_MISSING', message: `La guía ${r.almacen_id} no tiene cliente asignado.` })
