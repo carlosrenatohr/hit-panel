@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks'
 import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier } from '../../lib/billing'
 import { configApi, type ChargeConcept, type RateTableInfo } from '../../lib/config'
 import type { Customer } from '../../lib/customer'
-import { FREIGHT_LABEL, fmtMoney, FREIGHT_LABEL as FL, TIER_LABEL } from '../../lib/format'
+import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner } from '../ui'
 import ClientSearch from '../ui/ClientSearch'
 

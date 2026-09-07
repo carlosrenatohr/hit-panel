@@ -237,6 +237,12 @@ export default function InvoiceDetail({
                             {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
                             {l.quantityLbs != null ? ` · ${l.quantityLbs} lb` : ''}
                           </div>
+                          {l.packageGuia && (
+                            <div class="text-[11px] text-gray-500">
+                              Guía {l.packageGuia}
+                              {l.packageTracking ? ` · Tracking ${l.packageTracking}` : ''}
+                            </div>
+                          )}
                         </td>
                         <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
                       </tr>
@@ -344,7 +350,12 @@ export default function InvoiceDetail({
                   {inv.packages.length === 0 && <div class="px-4 py-3 text-sm text-gray-400">Sin paquetes enlazados.</div>}
                   {inv.packages.map((p) => (
                     <div key={p.packageId} class="flex items-center justify-between px-4 py-2 text-sm">
-                      <span class="flex items-center gap-2"><Package class="h-3.5 w-3.5 text-gray-400" /> {p.matchedOc ?? p.packageId.slice(0, 8)} <span class="text-[10px] text-gray-400">({p.source})</span></span>
+                      <span class="flex items-center gap-2">
+                        <Package class="h-3.5 w-3.5 text-gray-400" />
+                        <span>{p.guia ?? p.matchedOc ?? p.packageId.slice(0, 8)}</span>
+                        {p.tracking && <span class="text-[11px] text-gray-500">Tracking {p.tracking}</span>}
+                        <span class="text-[10px] text-gray-400">({p.source})</span>
+                      </span>
                       {canWrite && !inv.closedAt && (
                         <button aria-label="Desenlazar" onClick={() => run(() => billingApi.unlinkPackage(id, p.packageId))} class="text-gray-300 hover:text-red-500">
                           <Trash2 class="h-3.5 w-3.5" />

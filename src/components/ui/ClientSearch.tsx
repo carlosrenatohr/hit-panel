@@ -97,7 +97,7 @@ export default function ClientSearch({
         <input
           ref={inputRef}
           class={`${inputCls} w-full pl-8 pr-7`}
-          placeholder={placeholder}
+          placeholder={loading ? 'Buscando…' : placeholder}
           value={query}
           disabled={disabled}
           onInput={(e) => setQuery((e.target as HTMLInputElement).value)}

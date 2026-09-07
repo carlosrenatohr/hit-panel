@@ -84,7 +84,7 @@ export interface InvoiceView extends InvoiceListRow {
     reference: string | null
     comments: string | null
   }>
-  packages: Array<{ packageId: string; source: 'auto' | 'manual'; matchedOc: string | null }>
+  packages: Array<{ packageId: string; source: 'auto' | 'manual'; matchedOc: string | null; guia: string | null; tracking: string | null }>
 }
 export interface MonthlyClose {
   year: number

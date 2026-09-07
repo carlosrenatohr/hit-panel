@@ -651,7 +651,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
       {bulkPreview && (
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div class="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
-            <h2 class="text-lg font-semibold text-secondary mb-4">Vista previa — Factura bulk</h2>
+            <h2 class="text-lg font-semibold text-secondary mb-4">Vista previa — Factura por paquetes</h2>
             {bulkErr && <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{bulkErr}</div>}
             <div class="mb-4 text-sm text-gray-600">
               <span class="font-medium">{bulkPreview.clientName}</span> · {bulkPreview.lines.length} paquetes
@@ -661,6 +661,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                 <thead>
                   <tr class="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-500">
                     <th class="px-3 py-2">Guía</th>
+                    <th class="px-3 py-2">Tracking</th>
                     <th class="px-3 py-2">Servicio</th>
                     <th class="px-3 py-2">Peso</th>
                     <th class="px-3 py-2 text-right">Precio</th>
@@ -670,6 +671,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                   {bulkPreview.lines.map((l) => (
                     <tr key={l.packageId}>
                       <td class="px-3 py-2 font-mono text-xs">{l.guia}</td>
+                      <td class="px-3 py-2 font-mono text-xs">{l.tracking ?? '—'}</td>
                       <td class="px-3 py-2">{l.serviceType ?? '—'}</td>
                       <td class="px-3 py-2">{l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
                       <td class="px-3 py-2 text-right font-medium">${l.total.toFixed(2)}</td>
@@ -683,7 +685,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
               <div class="flex gap-2">
                 <Button variant="ghost" onClick={clearSelection}>Cancelar</Button>
                 <Button onClick={createBulkInvoice} disabled={bulkBusy}>
-                  {bulkBusy ? 'Creando…' : 'Crear factura DRAFT'}
+                  {bulkBusy ? 'Creando…' : 'Crear factura en borrador'}
                 </Button>
               </div>
             </div>
