@@ -1,6 +1,8 @@
 import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, RefreshCw, StickyNote, Tag, X } from 'lucide-preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import InvoiceForm from './billing/InvoiceForm'
+import InvoiceDetail from './billing/InvoiceDetail'
+import { billingApi } from '../lib/billing'
 import {
   cleanName,
   daysAgo,
@@ -48,6 +50,7 @@ export default function ShipmentDetail({
   const [tagValue, setTagValue] = useState('')
   const [noteBody, setNoteBody] = useState('')
   const [showInvoice, setShowInvoice] = useState(false)
+  const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null)
   // Agencies with is_scrapable = false work manual-only: no re-scrape affordance.
   const [scrapable, setScrapable] = useState(true)
 
@@ -66,6 +69,25 @@ export default function ShipmentDetail({
   const canBill = user.role === 'admin' || user.role === 'billing'
   const canRefresh = user.role === 'admin' && scrapable
   const isAdmin = user.role === 'admin'
+
+  const linkedInvoiceId = d?.pkg.invoice_packages?.[0]?.invoice_id ?? null
+
+  async function handleInvoiceClick() {
+    if (!linkedInvoiceId) {
+      setShowInvoice(true)
+      return
+    }
+    try {
+      const inv = await billingApi.getInvoice(linkedInvoiceId)
+      if (inv.status === 'DRAFT' && !inv.closedAt) {
+        setShowInvoice(true)
+      } else {
+        setViewInvoiceId(linkedInvoiceId)
+      }
+    } catch {
+      setViewInvoiceId(linkedInvoiceId)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -235,12 +257,12 @@ export default function ShipmentDetail({
           {canBill && d && (
             <button
               type="button"
-              onClick={() => setShowInvoice(true)}
-              title="Generar o ver la factura de este paquete"
+              onClick={handleInvoiceClick}
+              title={linkedInvoiceId ? 'Ver o editar la factura de este paquete' : 'Generar factura para este paquete'}
               class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
             >
               <FileText class="h-4 w-4" aria-hidden="true" />
-              Factura
+              {linkedInvoiceId ? 'Ver factura' : 'Factura'}
             </button>
           )}
           <IconButton label="Cerrar" onClick={onClose}>
@@ -250,7 +272,8 @@ export default function ShipmentDetail({
 
         {showInvoice && d && (
           <InvoiceForm
-            prefill={{
+            invoiceId={linkedInvoiceId ?? undefined}
+            prefill={linkedInvoiceId ? undefined : {
               clientName: cleanName(d.pkg.referencia_name) === '—' ? '' : cleanName(d.pkg.referencia_name),
               lines: [
                 {
@@ -263,6 +286,14 @@ export default function ShipmentDetail({
             }}
             onClose={() => setShowInvoice(false)}
             onCreated={() => setShowInvoice(false)}
+          />
+        )}
+
+        {viewInvoiceId && (
+          <InvoiceDetail
+            id={viewInvoiceId}
+            canWrite={canBill}
+            onClose={() => setViewInvoiceId(null)}
           />
         )}
 
