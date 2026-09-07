@@ -190,7 +190,14 @@ export default function InvoiceDetail({
               </button>
             )}
             {inv && (
-              <button aria-label="Imprimir" title="Imprimir" onClick={() => window.print()} class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+              <button aria-label="Imprimir" title="Imprimir PDF" onClick={async () => {
+                try {
+                  const { url } = await billingApi.shareInvoice(id)
+                  window.open(url, '_blank')
+                } catch (e) {
+                  setErr(e instanceof Error ? e.message : 'No se pudo generar el PDF.')
+                }
+              }} class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
                 <Printer class="h-4 w-4" />
               </button>
             )}
