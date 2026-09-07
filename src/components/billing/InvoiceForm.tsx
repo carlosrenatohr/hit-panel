@@ -37,19 +37,21 @@ function tableCost(tables: RateTableInfo[], tableId: string): number {
   return tables.find((t) => t.id === tableId)?.rows.find((r) => r.cost != null)?.cost ?? 0
 }
 
-/** Create-invoice modal. Freight lines pick an explicit rate table ("Estándar -
- *  Aéreo", "Estándar - Marítimo"…) or leave "(tarifa del cliente)" so the server
- *  applies the client's default. Extra charges ("otros") reference agency-managed
- *  concepts with an admin-set amount. The server recomputes everything. */
+/** Invoice editor modal — used for both create and edit (DRAFT) flows.
+ *  When `invoiceId` is provided, loads the existing invoice and submits via PATCH.
+ *  Otherwise creates a new invoice via POST. */
 export default function InvoiceForm({
   prefill,
+  invoiceId,
   onClose,
   onCreated,
 }: {
   prefill?: Partial<CreateInvoiceInput>
+  invoiceId?: string
   onClose: () => void
   onCreated: (v: InvoiceView) => void
 }) {
+  const isEdit = !!invoiceId
   const [rateTables, setRateTables] = useState<RateTableInfo[]>([])
   const [catalog, setCatalog] = useState<CatalogEntry[]>([])
   const [concepts, setConcepts] = useState<ChargeConcept[]>([])
@@ -64,6 +66,7 @@ export default function InvoiceForm({
   const [others, setOthers] = useState<DraftOther[]>([])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [loadingInvoice, setLoadingInvoice] = useState(isEdit)
 
   useEffect(() => {
     configApi
@@ -75,6 +78,37 @@ export default function InvoiceForm({
       .then((cs) => setConcepts(cs.filter((c) => c.active)))
       .catch(() => setConcepts([]))
     billingApi.catalog().then(setCatalog).catch(() => setErr('No se pudo cargar el catálogo.'))
+    // Load existing invoice for edit mode
+    if (isEdit && invoiceId) {
+      setLoadingInvoice(true)
+      billingApi
+        .getInvoice(invoiceId)
+        .then((inv) => {
+          setClientName(inv.clientName ?? '')
+          setIssueDate(inv.issueDate ?? new Date().toISOString().slice(0, 10))
+          setObservations(inv.observations ?? '')
+          const freightLines = inv.lines.filter((l) => l.lineType === 'freight')
+          const otherLines = inv.lines.filter((l) => l.lineType === 'other')
+          setLines(
+            freightLines.map((l) => ({
+              freightType: (l.freightType ?? 'AIR') as FreightType,
+              tier: (l.priceTier ?? 'REGULAR') as PriceTier,
+              quantityLbs: String(l.quantityLbs ?? ''),
+              description: l.description ?? '',
+              rateTableId: null,
+            })) ?? [{ freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null }],
+          )
+          setOthers(
+            otherLines.map((l) => ({
+              conceptId: '',
+              extra: l.description ?? '',
+              amount: String(l.total ?? ''),
+            })),
+          )
+        })
+        .catch((e) => setErr(e instanceof Error ? e.message : 'No se pudo cargar la factura.'))
+        .finally(() => setLoadingInvoice(false))
+    }
   }, [])
 
   const activeConcepts = useMemo(() => concepts.filter((c) => c.active), [concepts])
@@ -155,21 +189,37 @@ export default function InvoiceForm({
     const cleanOthers = others
       .map((o) => ({ conceptId: o.conceptId || null, description: o.extra || null, amount: otherAmount(o) }))
       .filter((o) => o.amount > 0)
-    if (!window.confirm('¿Generar la factura? Se creará con los datos ingresados.')) return
+
+    const confirmMsg = isEdit
+      ? `¿Guardar los cambios de la factura? Se actualizarán las líneas y montos.`
+      : `¿Generar la factura? Se creará como borrador editable.`
+    if (!window.confirm(confirmMsg)) return
+
     setSaving(true)
     try {
-      const view = await billingApi.createInvoice({
-        clientName: clientName.trim(),
-        issueDate,
-        observations: observations || null,
-        lines: cleanLines,
-        otherLines: cleanOthers,
-        packageIds: prefill?.packageIds,
-      })
-      window.alert(`Factura #${view.invoiceNumber} creada exitosamente.`)
+      let view: InvoiceView
+      if (isEdit && invoiceId) {
+        view = await billingApi.updateInvoice(invoiceId, {
+          issueDate,
+          observations: observations || null,
+          lines: cleanLines,
+          otherLines: cleanOthers,
+        })
+        window.alert(`Factura #${view.invoiceNumber} actualizada exitosamente.`)
+      } else {
+        view = await billingApi.createInvoice({
+          clientName: clientName.trim(),
+          issueDate,
+          observations: observations || null,
+          lines: cleanLines,
+          otherLines: cleanOthers,
+          packageIds: prefill?.packageIds,
+        })
+        window.alert(`Factura #${view.invoiceNumber} creada como borrador.`)
+      }
       onCreated(view)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'No se pudo crear la factura.')
+      setErr(e instanceof Error ? e.message : 'No se pudo guardar la factura.')
     } finally {
       setSaving(false)
     }
@@ -179,11 +229,14 @@ export default function InvoiceForm({
     <div class="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4 print:hidden">
       <Card class="my-8 w-full max-w-2xl">
         <SectionTitle class="justify-between">
-          <span>Nueva factura</span>
+          <span>{isEdit ? 'Editar factura' : 'Nueva factura'}</span>
           <button onClick={onClose} aria-label="Cerrar" class="text-gray-400 hover:text-gray-700">
             <X class="h-4 w-4" />
           </button>
         </SectionTitle>
+        {loadingInvoice ? (
+          <div class="p-6"><Spinner label="Cargando factura…" /></div>
+        ) : (
         <div class="space-y-4 p-5">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Cliente">
@@ -303,11 +356,12 @@ export default function InvoiceForm({
             </div>
             <div class="flex gap-2">
               <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-              <Button onClick={submit} disabled={saving}>{saving ? <Spinner /> : 'Crear factura'}</Button>
+              <Button onClick={submit} disabled={saving}>{saving ? <Spinner /> : isEdit ? 'Guardar cambios' : 'Crear factura'}</Button>
             </div>
           </div>
           {err && <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
         </div>
+        )}
       </Card>
     </div>
   )

@@ -205,6 +205,8 @@ export const billingApi = {
   listInvoices: (f: InvoiceFilters) => workerApi<{ rows: InvoiceListRow[]; count: number }>(`${API_BASE}/api/billing/invoices${qs({ ...f })}`),
   getInvoice: (id: string) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}`),
   createInvoice: (input: CreateInvoiceInput) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices`, { method: 'POST', body: input }),
+  updateInvoice: (id: string, input: Partial<Pick<CreateInvoiceInput, 'issueDate' | 'observations' | 'lines' | 'otherLines'>>) =>
+    workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}`, { method: 'PATCH', body: input }),
   applyPayment: (id: string, input: ApplyPaymentInput) =>
     workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/payments`, { method: 'POST', body: input }),
   voidInvoice: (id: string, reason?: string) =>
@@ -217,6 +219,10 @@ export const billingApi = {
   closeInvoice: (id: string) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/close`, { method: 'POST' }),
   bulkPreview: (input: BulkPreviewInput) => workerApi<BulkPreviewOutput>(`${API_BASE}/api/billing/invoices/bulk/preview`, { method: 'POST', body: input }),
   bulkCreate: (input: BulkCreateInput) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/bulk/create`, { method: 'POST', body: input }),
+  checkBulkEligibility: (input: BulkPreviewInput) =>
+    workerApi<{ eligible: boolean; reasons: Array<{ packageId: string; guia: string | null; code: string; message: string }> }>(
+      `${API_BASE}/api/billing/invoices/bulk/eligibility`, { method: 'POST', body: input },
+    ),
   reports: (year: number) => workerApi<YearReport>(`${API_BASE}/api/billing/reports${qs({ year })}`),
   summary: (from: string, to: string) => workerApi<DateRangeSummary>(`${API_BASE}/api/billing/summary${qs({ from, to })}`),
   exceptions: () => workerApi<Exceptions>(`${API_BASE}/api/billing/exceptions`),
