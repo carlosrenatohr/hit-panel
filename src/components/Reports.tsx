@@ -22,6 +22,7 @@ import ChartCanvas from './charts/ChartCanvas'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import { DateRangePicker } from './DateRangePicker'
 import { SectionPicker, useReportSections } from './reports/ReportSections'
+import { MultiSelect } from './ui/MultiSelect'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
 function ymd(d: Date): string {
@@ -111,7 +112,7 @@ export default function Reports({ user }: { user: SessionUser }) {
     let cancelled = false
     Promise.all([
       listPackages({ ...filters, organizationId, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
-      listPackages({ ...filters, organizationId, status: 'entregado', from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+      listPackages({ ...filters, organizationId, statuses: ['entregado'], from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
     ])
       .then(([totalRes, entRes]) => !cancelled && setPrev({ total: totalRes.count, entregados: entRes.count }))
       .catch(() => !cancelled && setPrev(null))
@@ -269,11 +270,13 @@ export default function Reports({ user }: { user: SessionUser }) {
   }
 
   // Short one-line summary of what's applied — shown on screen and printed into the PDF header.
+  const summaryList = (vals: string[] | undefined, name: (v: string) => string) =>
+    vals?.length ? (vals.length <= 2 ? vals.map(name).join(', ') : `${vals.length} seleccionados`) : undefined
   const filterSummary = [
     filters.search && `"${filters.search}"`,
-    filters.providerId && providerLabel(providers.find((p) => p.id === filters.providerId)?.code),
-    filters.status && STATUS_LABEL[filters.status as ShipmentStatus],
-    filters.service && SERVICE_LABEL[filters.service],
+    summaryList(filters.providerIds, (id) => providerLabel(providers.find((p) => p.id === id)?.code) ?? id),
+    summaryList(filters.statuses, (s) => STATUS_LABEL[s as ShipmentStatus] ?? s),
+    summaryList(filters.services, (s) => SERVICE_LABEL[s] ?? s),
     (filters.from || filters.to) && `${filters.from || 'inicio'} – ${filters.to || 'hoy'}`,
   ]
     .filter(Boolean)
@@ -324,27 +327,24 @@ export default function Reports({ user }: { user: SessionUser }) {
                 onInput={(e) => setSearchInput((e.target as HTMLInputElement).value)}
               />
             </div>
-            <select class={inputCls} value={filters.providerId ?? ''} onChange={(e) => patch({ providerId: (e.target as HTMLSelectElement).value || undefined })}>
-              <option value="">Todos los proveedores</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {providerLabel(p.code)}
-                </option>
-              ))}
-            </select>
-            <select class={inputCls} value={filters.status ?? ''} onChange={(e) => patch({ status: (e.target as HTMLSelectElement).value || undefined })}>
-              <option value="">Todos los estados</option>
-              {STATUS_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
-            <select class={inputCls} value={filters.service ?? ''} onChange={(e) => patch({ service: (e.target as HTMLSelectElement).value || undefined })}>
-              <option value="">Aéreo y marítimo</option>
-              <option value="aereo">Aéreo</option>
-              <option value="maritimo">Marítimo</option>
-            </select>
+            <MultiSelect
+              options={providers.filter((p): p is Provider & { id: string } => !!p.id).map((p) => ({ value: p.id, label: providerLabel(p.code) }))}
+              selected={filters.providerIds ?? []}
+              onChange={(v) => patch({ providerIds: v.length ? v : undefined })}
+              placeholder="Proveedores"
+            />
+            <MultiSelect
+              options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
+              selected={filters.statuses ?? []}
+              onChange={(v) => patch({ statuses: v.length ? v : undefined })}
+              placeholder="Estados"
+            />
+            <MultiSelect
+              options={[{ value: 'aereo', label: 'Aéreo' }, { value: 'maritimo', label: 'Marítimo' }]}
+              selected={filters.services ?? []}
+              onChange={(v) => patch({ services: v.length ? v : undefined })}
+              placeholder="Servicio"
+            />
             <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
           </div>
         </Card>

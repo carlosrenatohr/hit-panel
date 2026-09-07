@@ -79,8 +79,11 @@ export async function getProviders(agency?: string): Promise<Provider[]> {
 export interface ListFilters {
   search?: string
   providerId?: string
+  providerIds?: string[] // multi-select (Reports); takes precedence over providerId
   status?: string
+  statuses?: string[] // multi-select (Reports); takes precedence over status
   service?: string
+  services?: string[] // multi-select (Reports); takes precedence over service
   from?: string
   to?: string
   sortCol?: string
@@ -108,9 +111,13 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
     const s = f.search.trim().replace(/[(),*]/g, '')
     q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*,referencia_name.ilike.*${s}*`)
   }
-  if (f.providerId) q = q.eq('provider_id', f.providerId)
-  if (f.status) q = q.eq('effective_status', f.status)
-  if (f.service) q = q.eq('service_type', f.service)
+  // -- Multi-select arrays filter with PostgREST IN; the single-value fields stay for the shipments list. --
+  if (f.providerIds?.length) q = q.in('provider_id', f.providerIds)
+  else if (f.providerId) q = q.eq('provider_id', f.providerId)
+  if (f.statuses?.length) q = q.in('effective_status', f.statuses)
+  else if (f.status) q = q.eq('effective_status', f.status)
+  if (f.services?.length) q = q.in('service_type', f.services)
+  else if (f.service) q = q.eq('service_type', f.service)
   if (f.from) q = q.gte('received_at', f.from)
   // `to` is a date-only string; received_at is timestamptz. `lte('2026-07-10')` compares against
   // midnight and drops everything received later that day. Use `< next day` to include the whole day.
