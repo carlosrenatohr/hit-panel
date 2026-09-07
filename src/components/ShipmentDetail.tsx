@@ -292,6 +292,8 @@ export default function ShipmentDetail({
                   freightType: d.pkg.service_type === 'maritimo' ? 'MAR' : 'AIR',
                   tier: 'REGULAR',
                   quantityLbs: d.pkg.weight_lb ?? 0,
+                  guia: d.pkg.almacen_id,
+                  tracking: d.pkg.tracking_number ?? null,
                 },
               ],
               packageIds: [d.pkg.id],

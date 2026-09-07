@@ -268,24 +268,32 @@ export default function InvoiceDetail({
                 <table class="w-full text-left text-sm">
                   <tbody>
                     {inv.lines.map((l) => {
-                      const pkg = l.packageId ? inv.packages.find((p) => p.packageId === l.packageId) : null
-                      const guia = l.packageGuia ?? pkg?.guia ?? null
-                      const tracking = l.packageTracking ?? pkg?.tracking ?? null
+                      let guia = l.packageGuia ?? null
+                      let tracking = l.packageTracking ?? null
+                      if (!guia && !tracking) {
+                        const pkg = l.packageId ? inv.packages.find((p) => p.packageId === l.packageId) : null
+                        if (pkg) {
+                          guia = pkg.guia ?? null
+                          tracking = pkg.tracking ?? null
+                        } else if (inv.packages.length === 1 && l.lineType === 'freight') {
+                          guia = inv.packages[0].guia ?? null
+                          tracking = inv.packages[0].tracking ?? null
+                        }
+                      }
                       return (
                         <tr key={l.lineNo} class="border-b border-gray-50 last:border-0">
                           <td class="px-4 py-2">
-                            <div>{normDesc(l.description, l.freightType)}</div>
+                            {l.lineType === 'freight' ? (
+                              <div class="font-medium text-gray-800">{guia ? `Guía ${guia}` : normDesc(l.description, l.freightType)}</div>
+                            ) : (
+                              <div>{l.description ?? 'Otro cargo'}</div>
+                            )}
+                            {tracking && <div class="text-[11px] text-gray-500">Tracking {tracking}</div>}
                             <div class="text-[11px] text-gray-400">
                               {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
                               {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
                               {l.quantityLbs != null ? ` · ${l.quantityLbs} lb` : ''}
                             </div>
-                            {guia && (
-                              <div class="text-[11px] text-gray-500">
-                                Guía {guia}
-                                {tracking ? ` · Tracking ${tracking}` : ''}
-                              </div>
-                            )}
                           </td>
                           <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
                         </tr>

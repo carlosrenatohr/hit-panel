@@ -73,7 +73,7 @@ export default function InvoicePrint({
       <table class="mb-4 w-full border-collapse">
         <thead>
           <tr class="border-y border-gray-300 text-[10px] uppercase tracking-widest text-gray-500">
-            <th class="py-2 text-left font-semibold">Descripción</th>
+            <th class="py-2 text-left font-semibold">Guía / Concepto</th>
             <th class="py-2 text-left font-semibold">Flete</th>
             <th class="py-2 text-right font-semibold">Libras</th>
             <th class="py-2 text-right font-semibold">P. unit.</th>
@@ -83,18 +83,28 @@ export default function InvoicePrint({
         <tbody>
           {inv.lines.map((l) => {
             // Resolve guia/tracking: prefer line snapshot, fall back to linked packages
-            const pkg = l.packageId ? inv.packages.find((p) => p.packageId === l.packageId) : null
-            const guia = l.packageGuia ?? pkg?.guia ?? null
-            const tracking = l.packageTracking ?? pkg?.tracking ?? null
+            let guia = l.packageGuia ?? null
+            let tracking = l.packageTracking ?? null
+            if (!guia && !tracking) {
+              const pkg = l.packageId ? inv.packages.find((p) => p.packageId === l.packageId) : null
+              if (pkg) {
+                guia = pkg.guia ?? null
+                tracking = pkg.tracking ?? null
+              } else if (inv.packages.length === 1 && l.lineType === 'freight') {
+                guia = inv.packages[0].guia ?? null
+                tracking = inv.packages[0].tracking ?? null
+              }
+            }
             return (
               <tr key={l.lineNo} class="border-b border-gray-100">
                 <td class="py-2">
-                  {normalizeDescription(l.description, l.freightType)}
-                  {guia && (
-                    <div class="text-[10px] text-gray-500">
-                      Guía {guia}
-                      {tracking ? ` · Tracking ${tracking}` : ''}
-                    </div>
+                  {l.lineType === 'freight' ? (
+                    <>
+                      <div class="font-semibold">{guia ? `Guía ${guia}` : normalizeDescription(l.description, l.freightType)}</div>
+                      {tracking && <div class="text-[10px] text-gray-500">Tracking {tracking}</div>}
+                    </>
+                  ) : (
+                    <div>{l.description ?? 'Otro cargo'}</div>
                   )}
                 </td>
                 <td class="py-2">{l.freightType ? FREIGHT_LABEL[l.freightType] : '—'}</td>
