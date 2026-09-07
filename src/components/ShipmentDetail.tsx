@@ -294,6 +294,7 @@ export default function ShipmentDetail({
                   quantityLbs: d.pkg.weight_lb ?? 0,
                   guia: d.pkg.almacen_id,
                   tracking: d.pkg.tracking_number ?? null,
+                  packageId: d.pkg.id,
                 },
               ],
               packageIds: [d.pkg.id],
