@@ -40,7 +40,7 @@ export interface Pkg {
   declared_value: number | null
   photo_ref: string | null
   /** To-many embed: when present, the package has at least one linked invoice. */
-  invoice_packages?: { invoice_id: string }[] | null
+  invoice_packages?: { invoice_id: string; active: boolean }[] | null
   received_at: string | null
   last_event_at: string | null
   scraped_at: string | null

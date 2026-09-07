@@ -70,7 +70,7 @@ export default function ShipmentDetail({
   const canRefresh = user.role === 'admin' && scrapable
   const isAdmin = user.role === 'admin'
 
-  const linkedInvoiceId = d?.pkg.invoice_packages?.[0]?.invoice_id ?? null
+  const linkedInvoiceId = d?.pkg.invoice_packages?.find((ip) => ip.active)?.invoice_id ?? null
 
   async function handleInvoiceClick() {
     if (!linkedInvoiceId) {

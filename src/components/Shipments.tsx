@@ -145,7 +145,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     const noClient: string[] = []
 
     for (const r of selectedRows) {
-      if (r.invoice_packages?.length) alreadyInvoiced.push(r.almacen_id)
+      if (r.invoice_packages?.some((ip) => ip.active)) alreadyInvoiced.push(r.almacen_id)
       if (!invoiceable.has(r.effective_status)) notInvoiceable.push({ guia: r.almacen_id, status: statusLabels[r.effective_status] ?? r.effective_status })
       if (!r.referencia_name?.trim()) noClient.push(r.almacen_id)
     }
@@ -448,7 +448,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                     <span class="truncate">{cleanName(p.referencia_name)}</span>
                     {isHazmat(p.referencia_name) && <HazmatBadge />}
                     {p.photo_ref && <span title="Tiene foto">🖼️</span>}
-                    {p.invoice_packages?.length ? (
+                    {p.invoice_packages?.some((ip) => ip.active) ? (
                       <span title="Tiene factura" class="text-primary/70">
                         <FileText class="h-3.5 w-3.5" />
                       </span>
@@ -529,13 +529,14 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
                           {selected.has(p.id) ? <SquareCheck class="h-4 w-4" /> : <Square class="h-4 w-4" />}
                         </button>
                         {p.almacen_id}
-                        {p.invoice_packages?.[0]?.invoice_id && (
+                        {p.invoice_packages?.some((ip) => ip.active) && (
                           <button
                             type="button"
                             title="Ver factura"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setInvoiceId(p.invoice_packages?.[0]?.invoice_id ?? null)
+                              const activeLink = p.invoice_packages?.find((ip) => ip.active)
+                              setInvoiceId(activeLink?.invoice_id ?? null)
                             }}
                             class="text-primary/70 hover:text-primary"
                           >
