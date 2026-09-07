@@ -144,10 +144,22 @@ export interface CreateInvoiceInput {
   address?: string | null
   specialPrice?: boolean
   observations?: string | null
-  lines: Array<{ freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null }>
+  lines: Array<{ freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null; packageId?: string | null }>
   otherLines?: Array<{ conceptId?: string | null; description?: string | null; amount: number }>
   packageIds?: string[]
   status?: InvoiceStatus
+}
+/** A client package as seen by the guided new-invoice flow (eligible or not). */
+export interface UnbilledPackage {
+  packageId: string
+  guia: string | null
+  tracking: string | null
+  status: string
+  serviceType: string | null
+  freightType: FreightType | null
+  weightLb: number | null
+  eligible: boolean
+  reason: string | null
 }
 export interface BulkPreviewInput {
   packageIds: string[]
@@ -231,4 +243,7 @@ export const billingApi = {
   shareInvoice: (id: string) => workerApi<{ token: string; url: string }>(`${API_BASE}/api/billing/invoices/${id}/share`, { method: 'POST' }),
   invoiceEvents: (id: string) =>
     workerApi<{ events: Array<{ action: string; detail: string | null; actor: string | null; createdAt: string }> }>(`${API_BASE}/api/billing/invoices/${id}/events`),
+  /** Guided new-invoice flow: a client's unbilled packages (eligible + reasons). */
+  unbilledPackages: (clientId: string) =>
+    workerApi<{ clientId: string; packages: UnbilledPackage[] }>(`${API_BASE}/api/billing/clients/${encodeURIComponent(clientId)}/unbilled-packages`),
 }

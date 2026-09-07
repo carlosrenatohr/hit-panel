@@ -1,6 +1,6 @@
-import { Plus, Trash2, X } from 'lucide-preact'
+import { Check, Plus, Trash2, X } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
-import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier } from '../../lib/billing'
+import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier, type UnbilledPackage } from '../../lib/billing'
 import { configApi, type ChargeConcept, type RateTableInfo } from '../../lib/config'
 import type { Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
@@ -17,11 +17,13 @@ interface DraftLine {
   /** Display-only: package guide + tracking this line bills (resolved from prefill or linked packages). */
   guia: string | null
   tracking: string | null
+  /** Package billed by this line (drives the guided flow + server link sync). */
+  packageId: string | null
 }
 
 /** Prefill lines may carry display-only guia/tracking/packageId beyond the create shape. */
-interface PrefillLine { freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null; guia?: string | null; tracking?: string | null }
-interface InvoicePrefill extends Omit<Partial<CreateInvoiceInput>, 'lines'> { lines?: PrefillLine[] }
+interface PrefillLine { freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null; guia?: string | null; tracking?: string | null; packageId?: string | null }
+interface InvoicePrefill extends Omit<Partial<CreateInvoiceInput>, 'lines'> { clientId?: string | null; lines?: PrefillLine[] }
 
 interface DraftOther {
   conceptId: string
@@ -63,12 +65,17 @@ export default function InvoiceForm({
   const [catalog, setCatalog] = useState<CatalogEntry[]>([])
   const [concepts, setConcepts] = useState<ChargeConcept[]>([])
   const [clientName, setClientName] = useState(prefill?.clientName ?? '')
+  const [clientId, setClientId] = useState<string | null>(prefill?.clientId ?? null)
+  const [clientPkgs, setClientPkgs] = useState<UnbilledPackage[]>([])
+  const [pkgLoading, setPkgLoading] = useState(false)
+  const [pkgErr, setPkgErr] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>(prefill?.lines?.map((l) => l.packageId).filter((id): id is string => !!id) ?? [])
   const [issueDate, setIssueDate] = useState(prefill?.issueDate ?? new Date().toISOString().slice(0, 10))
   const [observations, setObservations] = useState('')
   const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD')
   const [lines, setLines] = useState<DraftLine[]>(
-    prefill?.lines?.map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: String(l.quantityLbs), description: l.description ?? '', rateTableId: l.rateTableId ?? null, guia: l.guia ?? null, tracking: l.tracking ?? null })) ?? [
-      { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null },
+    prefill?.lines?.map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: String(l.quantityLbs), description: l.description ?? '', rateTableId: l.rateTableId ?? null, guia: l.guia ?? null, tracking: l.tracking ?? null, packageId: l.packageId ?? null })) ?? [
+      { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null, packageId: null },
     ],
   )
   const [others, setOthers] = useState<DraftOther[]>([])
@@ -98,6 +105,8 @@ export default function InvoiceForm({
           setObservations(inv.observations ?? '')
           const freightLines = inv.lines.filter((l) => l.lineType === 'freight')
           const otherLines = inv.lines.filter((l) => l.lineType === 'other')
+          setClientId(inv.clientId ?? null)
+          setSelectedIds(freightLines.map((l) => l.packageId).filter((id): id is string => !!id))
           setLines(
             freightLines.map((l) => {
               let guia = l.packageGuia ?? null
@@ -120,6 +129,7 @@ export default function InvoiceForm({
                 rateTableId: null,
                 guia,
                 tracking,
+                packageId: l.packageId ?? null,
               }
             }),
           )
@@ -135,6 +145,25 @@ export default function InvoiceForm({
         .finally(() => setLoadingInvoice(false))
     }
   }, [])
+
+  // Guided flow: load the selected client's unbilled packages.
+  useEffect(() => {
+    if (!clientId) {
+      setClientPkgs([])
+      return
+    }
+    let alive = true
+    setPkgLoading(true)
+    setPkgErr(null)
+    billingApi
+      .unbilledPackages(clientId)
+      .then((r) => alive && setClientPkgs(r.packages))
+      .catch(() => alive && setPkgErr('No se pudieron cargar las guías del cliente.'))
+      .finally(() => alive && setPkgLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [clientId])
 
   const activeConcepts = useMemo(() => concepts.filter((c) => c.active), [concepts])
 
@@ -196,7 +225,30 @@ export default function InvoiceForm({
   }
 
   function addFreightLine() {
-    setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null }])
+    setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null, packageId: null }])
+  }
+
+  /** Guided flow: select/deselect a package → one freight line per selected package. */
+  function togglePackage(pkg: UnbilledPackage) {
+    const has = selectedIds.includes(pkg.packageId)
+    setSelectedIds((ids) => (has ? ids.filter((id) => id !== pkg.packageId) : [...ids, pkg.packageId]))
+    setLines((ls) => {
+      if (has) return ls.filter((l) => l.packageId !== pkg.packageId)
+      if (ls.some((l) => l.packageId === pkg.packageId)) return ls
+      return [
+        ...ls,
+        {
+          freightType: pkg.freightType ?? (pkg.serviceType === 'maritimo' ? 'MAR' : 'AIR'),
+          tier: 'REGULAR',
+          quantityLbs: String(pkg.weightLb ?? ''),
+          description: '',
+          rateTableId: null,
+          guia: pkg.guia,
+          tracking: pkg.tracking,
+          packageId: pkg.packageId,
+        },
+      ]
+    })
   }
 
   function addOtherLine() {
@@ -207,8 +259,11 @@ export default function InvoiceForm({
   async function submit() {
     setErr(null)
     if (!clientName.trim()) return setErr('El cliente es obligatorio.')
+    const guidedCreate = !isEdit && !prefill?.packageIds?.length
+    if (guidedCreate && !clientId) return setErr('Selecciona un cliente para cargar sus guías.')
+    if (guidedCreate && selectedIds.length === 0) return setErr('Selecciona al menos una guía del cliente.')
     const cleanLines = lines
-      .map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: Number(l.quantityLbs), description: l.description || null, rateTableId: l.rateTableId }))
+      .map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: Number(l.quantityLbs), description: l.description || null, rateTableId: l.rateTableId, packageId: l.packageId ?? null }))
       .filter((l) => l.quantityLbs > 0)
     if (cleanLines.length === 0) return setErr('Agrega al menos una línea con peso.')
     const cleanOthers = others
@@ -238,7 +293,8 @@ export default function InvoiceForm({
           observations: observations || null,
           lines: cleanLines,
           otherLines: cleanOthers,
-          packageIds: prefill?.packageIds,
+          packageIds: selectedIds.length ? selectedIds : prefill?.packageIds,
+          status: 'DRAFT',
         })
         window.alert(`Factura #${view.invoiceNumber} creada como borrador.`)
       }
@@ -267,7 +323,14 @@ export default function InvoiceForm({
             <Field label="Cliente">
               <ClientSearch
                 value={clientName}
-                onSelect={(c: Customer) => setClientName(c.name)}
+                onSelect={(c: Customer) => {
+                  setClientName(c.name)
+                  if (!isEdit) {
+                    setClientId(c.id)
+                    setSelectedIds([])
+                    setLines([])
+                  }
+                }}
                 onClear={() => setClientName('')}
                 allowCreate
                 placeholder="Nombre del cliente"
@@ -277,6 +340,39 @@ export default function InvoiceForm({
               <input type="date" class={inputCls} value={issueDate} onInput={(e) => setIssueDate((e.target as HTMLInputElement).value)} />
             </Field>
           </div>
+
+          {clientId && (
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Guías del cliente</div>
+                {pkgLoading && <Spinner />}
+                {pkgErr && <span class="text-xs text-red-600">{pkgErr}</span>}
+              </div>
+              {!pkgLoading && clientPkgs.length === 0 && <div class="text-xs text-gray-400">Sin paquetes pendientes para este cliente.</div>}
+              <div class="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-100 p-2">
+                {clientPkgs.map((p) => {
+                  const checked = selectedIds.includes(p.packageId)
+                  return (
+                    <button
+                      key={p.packageId}
+                      type="button"
+                      disabled={!p.eligible}
+                      onClick={() => p.eligible && togglePackage(p)}
+                      class={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${p.eligible ? 'hover:bg-gray-50' : 'cursor-not-allowed opacity-60'}`}
+                    >
+                      <span class={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white'}`} aria-hidden="true">
+                        {checked && <Check class="h-3 w-3" />}
+                      </span>
+                      <span class="font-semibold text-gray-700">{p.guia ?? p.packageId.slice(0, 8)}</span>
+                      {p.tracking && <span class="font-mono text-gray-400">{p.tracking}</span>}
+                      {p.weightLb != null && <span class="text-gray-400">{p.weightLb} lb</span>}
+                      {p.eligible ? null : <span class="ml-auto text-gray-400">{p.reason}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div class="space-y-2">
             <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Líneas de flete</div>
@@ -318,7 +414,10 @@ export default function InvoiceForm({
                       <div class="font-semibold text-secondary">{a.unitPrice == null ? 'N/A' : fmtMoney(a.total, currency)}</div>
                       <div class="text-[11px] text-gray-400">{a.unitPrice == null ? 'tarifa no aplica' : `${fmtMoney(a.unitPrice, currency)}/lb`}</div>
                     </div>
-                    <button class="col-span-1 pb-2 text-gray-300 hover:text-red-500" aria-label="Quitar línea" onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}>
+                    <button class="col-span-1 pb-2 text-gray-300 hover:text-red-500" aria-label="Quitar línea" onClick={() => {
+                          setLines((ls) => ls.filter((_, idx) => idx !== i))
+                          if (l.packageId) setSelectedIds((ids) => ids.filter((id) => id !== l.packageId))
+                        }}>
                       <Trash2 class="h-4 w-4" />
                     </button>
                   </div>
@@ -333,7 +432,7 @@ export default function InvoiceForm({
                 </div>
               )
             })}
-            <Button variant="ghost" onClick={addFreightLine}>
+            <Button variant="ghost" onClick={addFreightLine} disabled={!!clientId && !isEdit}>
               <Plus class="h-4 w-4" /> Agregar línea de flete
             </Button>
           </div>
