@@ -23,7 +23,8 @@ import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import { DateRangePicker } from './DateRangePicker'
 import { SectionPicker, useReportSections } from './reports/ReportSections'
 import { MultiSelect } from './ui/MultiSelect'
-import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
+import { SplitButton } from './ui/SplitButton'
+import { Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -308,15 +309,15 @@ export default function Reports({ user }: { user: SessionUser }) {
               <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </IconButton>
             <SectionPicker prefs={sections} />
-            <Button variant="ghost" onClick={exportMatrix}>
-              <Download class="h-4 w-4" aria-hidden="true" /> CSV estados
-            </Button>
-            <Button variant="ghost" onClick={exportDetailed}>
-              <Download class="h-4 w-4" aria-hidden="true" /> CSV detallado
-            </Button>
-            <Button onClick={() => window.print()}>
-              <Printer class="h-4 w-4" aria-hidden="true" /> Exportar PDF
-            </Button>
+            <SplitButton
+              primaryLabel="Exportar PDF"
+              primaryIcon={<Printer class="h-4 w-4" aria-hidden="true" />}
+              primaryOnClick={() => window.print()}
+              items={[
+                { label: 'CSV estados', icon: <Download class="h-4 w-4" aria-hidden="true" />, onClick: exportMatrix },
+                { label: 'CSV detallado', icon: <Download class="h-4 w-4" aria-hidden="true" />, onClick: exportDetailed },
+              ]}
+            />
           </div>
         </div>
 
