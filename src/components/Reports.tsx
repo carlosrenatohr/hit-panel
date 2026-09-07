@@ -37,7 +37,11 @@ export default function Reports({ user }: { user: SessionUser }) {
   const [printBrand, setPrintBrand] = useState<{ name: string; logoUrl: string | null } | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
-  const [filters, setFilters] = useState<ListFilters>({})
+  // -- Default window is the current month (matches the DateRangePicker 'Este mes' preset); 'Todo el tiempo' stays opt-in. --
+  const [filters, setFilters] = useState<ListFilters>(() => ({
+    from: ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+    to: ymd(new Date()),
+  }))
   const [rows, setRows] = useState<Pkg[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
