@@ -1,5 +1,5 @@
 import type { InvoiceView } from '../../lib/billing'
-import { fmtMoney, FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL } from '../../lib/format'
+import { fmtMoney, FREIGHT_LABEL, fmtDate } from '../../lib/format'
 
 export interface InvoiceBrand {
   name: string
@@ -50,37 +50,24 @@ export default function InvoicePrint({
           <img src={logo} alt={b.name} class="h-12 w-12 object-contain" />
           <div>
             <div class="text-xl font-extrabold tracking-tight">{b.name}</div>
-            <div class="text-xs text-gray-500">Recibo de venta</div>
-            {infoLines.length > 0 && (
-              <div class="mt-1 text-[11px] text-gray-500">
-                {infoLines.map((line, i) => (
-                  <span key={i}>
-                    {i > 0 && ' · '}
-                    {line}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div class="text-xs text-gray-500">Factura</div>
+            {profile?.ruc && <div class="mt-1 text-[12px] font-bold text-gray-800">RUC: {profile.ruc}</div>}
+            {profile?.address && <div class="text-[11px] text-gray-500">{profile.address}</div>}
+            {profile?.phone && <div class="text-[11px] text-gray-500">{profile.phone}</div>}
           </div>
         </div>
         <div class="text-right">
-          <div class="text-[10px] uppercase tracking-widest text-gray-400">Recibo N.º</div>
+          <div class="text-[10px] uppercase tracking-widest text-gray-400">Factura N.º</div>
           <div class="text-2xl font-extrabold">{inv.invoiceNumber}</div>
           <div class="text-xs text-gray-500">{fmtDate(inv.issueDate)}</div>
         </div>
       </div>
 
-      {/* Parties */}
-      <div class="mb-6 flex items-start justify-between gap-6">
-        <div>
-          <div class="text-[10px] uppercase tracking-widest text-gray-400">Cliente</div>
-          <div class="font-semibold">{inv.clientName ?? '—'}</div>
-          {inv.address && <div class="text-xs text-gray-500">{inv.address}</div>}
-        </div>
-        <div class="text-right">
-          <div class="text-[10px] uppercase tracking-widest text-gray-400">Estado</div>
-          <div class="font-semibold">{INVOICE_STATUS_LABEL[inv.status] ?? inv.status}</div>
-        </div>
+      {/* Client */}
+      <div class="mb-6">
+        <div class="text-[10px] uppercase tracking-widest text-gray-400">Cliente</div>
+        <div class="font-semibold">{inv.clientName ?? '—'}</div>
+        {inv.address && <div class="text-xs text-gray-500">{inv.address}</div>}
       </div>
 
       {/* Lines */}
@@ -126,12 +113,6 @@ export default function InvoicePrint({
           <span>Total</span>
           <span>{fmtMoney(inv.total, currency)}</span>
         </div>
-        {inv.paidUsd > 0 && (
-          <div class="flex justify-between pt-1 text-xs text-gray-500">
-            <span>Pagado</span>
-            <span>{fmtMoney(inv.paidUsd, currency)}</span>
-          </div>
-        )}
       </div>
 
       {inv.observations && <div class="mt-6 border-t border-gray-100 pt-3 text-xs text-gray-500">Obs: {inv.observations}</div>}
