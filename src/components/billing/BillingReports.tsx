@@ -3,6 +3,7 @@ import { billingApi, type YearReport } from '../../lib/billing'
 import { BRAND_HEX, fmtUsd } from '../../lib/format'
 import ChartCanvas from '../charts/ChartCanvas'
 import MonthCalendar, { type CalendarEvent } from '../MonthCalendar'
+import { BILLING_SECTION_DEFS, BILLING_SECTIONS_KEY, SectionPicker, useReportSections } from '../reports/ReportSections'
 import { Card, SectionTitle, Spinner } from '../ui'
 
 function monthRange(y: number, m: number): { from: string; to: string } {
@@ -26,6 +27,7 @@ function Kpi({ label, value, accent }: { label: string; value: string; accent?: 
 }
 
 export default function BillingReports() {
+  const prefs = useReportSections(BILLING_SECTION_DEFS, BILLING_SECTIONS_KEY)
   const [year, setYear] = useState(new Date().getUTCFullYear())
   const [rep, setRep] = useState<YearReport | null>(null)
   const [loading, setLoading] = useState(true)
@@ -63,6 +65,9 @@ export default function BillingReports() {
         <select class="rounded-lg border border-gray-200 px-2 py-1 text-sm" value={year} onChange={(e) => setYear(Number((e.target as HTMLSelectElement).value))}>
           {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
+        <div class="ml-auto">
+          <SectionPicker prefs={prefs} defs={BILLING_SECTION_DEFS} />
+        </div>
       </div>
 
       {loading && <Spinner label="Cargando reportes…" />}
@@ -70,80 +75,92 @@ export default function BillingReports() {
 
       {rep && (
         <>
-          <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <Kpi label="Ingresos" value={fmtUsd(rep.revenue)} />
-            <Kpi label="Ganancia" value={fmtUsd(rep.profit)} accent="text-green-700" />
-            <Kpi label="Margen" value={rep.revenue > 0 ? `${Math.round((rep.profit / rep.revenue) * 100)}%` : '—'} accent="text-green-700" />
-            <Kpi label="Por cobrar" value={fmtUsd(rep.receivables)} accent="text-yellow-700" />
-            <Kpi label="Facturas" value={String(rep.invoices)} />
-          </div>
-
-          <Card>
-            <SectionTitle>Ingresos y ganancia por mes</SectionTitle>
-            <div class="p-4">
-              <ChartCanvas
-                height={280}
-                config={{
-                  type: 'bar',
-                  data: {
-                    labels: MONTHS,
-                    datasets: [
-                      { label: 'Ingresos', data: rep.byMonth.map((m) => m.revenue), backgroundColor: BRAND_HEX.primary },
-                      { label: 'Ganancia', data: rep.byMonth.map((m) => m.profit), backgroundColor: BRAND_HEX.accentBlue },
-                    ],
-                  },
-                  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
-                }}
-              />
+          {prefs.visible('kpis') && (
+            <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <Kpi label="Ingresos" value={fmtUsd(rep.revenue)} />
+              <Kpi label="Ganancia" value={fmtUsd(rep.profit)} accent="text-green-700" />
+              <Kpi label="Margen" value={rep.revenue > 0 ? `${Math.round((rep.profit / rep.revenue) * 100)}%` : '—'} accent="text-green-700" />
+              <Kpi label="Por cobrar" value={fmtUsd(rep.receivables)} accent="text-yellow-700" />
+              <Kpi label="Facturas" value={String(rep.invoices)} />
             </div>
-          </Card>
+          )}
 
-          <div class="grid gap-4 lg:grid-cols-2">
+          {prefs.visible('mes') && (
             <Card>
-              <SectionTitle>Ingresos por tipo de flete</SectionTitle>
+              <SectionTitle>Ingresos y ganancia por mes</SectionTitle>
               <div class="p-4">
                 <ChartCanvas
-                  height={240}
+                  height={280}
                   config={{
-                    type: 'doughnut',
+                    type: 'bar',
                     data: {
-                      labels: ['Aéreo', 'Marítimo'],
-                      datasets: [{ data: [rep.byFreight.AIR.revenue, rep.byFreight.MAR.revenue], backgroundColor: [BRAND_HEX.primary, BRAND_HEX.accentBlue] }],
+                      labels: MONTHS,
+                      datasets: [
+                        { label: 'Ingresos', data: rep.byMonth.map((m) => m.revenue), backgroundColor: BRAND_HEX.primary },
+                        { label: 'Ganancia', data: rep.byMonth.map((m) => m.profit), backgroundColor: BRAND_HEX.accentBlue },
+                      ],
                     },
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
                   }}
                 />
               </div>
             </Card>
+          )}
 
-            <Card>
-              <SectionTitle>Ganancia por tipo de flete</SectionTitle>
-              <div class="p-4">
-                <ChartCanvas
-                  height={240}
-                  config={{
-                    type: 'doughnut',
-                    data: {
-                      labels: ['Aéreo', 'Marítimo'],
-                      datasets: [{ data: [rep.byFreight.AIR.profit, rep.byFreight.MAR.profit], backgroundColor: [BRAND_HEX.primary, BRAND_HEX.accentBlue] }],
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
-                  }}
-                />
-              </div>
-            </Card>
-          </div>
+          {(prefs.visible('flete-ingresos') || prefs.visible('flete-ganancia')) && (
+            <div class="grid gap-4 lg:grid-cols-2">
+              {prefs.visible('flete-ingresos') && (
+                <Card>
+                  <SectionTitle>Ingresos por tipo de flete</SectionTitle>
+                  <div class="p-4">
+                    <ChartCanvas
+                      height={240}
+                      config={{
+                        type: 'doughnut',
+                        data: {
+                          labels: ['Aéreo', 'Marítimo'],
+                          datasets: [{ data: [rep.byFreight.AIR.revenue, rep.byFreight.MAR.revenue], backgroundColor: [BRAND_HEX.primary, BRAND_HEX.accentBlue] }],
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+                      }}
+                    />
+                  </div>
+                </Card>
+              )}
+
+              {prefs.visible('flete-ganancia') && (
+                <Card>
+                  <SectionTitle>Ganancia por tipo de flete</SectionTitle>
+                  <div class="p-4">
+                    <ChartCanvas
+                      height={240}
+                      config={{
+                        type: 'doughnut',
+                        data: {
+                          labels: ['Aéreo', 'Marítimo'],
+                          datasets: [{ data: [rep.byFreight.AIR.profit, rep.byFreight.MAR.profit], backgroundColor: [BRAND_HEX.primary, BRAND_HEX.accentBlue] }],
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+                      }}
+                    />
+                  </div>
+                </Card>
+              )}
+            </div>
+          )}
         </>
       )}
 
-      <MonthCalendar
-        title="Calendario de facturación"
-        legend={[
-          { kind: 'facturado', label: 'Facturado', dot: 'bg-primary' },
-          { kind: 'pagado', label: 'Pagado', dot: 'bg-green-500' },
-        ]}
-        loadEvents={loadBillingMonth}
-      />
+      {prefs.visible('calendario') && (
+        <MonthCalendar
+          title="Calendario de facturación"
+          legend={[
+            { kind: 'facturado', label: 'Facturado', dot: 'bg-primary' },
+            { kind: 'pagado', label: 'Pagado', dot: 'bg-green-500' },
+          ]}
+          loadEvents={loadBillingMonth}
+        />
+      )}
     </div>
   )
 }

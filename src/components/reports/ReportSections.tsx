@@ -24,34 +24,44 @@ export const SECTION_DEFS: SectionDef[] = [
   { key: 'calendario', label: 'Calendario de recepción (solo pantalla)' },
 ]
 
-const STORAGE_KEY = 'hit-panel:reports:sections:v1'
+// -- Bloques del tab Facturación → Reportes; misma mecánica con su propia clave de persistencia. --
+export const BILLING_SECTION_DEFS: SectionDef[] = [
+  { key: 'kpis', label: 'Indicadores' },
+  { key: 'mes', label: 'Ingresos y ganancia por mes' },
+  { key: 'flete-ingresos', label: 'Ingresos por tipo de flete' },
+  { key: 'flete-ganancia', label: 'Ganancia por tipo de flete' },
+  { key: 'calendario', label: 'Calendario de facturación' },
+]
 
-function defaultSections(): SectionState[] {
-  return SECTION_DEFS.map((s) => ({ key: s.key, visible: true }))
+const STORAGE_KEY = 'hit-panel:reports:sections:v1'
+export const BILLING_SECTIONS_KEY = 'hit-panel:billing-report:sections:v1'
+
+function defaultSections(defs: SectionDef[]): SectionState[] {
+  return defs.map((s) => ({ key: s.key, visible: true }))
 }
 
-function loadSections(): SectionState[] {
+function loadSections(defs: SectionDef[], storageKey: string): SectionState[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return defaultSections()
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return defaultSections(defs)
     const saved = JSON.parse(raw) as SectionState[]
-    const known = new Set(SECTION_DEFS.map((s) => s.key))
+    const known = new Set(defs.map((s) => s.key))
     const savedKeys = new Set(saved.map((s) => s.key))
     // -- Drop keys that no longer exist, append new ones visible — same migration rule as the shipments column picker. --
-    const extra = SECTION_DEFS.filter((s) => !savedKeys.has(s.key)).map((s) => ({ key: s.key, visible: true }))
+    const extra = defs.filter((s) => !savedKeys.has(s.key)).map((s) => ({ key: s.key, visible: true }))
     return [...saved.filter((s) => known.has(s.key)), ...extra]
   } catch {
-    return defaultSections()
+    return defaultSections(defs)
   }
 }
 
-/** Persisted show/hide for the report sections, kept in localStorage (per-browser, no backend). */
-export function useReportSections() {
-  const [sections, setSections] = useState<SectionState[]>(loadSections)
+/** Persisted show/hide for a set of report sections, kept in localStorage (per-browser, no backend). */
+export function useReportSections(defs: SectionDef[] = SECTION_DEFS, storageKey = STORAGE_KEY) {
+  const [sections, setSections] = useState<SectionState[]>(() => loadSections(defs, storageKey))
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sections))
-  }, [sections])
+    localStorage.setItem(storageKey, JSON.stringify(sections))
+  }, [sections, storageKey])
 
   return {
     sections,
@@ -59,7 +69,7 @@ export function useReportSections() {
       setSections((ss) => ss.map((s) => (s.key === key ? { ...s, visible: !s.visible } : s)))
     },
     reset() {
-      setSections(defaultSections())
+      setSections(defaultSections(defs))
     },
     visible(key: string) {
       return sections.find((s) => s.key === key)?.visible ?? true
@@ -68,7 +78,7 @@ export function useReportSections() {
 }
 
 /** Ghost button + popover (same interaction shape as DateRangePicker) that toggles sections live. */
-export function SectionPicker({ prefs }: { prefs: ReturnType<typeof useReportSections> }) {
+export function SectionPicker({ prefs, defs = SECTION_DEFS }: { prefs: ReturnType<typeof useReportSections>; defs?: SectionDef[] }) {
   const [open, setOpen] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
 
@@ -90,7 +100,7 @@ export function SectionPicker({ prefs }: { prefs: ReturnType<typeof useReportSec
         <div class="absolute right-0 top-full z-30 mt-1.5 w-72 rounded-xl border border-gray-100 bg-white p-2 shadow-lg">
           <ul class="max-h-80 overflow-y-auto scroll-thin">
             {prefs.sections.map((s) => {
-              const def = SECTION_DEFS.find((d) => d.key === s.key)
+              const def = defs.find((d) => d.key === s.key)
               if (!def) return null
               return (
                 <li key={s.key}>
