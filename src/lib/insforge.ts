@@ -144,7 +144,7 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 export async function getPackageDetail(guia: string, organizationId?: string): Promise<PackageDetail | null> {
   let q = insforge.database
     .from('packages')
-    .select('*, providers(code,name,base_url)')
+    .select('*, providers(code,name,base_url), invoice_packages(invoice_id)')
     .eq('almacen_id', guia)
     // A guide can exist in both provider ledgers. Match the Worker lookup and use the newest row.
     .order('scraped_at', { ascending: false })
