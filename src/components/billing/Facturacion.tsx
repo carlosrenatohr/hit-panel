@@ -51,6 +51,7 @@ export default function Facturacion({ role }: { role: Role }) {
 
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   // Monthly close panel
   const now = new Date()
@@ -255,7 +256,10 @@ export default function Facturacion({ role }: { role: Role }) {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} class="cursor-pointer border-b border-gray-50 hover:bg-gray-50" onClick={() => setDetailId(r.id)}>
+                  <tr key={r.id} class="cursor-pointer border-b border-gray-50 hover:bg-gray-50" onClick={() => {
+                    if (r.status === 'DRAFT' && !r.closedAt) setEditingId(r.id)
+                    else setDetailId(r.id)
+                  }}>
                     <td class="px-4 py-2 font-medium text-secondary">#{r.invoiceNumber}<span class="ml-1 text-[11px] text-gray-400">{r.fiscalYear}</span></td>
                     <td class="px-4 py-2">{r.clientName ?? '—'}</td>
                     <td class="px-4 py-2 text-gray-500">
@@ -290,6 +294,17 @@ export default function Facturacion({ role }: { role: Role }) {
           onClose={() => setShowForm(false)}
           onCreated={(v) => {
             setShowForm(false)
+            setDetailId(v.id)
+            reload()
+          }}
+        />
+      )}
+      {editingId && (
+        <InvoiceForm
+          invoiceId={editingId}
+          onClose={() => setEditingId(null)}
+          onCreated={(v) => {
+            setEditingId(null)
             setDetailId(v.id)
             reload()
           }}

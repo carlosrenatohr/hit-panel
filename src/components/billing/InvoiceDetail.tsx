@@ -381,9 +381,17 @@ export default function InvoiceDetail({
               {inv.observations && <div class="rounded-lg bg-white p-3 text-sm text-gray-600 ring-1 ring-gray-100">{inv.observations}</div>}
 
               {canWrite && inv.status !== 'VOID' && !inv.closedAt && (
-                <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
-                  <Ban class="h-4 w-4" /> Anular factura
-                </Button>
+                <div class="flex gap-2">
+                  <Button disabled={busy} onClick={() => {
+                    if (confirm('Al cerrar la factura, sus líneas, montos y paquetes quedarán bloqueados. Después solo podrán registrarse pagos o anularse la factura. ¿La factura está lista para cerrarse?'))
+                      void run(() => billingApi.closeInvoice(id))
+                  }}>
+                    <Lock class="h-4 w-4" /> Cerrar factura
+                  </Button>
+                  <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
+                    <Ban class="h-4 w-4" /> Anular factura
+                  </Button>
+                </div>
               )}
               {canWrite && inv.closedAt && inv.status !== 'VOID' && inv.status !== 'PAID' && (
                 <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
