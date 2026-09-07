@@ -254,17 +254,29 @@ export default function ShipmentDetail({
             )}
           </div>
           {d && <StatusPill s={d.pkg.effective_status as ShipmentStatus} class="shrink-0" />}
-          {canBill && d && (
-            <button
-              type="button"
-              onClick={handleInvoiceClick}
-              title={linkedInvoiceId ? 'Ver o editar la factura de este paquete' : 'Generar factura para este paquete'}
-              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
-            >
-              <FileText class="h-4 w-4" aria-hidden="true" />
-              {linkedInvoiceId ? 'Ver factura' : 'Factura'}
-            </button>
-          )}
+          {canBill && d && (() => {
+            const invoiceable = d.pkg.effective_status === 'en_destino' || d.pkg.effective_status === 'entregado'
+            const hasInvoice = !!linkedInvoiceId
+            const enabled = hasInvoice || invoiceable
+            const statusLabels: Record<string, string> = { en_almacen: 'En bodega Miami', parcial: 'Parcial', en_transito: 'En tránsito', en_destino: 'En destino', entregado: 'Entregado', excepcion: 'Excepción', desconocido: 'Desconocido' }
+            const tooltip = hasInvoice
+              ? 'Ver o editar la factura de este paquete'
+              : invoiceable
+                ? 'Generar factura para este paquete'
+                : `No se puede facturar — estado actual: ${statusLabels[d.pkg.effective_status] ?? d.pkg.effective_status}. Solo "En destino" o "Entregado".`
+            return (
+              <button
+                type="button"
+                onClick={enabled ? handleInvoiceClick : undefined}
+                title={tooltip}
+                disabled={!enabled}
+                class={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${enabled ? 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/15' : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'}`}
+              >
+                <FileText class="h-4 w-4" aria-hidden="true" />
+                {hasInvoice ? 'Ver factura' : 'Factura'}
+              </button>
+            )
+          })()}
           <IconButton label="Cerrar" onClick={onClose}>
             <X class="h-4 w-4" aria-hidden="true" />
           </IconButton>

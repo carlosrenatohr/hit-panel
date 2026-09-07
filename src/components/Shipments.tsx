@@ -160,7 +160,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     }
     if (notInvoiceable.length > 0) {
       const guias = notInvoiceable.length <= 3 ? notInvoiceable.map((g) => `${g.guia} (${g.status})`).join(', ') : `${notInvoiceable.slice(0, 3).map((g) => `${g.guia} (${g.status})`).join(', ')} y ${notInvoiceable.length - 3} más`
-      problems.push(`${notInvoiceable.length} guía${notInvoiceable.length > 1 ? 's' : ''} no se puede facturar: ${guias}.`)
+      problems.push(`${notInvoiceable.length} guía${notInvoiceable.length > 1 ? 's' : ''} no se puede facturar: ${guias}. Solo se pueden facturar guías con estado "En destino" o "Entregado".`)
     }
     if (noClient.length > 0) {
       problems.push(`${noClient.length} guía${noClient.length > 1 ? 's' : ''} sin cliente asignado.`)
