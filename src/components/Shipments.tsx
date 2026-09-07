@@ -107,8 +107,8 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkPreview, setBulkPreview] = useState<BulkPreviewOutput | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
-  const [bulkErr, setBulkErr] = useState<string | null>(null)
-  const [eligibilityReasons, setEligibilityReasons] = useState<Array<{ packageId: string; guia: string | null; code: string; message: string }>>([])
+  const [bulkProblems, setBulkProblems] = useState<string[]>([])
+  const [createErr, setCreateErr] = useState<string | null>(null)
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -117,47 +117,57 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
       else next.add(id)
       return next
     })
-    setBulkErr(null)
-    setEligibilityReasons([])
+    setBulkProblems([])
   }
 
   function clearSelection() {
     setSelected(new Set())
     setBulkPreview(null)
-    setBulkErr(null)
-    setEligibilityReasons([])
+    setBulkProblems([])
   }
 
   async function openBulkPreview() {
     if (selected.size === 0) return
     setBulkBusy(true)
-    setBulkErr(null)
-    setEligibilityReasons([])
+    setBulkProblems([])
+    setCreateErr(null)
     setBulkPreview(null)
 
     // Client-side pre-validation using data already loaded in the table
     const selectedRows = rows.filter((r) => selected.has(r.id))
-    const localReasons: Array<{ packageId: string; guia: string | null; code: string; message: string }> = []
     const clients = new Set(selectedRows.map((r) => (r.referencia_name ?? '').trim()).filter(Boolean))
     const invoiceable = new Set(['en_destino', 'entregado'])
     const statusLabels: Record<string, string> = { en_almacen: 'En bodega Miami', parcial: 'Parcial', en_transito: 'En tránsito', en_destino: 'En destino', entregado: 'Entregado', excepcion: 'Excepción', desconocido: 'Desconocido' }
+
+    // Group issues by type to avoid redundant messages
+    const alreadyInvoiced: string[] = []
+    const notInvoiceable: Array<{ guia: string; status: string }> = []
+    const noClient: string[] = []
+
     for (const r of selectedRows) {
-      if (r.invoice_packages?.length) {
-        localReasons.push({ packageId: r.id, guia: r.almacen_id, code: 'PACKAGE_ALREADY_INVOICED', message: `La guía ${r.almacen_id} ya tiene una factura asociada.` })
-      }
-      if (!invoiceable.has(r.effective_status)) {
-        localReasons.push({ packageId: r.id, guia: r.almacen_id, code: 'PACKAGE_NOT_INVOICEABLE', message: `La guía ${r.almacen_id} no es facturable — estado actual: ${statusLabels[r.effective_status] ?? r.effective_status}.` })
-      }
-      if (!r.referencia_name?.trim()) {
-        localReasons.push({ packageId: r.id, guia: r.almacen_id, code: 'PACKAGE_CLIENT_MISSING', message: `La guía ${r.almacen_id} no tiene cliente asignado.` })
-      }
+      if (r.invoice_packages?.length) alreadyInvoiced.push(r.almacen_id)
+      if (!invoiceable.has(r.effective_status)) notInvoiceable.push({ guia: r.almacen_id, status: statusLabels[r.effective_status] ?? r.effective_status })
+      if (!r.referencia_name?.trim()) noClient.push(r.almacen_id)
     }
+
+    const problems: string[] = []
     if (clients.size > 1) {
-      localReasons.push({ packageId: '', guia: null, code: 'BULK_MIXED_CLIENTS', message: `Los paquetes pertenecen a ${clients.size} clientes diferentes. Selecciona paquetes de un solo cliente.` })
+      problems.push(`Los paquetes pertenecen a ${clients.size} clientes diferentes. Selecciona solo paquetes de un mismo cliente.`)
     }
-    if (localReasons.length > 0) {
-      setEligibilityReasons(localReasons)
-      setBulkErr('Hay problemas con la selección. Revisa los detalles abajo.')
+    if (alreadyInvoiced.length > 0) {
+      const guias = alreadyInvoiced.length <= 3 ? alreadyInvoiced.join(', ') : `${alreadyInvoiced.slice(0, 3).join(', ')} y ${alreadyInvoiced.length - 3} más`
+      problems.push(`${alreadyInvoiced.length} guía${alreadyInvoiced.length > 1 ? 's' : ''} ya tiene${alreadyInvoiced.length === 1 ? '' : 'n'} factura: ${guias}.`)
+    }
+    if (notInvoiceable.length > 0) {
+      const guias = notInvoiceable.length <= 3 ? notInvoiceable.map((g) => `${g.guia} (${g.status})`).join(', ') : `${notInvoiceable.slice(0, 3).map((g) => `${g.guia} (${g.status})`).join(', ')} y ${notInvoiceable.length - 3} más`
+      problems.push(`${notInvoiceable.length} guía${notInvoiceable.length > 1 ? 's' : ''} no se puede facturar: ${guias}.`)
+    }
+    if (noClient.length > 0) {
+      problems.push(`${noClient.length} guía${noClient.length > 1 ? 's' : ''} sin cliente asignado.`)
+    }
+
+    if (problems.length > 0) {
+      setBulkProblems(problems)
       setBulkBusy(false)
       return
     }
@@ -167,14 +177,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
       setBulkPreview(preview)
     } catch (e) {
       const raw = e instanceof Error ? e.message : 'No se pudo generar la vista previa.'
-      setBulkErr(translateBulkError(raw))
-      // Try to get detailed eligibility reasons
-      try {
-        const elig = await billingApi.checkBulkEligibility({ packageIds: [...selected] })
-        if (!elig.eligible) setEligibilityReasons(elig.reasons)
-      } catch {
-        // eligibility check failed too — show the translated error only
-      }
+      setBulkProblems([translateBulkError(raw)])
     } finally {
       setBulkBusy(false)
     }
@@ -183,14 +186,15 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
   async function createBulkInvoice() {
     if (!bulkPreview) return
     setBulkBusy(true)
-    setBulkErr(null)
+    setCreateErr(null)
     try {
       const inv = await billingApi.bulkCreate({ packageIds: [...selected] })
       setInvoiceId(inv.id)
       clearSelection()
       reload()
     } catch (e) {
-      setBulkErr(e instanceof Error ? e.message : 'No se pudo crear la factura.')
+      const raw = e instanceof Error ? e.message : 'No se pudo crear la factura.'
+      setCreateErr(translateBulkError(raw))
     } finally {
       setBulkBusy(false)
     }
@@ -706,7 +710,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div class="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
             <h2 class="text-lg font-semibold text-secondary mb-4">Vista previa — Factura por paquetes</h2>
-            {bulkErr && <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{bulkErr}</div>}
+            {createErr && <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{createErr}</div>}
             <div class="mb-4 text-sm text-gray-600">
               <span class="font-medium">{bulkPreview.clientName}</span> · {bulkPreview.lines.length} paquetes
             </div>
@@ -747,20 +751,24 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
         </div>
       )}
 
-      {/* ── Bulk error banner (visible even without preview) ── */}
-      {bulkErr && !bulkPreview && (
-        <div class="fixed bottom-20 left-1/2 z-40 -translate-x-1/2 max-w-lg rounded-xl bg-red-600 px-4 py-3 text-sm text-white shadow-2xl">
-          <div class="font-medium mb-1">No se puede facturar esta selección</div>
-          <div class="text-red-100">{bulkErr}</div>
-          {eligibilityReasons.length > 0 && (
-            <ul class="mt-2 list-disc list-inside text-red-100 text-xs">
-              {eligibilityReasons.slice(0, 5).map((r, i) => (
-                <li key={i}>{r.guia ? `Guía ${r.guia}: ` : ''}{r.message}</li>
-              ))}
-              {eligibilityReasons.length > 5 && <li>…y {eligibilityReasons.length - 5} más</li>}
-            </ul>
-          )}
-          <button onClick={() => { setBulkErr(null); setEligibilityReasons([]) }} class="absolute top-1 right-2 text-red-200 hover:text-white">×</button>
+      {/* ── Bulk error banner ── */}
+      {bulkProblems.length > 0 && !bulkPreview && (
+        <div class="fixed bottom-20 left-1/2 z-40 -translate-x-1/2 max-w-md rounded-xl bg-white border border-red-200 px-5 py-4 text-sm shadow-2xl">
+          <div class="flex items-start gap-3">
+            <div class="text-red-500 text-lg mt-0.5">⚠️</div>
+            <div class="flex-1">
+              <div class="font-semibold text-gray-900 mb-2">No se puede facturar esta selección</div>
+              <ul class="space-y-1.5 text-gray-600">
+                {bulkProblems.map((p, i) => (
+                  <li key={i} class="flex items-start gap-2">
+                    <span class="text-red-400 mt-0.5">•</span>
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button onClick={() => setBulkProblems([])} class="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+          </div>
         </div>
       )}
 
@@ -773,11 +781,6 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
               <Button variant="primary" onClick={openBulkPreview} disabled={bulkBusy}>
                 {bulkBusy ? 'Calculando…' : 'Facturar seleccionados'}
               </Button>
-              {bulkErr && (
-                <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                  {bulkErr}
-                </div>
-              )}
             </div>
             <button onClick={clearSelection} class="rounded-lg p-1.5 text-gray-300 hover:text-white">✕</button>
           </div>
