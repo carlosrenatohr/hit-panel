@@ -95,6 +95,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
   const [bulkPreview, setBulkPreview] = useState<BulkPreviewOutput | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkErr, setBulkErr] = useState<string | null>(null)
+  const [eligibilityReasons, setEligibilityReasons] = useState<Array<{ packageId: string; guia: string | null; code: string; message: string }>>([])
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -103,24 +104,36 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
       else next.add(id)
       return next
     })
+    setBulkErr(null)
+    setEligibilityReasons([])
   }
 
   function clearSelection() {
     setSelected(new Set())
     setBulkPreview(null)
     setBulkErr(null)
+    setEligibilityReasons([])
   }
 
   async function openBulkPreview() {
     if (selected.size === 0) return
     setBulkBusy(true)
     setBulkErr(null)
+    setEligibilityReasons([])
     setBulkPreview(null)
     try {
       const preview = await billingApi.bulkPreview({ packageIds: [...selected] })
       setBulkPreview(preview)
     } catch (e) {
-      setBulkErr(e instanceof Error ? e.message : 'No se pudo generar la vista previa.')
+      const msg = e instanceof Error ? e.message : 'No se pudo generar la vista previa.'
+      setBulkErr(msg)
+      // Try to get detailed eligibility reasons
+      try {
+        const elig = await billingApi.checkBulkEligibility({ packageIds: [...selected] })
+        if (!elig.eligible) setEligibilityReasons(elig.reasons)
+      } catch {
+        // eligibility check failed too — show the original error only
+      }
     } finally {
       setBulkBusy(false)
     }
@@ -693,14 +706,38 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
         </div>
       )}
 
+      {/* ── Bulk error banner (visible even without preview) ── */}
+      {bulkErr && !bulkPreview && (
+        <div class="fixed bottom-20 left-1/2 z-40 -translate-x-1/2 max-w-lg rounded-xl bg-red-600 px-4 py-3 text-sm text-white shadow-2xl">
+          <div class="font-medium mb-1">No se puede facturar esta selección</div>
+          <div class="text-red-100">{bulkErr}</div>
+          {eligibilityReasons.length > 0 && (
+            <ul class="mt-2 list-disc list-inside text-red-100 text-xs">
+              {eligibilityReasons.slice(0, 5).map((r, i) => (
+                <li key={i}>{r.guia ? `Guía ${r.guia}: ` : ''}{r.message}</li>
+              ))}
+              {eligibilityReasons.length > 5 && <li>…y {eligibilityReasons.length - 5} más</li>}
+            </ul>
+          )}
+          <button onClick={() => { setBulkErr(null); setEligibilityReasons([]) }} class="absolute top-1 right-2 text-red-200 hover:text-white">×</button>
+        </div>
+      )}
+
       {/* ── Bulk selection floating bar ── */}
       {selected.size > 0 && !bulkPreview && (
         <div class="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-xl bg-secondary px-4 py-3 text-sm text-white shadow-2xl">
           <div class="flex items-center gap-4">
             <span class="font-medium">{selected.size} paquete{selected.size > 1 ? 's' : ''} seleccionado{selected.size > 1 ? 's' : ''}</span>
-            <Button variant="primary" onClick={openBulkPreview} disabled={bulkBusy}>
-              {bulkBusy ? 'Calculando…' : 'Facturar seleccionados'}
-            </Button>
+            <div class="relative group">
+              <Button variant="primary" onClick={openBulkPreview} disabled={bulkBusy}>
+                {bulkBusy ? 'Calculando…' : 'Facturar seleccionados'}
+              </Button>
+              {bulkErr && (
+                <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 rounded-lg bg-gray-900 px-3 py-2 text-xs text-white opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                  {bulkErr}
+                </div>
+              )}
+            </div>
             <button onClick={clearSelection} class="rounded-lg p-1.5 text-gray-300 hover:text-white">✕</button>
           </div>
         </div>
