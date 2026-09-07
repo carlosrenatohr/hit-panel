@@ -6,6 +6,7 @@ import InvoiceForm from './InvoiceForm'
 const UNBILLED = vi.hoisted((): UnbilledPackage[] => [
   { packageId: 'p1', guia: 'SG-1', tracking: 'TRK1', status: 'entregado', serviceType: 'aereo', freightType: 'AIR', weightLb: 3, eligible: true, reason: null },
   { packageId: 'p2', guia: 'SG-2', tracking: null, status: 'entregado', serviceType: 'aereo', freightType: 'AIR', weightLb: null, eligible: false, reason: 'Sin peso' },
+  { packageId: 'p3', guia: 'SG-3', tracking: 'TRK3', status: 'entregado', serviceType: 'maritimo', freightType: 'MAR', weightLb: 2, eligible: true, reason: null },
 ])
 
 const createdView = vi.hoisted((): InvoiceView => ({
@@ -95,5 +96,32 @@ describe('InvoiceForm guided flow', () => {
     expect(payload.packageIds).toEqual(['p1'])
     expect(payload.lines[0]).toMatchObject({ packageId: 'p1', quantityLbs: 3, freightType: 'AIR' })
     expect(onCreated).toHaveBeenCalledWith(createdView)
+  })
+
+  it('edit mode keeps linked guides selected and lets the user add more', async () => {
+    const editView: InvoiceView = {
+      ...createdView,
+      id: 'inv1',
+      clientId: 'c1',
+      status: 'DRAFT',
+      lines: [
+        { lineNo: 1, description: null, freightType: 'AIR', lineType: 'freight', quantityLbs: 3, unitPrice: 7, total: 21, freightCost: 4.5, profit: 2, priceTier: 'REGULAR', priceOffCatalog: false, packageId: 'p1', packageGuia: 'SG-1', packageTracking: 'TRK1' },
+      ],
+      packages: [{ packageId: 'p1', source: 'manual', matchedOc: 'SG-1', guia: 'SG-1', tracking: 'TRK1' }],
+    }
+    getInvoice.mockResolvedValue(editView)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const onCreated = vi.fn()
+    render(<InvoiceForm invoiceId="inv1" onClose={() => {}} onCreated={onCreated} />)
+    await waitFor(() => expect(screen.getByText('Editar factura')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('SG-3')).toBeTruthy())
+    const linked = screen.getByText('SG-1').closest('button')
+    expect(linked?.disabled).toBe(false)
+    fireEvent.click(screen.getByText('SG-3'))
+    fireEvent.click(screen.getByText('Guardar cambios'))
+    await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
+    const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ packageId: string | null }> }
+    expect(body.lines.map((l) => l.packageId).filter(Boolean)).toEqual(['p1', 'p3'])
   })
 })
