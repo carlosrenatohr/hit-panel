@@ -420,10 +420,15 @@ export default function InvoiceDetail({
                   }}>
                     <Lock class="h-4 w-4" /> Cerrar factura
                   </Button>
-                  <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
+                  <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? Se liberarán los paquetes enlazados y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
                     <Ban class="h-4 w-4" /> Anular factura
                   </Button>
                 </div>
+              )}
+              {canWrite && inv.status !== 'VOID' && inv.closedAt && (
+                <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura cerrada? Se liberarán los paquetes enlazados, los pagos registrados se conservarán y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
+                  <Ban class="h-4 w-4" /> Anular factura
+                </Button>
               )}
             </>
           )}
