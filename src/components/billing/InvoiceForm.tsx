@@ -352,13 +352,16 @@ export default function InvoiceForm({
               <div class="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-100 p-2">
                 {clientPkgs.map((p) => {
                   const checked = selectedIds.includes(p.packageId)
+                  // Already on this invoice (checked) is selectable/deselectable
+                  // even when the listing marks it "Ya facturado".
+                  const blocked = !p.eligible && !checked
                   return (
                     <button
                       key={p.packageId}
                       type="button"
-                      disabled={!p.eligible}
-                      onClick={() => p.eligible && togglePackage(p)}
-                      class={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${p.eligible ? 'hover:bg-gray-50' : 'cursor-not-allowed opacity-60'}`}
+                      disabled={blocked}
+                      onClick={() => !blocked && togglePackage(p)}
+                      class={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs ${blocked ? 'cursor-not-allowed opacity-60' : 'hover:bg-gray-50'}`}
                     >
                       <span class={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-primary bg-primary text-white' : 'border-gray-300 bg-white'}`} aria-hidden="true">
                         {checked && <Check class="h-3 w-3" />}
@@ -366,7 +369,7 @@ export default function InvoiceForm({
                       <span class="font-semibold text-gray-700">{p.guia ?? p.packageId.slice(0, 8)}</span>
                       {p.tracking && <span class="font-mono text-gray-400">{p.tracking}</span>}
                       {p.weightLb != null && <span class="text-gray-400">{p.weightLb} lb</span>}
-                      {p.eligible ? null : <span class="ml-auto text-gray-400">{p.reason}</span>}
+                      {blocked && <span class="ml-auto text-gray-400">{p.reason}</span>}
                     </button>
                   )
                 })}
