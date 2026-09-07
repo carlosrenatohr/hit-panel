@@ -10,6 +10,7 @@ import BillingReports from './BillingReports'
 import ExceptionsView from './Exceptions'
 import InvoiceDetail from './InvoiceDetail'
 import InvoiceForm from './InvoiceForm'
+import InvoiceRowActions from './InvoiceRowActions'
 
 type Tab = 'facturas' | 'reportes' | 'excepciones'
 const TABS: { key: Tab; label: string }[] = [
@@ -52,6 +53,7 @@ export default function Facturacion({ role }: { role: Role }) {
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [actionId, setActionId] = useState<string | null>(null)
 
   // Monthly close panel
   const now = new Date()
@@ -136,6 +138,34 @@ export default function Facturacion({ role }: { role: Role }) {
       setErr(e instanceof Error ? e.message : 'No se pudo cerrar el mes.')
     } finally {
       setCloseBusy(false)
+    }
+  }
+
+  async function runRowClose(r: InvoiceListRow) {
+    if (!confirm(`¿Cerrar la factura #${r.invoiceNumber}? Pasará de borrador a emitida y sus líneas, montos y guías quedarán bloqueados.`)) return
+    setActionId(r.id)
+    try {
+      const v = await billingApi.closeInvoice(r.id)
+      setDetailId(v.id)
+      reload()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo cerrar la factura.')
+    } finally {
+      setActionId(null)
+    }
+  }
+
+  async function runRowVoid(r: InvoiceListRow) {
+    if (!confirm(`¿Anular la factura #${r.invoiceNumber}? Se liberarán los paquetes enlazados y el documento quedará como inválido. No se puede deshacer.`)) return
+    setActionId(r.id)
+    try {
+      const v = await billingApi.voidInvoice(r.id, 'Anulada desde la lista')
+      setDetailId(v.id)
+      reload()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo anular la factura.')
+    } finally {
+      setActionId(null)
     }
   }
 
@@ -252,14 +282,12 @@ export default function Facturacion({ role }: { role: Role }) {
                   <th class="px-4 py-2">Estado</th>
                   <th class="px-4 py-2 text-right">Total</th>
                   <th class="px-4 py-2 text-right">Saldo</th>
+                  <th class="px-4 py-2 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.id} class="cursor-pointer border-b border-gray-50 hover:bg-gray-50" onClick={() => {
-                    if (r.status === 'DRAFT' && !r.closedAt) setEditingId(r.id)
-                    else setDetailId(r.id)
-                  }}>
+                  <tr key={r.id} class="cursor-pointer border-b border-gray-50 hover:bg-gray-50" onClick={() => setDetailId(r.id)}>
                     <td class="px-4 py-2 font-medium text-secondary">#{r.invoiceNumber}<span class="ml-1 text-[11px] text-gray-400">{r.fiscalYear}</span></td>
                     <td class="px-4 py-2">{r.clientName ?? '—'}</td>
                     <td class="px-4 py-2 text-gray-500">
@@ -268,6 +296,17 @@ export default function Facturacion({ role }: { role: Role }) {
                     <td class="px-4 py-2"><span class={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${INVOICE_STATUS_SOFT[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{INVOICE_STATUS_LABEL[r.status] ?? r.status}</span></td>
                     <td class="px-4 py-2 text-right font-medium">{fmtUsd(r.total)}</td>
                     <td class="px-4 py-2 text-right">{r.outstanding > 0 ? <span class="text-yellow-700">{fmtUsd(r.outstanding)}</span> : <span class="text-gray-300">—</span>}</td>
+                    <td class="px-4 py-2">
+                      <InvoiceRowActions
+                        row={r}
+                        canWrite={canWrite}
+                        busy={actionId === r.id}
+                        onView={() => setDetailId(r.id)}
+                        onEdit={() => setEditingId(r.id)}
+                        onClose={() => void runRowClose(r)}
+                        onVoid={() => void runRowVoid(r)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
