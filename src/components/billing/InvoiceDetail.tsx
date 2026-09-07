@@ -14,6 +14,12 @@ import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
 
+const SVC_LABEL: Record<string, string> = { aereo: 'Aéreo', maritimo: 'Marítimo', paquete: 'Flete' }
+function normDesc(desc: string | null, ft: string | null): string {
+  if (!desc) return ft ? FREIGHT_LABEL[ft] : 'Otro cargo'
+  return SVC_LABEL[desc.toLowerCase()] ?? desc
+}
+
 function StatusPill({ s }: { s: string }) {
   return <span class={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${INVOICE_STATUS_SOFT[s] ?? 'bg-gray-100 text-gray-600'}`}>{INVOICE_STATUS_LABEL[s] ?? s}</span>
 }
@@ -215,6 +221,32 @@ export default function InvoiceDetail({
                 </div>
               </Card>
 
+              {/* Persistent status banner */}
+              {!inv.closedAt && inv.status === 'DRAFT' && (
+                <div class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                  <Lock class="h-4 w-4 shrink-0" />
+                  Borrador editable — todavía no acepta pagos. Editá las líneas y cerrá la factura cuando esté lista.
+                </div>
+              )}
+              {inv.closedAt && inv.status !== 'VOID' && inv.status !== 'PAID' && (
+                <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  <Lock class="h-4 w-4 shrink-0" />
+                  Factura cerrada — no se puede editar ni desenlazar paquetes. Los pagos siguen habilitados.
+                </div>
+              )}
+              {inv.status === 'PAID' && (
+                <div class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                  <Check class="h-4 w-4 shrink-0" />
+                  Factura pagada — no se permiten más cambios.
+                </div>
+              )}
+              {inv.status === 'VOID' && (
+                <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <Ban class="h-4 w-4 shrink-0" />
+                  Factura anulada — documento inválido.
+                </div>
+              )}
+
               {shareUrl && (
                 <Card class="flex items-center gap-2 p-3">
                   {copied ? <Check class="h-4 w-4 shrink-0 text-green-600" /> : <Copy class="h-4 w-4 shrink-0 text-gray-400" />}
@@ -231,7 +263,7 @@ export default function InvoiceDetail({
                     {inv.lines.map((l) => (
                       <tr key={l.lineNo} class="border-b border-gray-50 last:border-0">
                         <td class="px-4 py-2">
-                          <div>{l.description ?? (l.freightType ? FREIGHT_LABEL[l.freightType] : 'Otro cargo')}</div>
+                          <div>{normDesc(l.description, l.freightType)}</div>
                           <div class="text-[11px] text-gray-400">
                             {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
                             {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
@@ -391,12 +423,6 @@ export default function InvoiceDetail({
                   <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
                     <Ban class="h-4 w-4" /> Anular factura
                   </Button>
-                </div>
-              )}
-              {canWrite && inv.closedAt && inv.status !== 'VOID' && inv.status !== 'PAID' && (
-                <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  <Lock class="h-4 w-4 shrink-0" />
-                  Factura cerrada — no se puede editar ni desenlazar paquetes. Los pagos siguen habilitados.
                 </div>
               )}
             </>
