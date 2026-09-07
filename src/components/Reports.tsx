@@ -21,7 +21,10 @@ import type { Pkg, Provider, SessionUser, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import { DateRangePicker } from './DateRangePicker'
-import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
+import { SectionPicker, useReportSections } from './reports/ReportSections'
+import { MultiSelect } from './ui/MultiSelect'
+import { SplitButton } from './ui/SplitButton'
+import { Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -35,10 +38,15 @@ export default function Reports({ user }: { user: SessionUser }) {
   const [printBrand, setPrintBrand] = useState<{ name: string; logoUrl: string | null } | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
-  const [filters, setFilters] = useState<ListFilters>({})
+  // -- Default window is the current month (matches the DateRangePicker 'Este mes' preset); 'Todo el tiempo' stays opt-in. --
+  const [filters, setFilters] = useState<ListFilters>(() => ({
+    from: ymd(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+    to: ymd(new Date()),
+  }))
   const [rows, setRows] = useState<Pkg[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  const sections = useReportSections()
 
   // Agency brand for the printed PDF header (cosmetic — never blocks).
   useEffect(() => {
@@ -109,7 +117,7 @@ export default function Reports({ user }: { user: SessionUser }) {
     let cancelled = false
     Promise.all([
       listPackages({ ...filters, organizationId, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
-      listPackages({ ...filters, organizationId, status: 'entregado', from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+      listPackages({ ...filters, organizationId, statuses: ['entregado'], from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
     ])
       .then(([totalRes, entRes]) => !cancelled && setPrev({ total: totalRes.count, entregados: entRes.count }))
       .catch(() => !cancelled && setPrev(null))
@@ -267,11 +275,13 @@ export default function Reports({ user }: { user: SessionUser }) {
   }
 
   // Short one-line summary of what's applied — shown on screen and printed into the PDF header.
+  const summaryList = (vals: string[] | undefined, name: (v: string) => string) =>
+    vals?.length ? (vals.length <= 2 ? vals.map(name).join(', ') : `${vals.length} seleccionados`) : undefined
   const filterSummary = [
     filters.search && `"${filters.search}"`,
-    filters.providerId && providerLabel(providers.find((p) => p.id === filters.providerId)?.code),
-    filters.status && STATUS_LABEL[filters.status as ShipmentStatus],
-    filters.service && SERVICE_LABEL[filters.service],
+    summaryList(filters.providerIds, (id) => providerLabel(providers.find((p) => p.id === id)?.code) ?? id),
+    summaryList(filters.statuses, (s) => STATUS_LABEL[s as ShipmentStatus] ?? s),
+    summaryList(filters.services, (s) => SERVICE_LABEL[s] ?? s),
     (filters.from || filters.to) && `${filters.from || 'inicio'} – ${filters.to || 'hoy'}`,
   ]
     .filter(Boolean)
@@ -298,15 +308,16 @@ export default function Reports({ user }: { user: SessionUser }) {
             <IconButton label="Actualizar" onClick={reload} disabled={loading}>
               <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </IconButton>
-            <Button variant="ghost" onClick={exportMatrix}>
-              <Download class="h-4 w-4" aria-hidden="true" /> CSV estados
-            </Button>
-            <Button variant="ghost" onClick={exportDetailed}>
-              <Download class="h-4 w-4" aria-hidden="true" /> CSV detallado
-            </Button>
-            <Button onClick={() => window.print()}>
-              <Printer class="h-4 w-4" aria-hidden="true" /> Exportar PDF
-            </Button>
+            <SectionPicker prefs={sections} />
+            <SplitButton
+              primaryLabel="Exportar PDF"
+              primaryIcon={<Printer class="h-4 w-4" aria-hidden="true" />}
+              primaryOnClick={() => window.print()}
+              items={[
+                { label: 'CSV estados', icon: <Download class="h-4 w-4" aria-hidden="true" />, onClick: exportMatrix },
+                { label: 'CSV detallado', icon: <Download class="h-4 w-4" aria-hidden="true" />, onClick: exportDetailed },
+              ]}
+            />
           </div>
         </div>
 
@@ -321,27 +332,24 @@ export default function Reports({ user }: { user: SessionUser }) {
                 onInput={(e) => setSearchInput((e.target as HTMLInputElement).value)}
               />
             </div>
-            <select class={inputCls} value={filters.providerId ?? ''} onChange={(e) => patch({ providerId: (e.target as HTMLSelectElement).value || undefined })}>
-              <option value="">Todos los proveedores</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {providerLabel(p.code)}
-                </option>
-              ))}
-            </select>
-            <select class={inputCls} value={filters.status ?? ''} onChange={(e) => patch({ status: (e.target as HTMLSelectElement).value || undefined })}>
-              <option value="">Todos los estados</option>
-              {STATUS_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
-            <select class={inputCls} value={filters.service ?? ''} onChange={(e) => patch({ service: (e.target as HTMLSelectElement).value || undefined })}>
-              <option value="">Aéreo y marítimo</option>
-              <option value="aereo">Aéreo</option>
-              <option value="maritimo">Marítimo</option>
-            </select>
+            <MultiSelect
+              options={providers.filter((p): p is Provider & { id: string } => !!p.id).map((p) => ({ value: p.id, label: providerLabel(p.code) }))}
+              selected={filters.providerIds ?? []}
+              onChange={(v) => patch({ providerIds: v.length ? v : undefined })}
+              placeholder="Proveedores"
+            />
+            <MultiSelect
+              options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
+              selected={filters.statuses ?? []}
+              onChange={(v) => patch({ statuses: v.length ? v : undefined })}
+              placeholder="Estados"
+            />
+            <MultiSelect
+              options={[{ value: 'aereo', label: 'Aéreo' }, { value: 'maritimo', label: 'Marítimo' }]}
+              selected={filters.services ?? []}
+              onChange={(v) => patch({ services: v.length ? v : undefined })}
+              placeholder="Servicio"
+            />
             <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
           </div>
         </Card>
@@ -371,43 +379,56 @@ export default function Reports({ user }: { user: SessionUser }) {
       ) : (
         <>
           {/* KPI strip */}
-          <div class="avoid-break grid grid-cols-2 gap-4 print:px-8 lg:grid-cols-4">
-            <Kpi label="Total" value={rows.length} trend={prev && <Trend current={rows.length} previous={prev.total} />} />
-            <Kpi
-              label="Entregados"
-              value={agg.entregados}
-              tone="text-orange-600"
-              trend={prev && <Trend current={agg.entregados} previous={prev.entregados} />}
-            />
-            <Kpi label="En tránsito" value={agg.enTransito} tone="text-red-600" />
-            <Kpi label="Excepciones" value={agg.excepciones} tone="text-gray-600" />
-          </div>
+          {sections.visible('kpis') && (
+            <div class="avoid-break grid grid-cols-2 gap-4 print:px-8 lg:grid-cols-4">
+              <Kpi label="Total" value={rows.length} trend={prev && <Trend current={rows.length} previous={prev.total} />} />
+              <Kpi
+                label="Entregados"
+                value={agg.entregados}
+                tone="text-orange-600"
+                trend={prev && <Trend current={agg.entregados} previous={prev.entregados} />}
+              />
+              <Kpi label="En tránsito" value={agg.enTransito} tone="text-red-600" />
+              <Kpi label="Excepciones" value={agg.excepciones} tone="text-gray-600" />
+            </div>
+          )}
 
-          {/* Charts */}
-          <div class="grid gap-5 md:grid-cols-2">
-            <Card class="avoid-break p-5">
-              <h3 class="mb-3 text-sm font-semibold text-secondary">Distribución por estado</h3>
-              {rows.length === 0 ? <Empty /> : <ChartCanvas config={statusChart} height={220} />}
-            </Card>
-            <Card class="avoid-break p-5">
-              <h3 class="mb-3 text-sm font-semibold text-secondary">Estado × proveedor</h3>
-              {rows.length === 0 ? <Empty /> : <ChartCanvas config={providerChart} height={220} />}
-            </Card>
-            <Card class="avoid-break p-5">
-              <h3 class="mb-3 text-sm font-semibold text-secondary">Por servicio</h3>
-              {rows.length === 0 ? <Empty /> : <ChartCanvas config={serviceChart} height={220} />}
-            </Card>
-            <Card class="avoid-break p-5">
-              <h3 class="mb-3 text-sm font-semibold text-secondary">Recibidos por mes</h3>
-              {rows.length === 0 ? <Empty /> : <ChartCanvas config={monthChart} height={220} />}
-            </Card>
-          </div>
+          {/* Charts — each card is independently toggleable; the grid only renders if at least one is on. */}
+          {(sections.visible('chart-estado') || sections.visible('chart-proveedor') || sections.visible('chart-servicio') || sections.visible('chart-meses')) && (
+            <div class="grid gap-5 md:grid-cols-2">
+              {sections.visible('chart-estado') && (
+                <Card class="avoid-break p-5">
+                  <h3 class="mb-3 text-sm font-semibold text-secondary">Distribución por estado</h3>
+                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={statusChart} height={220} />}
+                </Card>
+              )}
+              {sections.visible('chart-proveedor') && (
+                <Card class="avoid-break p-5">
+                  <h3 class="mb-3 text-sm font-semibold text-secondary">Estado × proveedor</h3>
+                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={providerChart} height={220} />}
+                </Card>
+              )}
+              {sections.visible('chart-servicio') && (
+                <Card class="avoid-break p-5">
+                  <h3 class="mb-3 text-sm font-semibold text-secondary">Por servicio</h3>
+                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={serviceChart} height={220} />}
+                </Card>
+              )}
+              {sections.visible('chart-meses') && (
+                <Card class="avoid-break p-5">
+                  <h3 class="mb-3 text-sm font-semibold text-secondary">Recibidos por mes</h3>
+                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={monthChart} height={220} />}
+                </Card>
+              )}
+            </div>
+          )}
 
           {/* Exact figures backing the charts — the part that matters for accounting/audit.
               break-before-page: always start this on a fresh printed page instead of wherever
               the charts happen to end — otherwise the next avoid-break block (the service/month
               cards below) doesn't fit the leftover space and the print engine strands it alone
               on its own page, leaving a big blank gap. */}
+          {sections.visible('tabla-exactas') && (
           <Card class="avoid-break break-before-page">
             <SectionTitle>Estado × proveedor — cifras exactas</SectionTitle>
             <div class="scroll-thin overflow-x-auto">
@@ -451,9 +472,11 @@ export default function Reports({ user }: { user: SessionUser }) {
               </table>
             </div>
           </Card>
+          )}
 
           {/* Redundant with the two charts above (same numbers) — screen-only, kept out of the
               PDF so the report doesn't grow an extra page for a repeat of the same figures. */}
+          {sections.visible('desglose') && (
           <div class="grid gap-5 print:hidden md:grid-cols-2">
             <Card class="avoid-break">
               <SectionTitle>Por servicio</SectionTitle>
@@ -480,16 +503,19 @@ export default function Reports({ user }: { user: SessionUser }) {
               </div>
             </Card>
           </div>
+          )}
         </>
       )}
 
-      <div class="print:hidden">
-        <MonthCalendar
-          title="Recepción en Miami por día"
-          legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
-          loadEvents={loadRecvMonth}
-        />
-      </div>
+      {sections.visible('calendario') && (
+        <div class="print:hidden">
+          <MonthCalendar
+            title="Recepción en Miami por día"
+            legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
+            loadEvents={loadRecvMonth}
+          />
+        </div>
+      )}
     </div>
   )
 }
