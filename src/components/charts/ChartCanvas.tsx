@@ -22,7 +22,18 @@ export default function ChartCanvas({
   useEffect(() => {
     if (!canvasRef.current) return
     chartRef.current = new Chart(canvasRef.current, config)
-    return () => chartRef.current?.destroy()
+    // -- Chrome's print preview re-layouts the page at print width; Chart.js would resize the
+    // canvas asynchronously and the print snapshot catches it blank/clipped. Resize synchronously
+    // on beforeprint (and back on afterprint) so the printed PDF always matches the layout. --
+    const onBeforePrint = () => chartRef.current?.resize()
+    const onAfterPrint = () => chartRef.current?.resize()
+    window.addEventListener('beforeprint', onBeforePrint)
+    window.addEventListener('afterprint', onAfterPrint)
+    return () => {
+      window.removeEventListener('beforeprint', onBeforePrint)
+      window.removeEventListener('afterprint', onAfterPrint)
+      chartRef.current?.destroy()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configKey])
 
