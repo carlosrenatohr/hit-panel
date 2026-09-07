@@ -15,6 +15,7 @@ import {
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
+import { billingApi } from '../lib/billing'
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, SessionUser, ShipmentStatus } from '../lib/types'
@@ -44,13 +45,15 @@ export default function Reports({ user }: { user: SessionUser }) {
     to: ymd(new Date()),
   }))
   const [rows, setRows] = useState<Pkg[]>([])
-  // -- Billing state lives on the invoice + the invoice_packages link (source of truth), never on the package status — the filter derives it from the embed. --
+  // -- Billing state lives on the invoice + the invoice_packages link (source of truth), never on the package status — the filter uses the worker endpoint (RLS default-deny blocks the SDK's PostgREST embed for this table). --
   const [billingFilter, setBillingFilter] = useState<'all' | 'sin' | 'facturadas'>('all')
+  const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set())
+  useEffect(() => { billingApi.linkedPackageIds().then(({ ids }) => setLinkedIds(new Set(ids))).catch(() => {}) }, [])
   const shown = useMemo(() => {
-    if (billingFilter === 'facturadas') return rows.filter((r) => (r.invoice_packages?.length ?? 0) > 0)
-    if (billingFilter === 'sin') return rows.filter((r) => !(r.invoice_packages?.length ?? 0))
+    if (billingFilter === 'facturadas') return rows.filter((r) => linkedIds.has(r.id))
+    if (billingFilter === 'sin') return rows.filter((r) => !linkedIds.has(r.id))
     return rows
-  }, [rows, billingFilter])
+  }, [rows, billingFilter, linkedIds])
   // "vs período anterior" counts come from the server (no billing filter there) — only honest when unfiltered.
   const showTrend = billingFilter === 'all'
   const [loading, setLoading] = useState(true)

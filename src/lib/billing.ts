@@ -220,6 +220,8 @@ export const billingApi = {
   reports: (year: number) => workerApi<YearReport>(`${API_BASE}/api/billing/reports${qs({ year })}`),
   summary: (from: string, to: string) => workerApi<DateRangeSummary>(`${API_BASE}/api/billing/summary${qs({ from, to })}`),
   exceptions: () => workerApi<Exceptions>(`${API_BASE}/api/billing/exceptions`),
+  /** -- Org-scoped package IDs with at least one invoice link (for the reports billing filter). -- */
+  linkedPackageIds: () => workerApi<{ ids: string[] }>(`${API_BASE}/api/billing/linked-packages`),
   shareInvoice: (id: string) => workerApi<{ token: string; url: string }>(`${API_BASE}/api/billing/invoices/${id}/share`, { method: 'POST' }),
   invoiceEvents: (id: string) =>
     workerApi<{ events: Array<{ action: string; detail: string | null; actor: string | null; createdAt: string }> }>(`${API_BASE}/api/billing/invoices/${id}/events`),
