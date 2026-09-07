@@ -44,6 +44,15 @@ export default function Reports({ user }: { user: SessionUser }) {
     to: ymd(new Date()),
   }))
   const [rows, setRows] = useState<Pkg[]>([])
+  // -- Billing state lives on the invoice + the invoice_packages link (source of truth), never on the package status — the filter derives it from the embed. --
+  const [billingFilter, setBillingFilter] = useState<'all' | 'sin' | 'facturadas'>('all')
+  const shown = useMemo(() => {
+    if (billingFilter === 'facturadas') return rows.filter((r) => (r.invoice_packages?.length ?? 0) > 0)
+    if (billingFilter === 'sin') return rows.filter((r) => !(r.invoice_packages?.length ?? 0))
+    return rows
+  }, [rows, billingFilter])
+  // "vs período anterior" counts come from the server (no billing filter there) — only honest when unfiltered.
+  const showTrend = billingFilter === 'all'
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const sections = useReportSections()
@@ -127,12 +136,12 @@ export default function Reports({ user }: { user: SessionUser }) {
   }, [filters])
 
   const agg = useMemo(() => {
-    const provCodes = Array.from(new Set(rows.map((r) => r.providers?.code ?? 'desconocido'))).sort()
+    const provCodes = Array.from(new Set(shown.map((r) => r.providers?.code ?? 'desconocido'))).sort()
     const matrix: Record<string, Record<string, number>> = {}
     const byStatus: Record<string, number> = {}
     const service: Record<string, number> = { aereo: 0, maritimo: 0, '—': 0 }
     const byMonth: Record<string, number> = {}
-    for (const r of rows) {
+    for (const r of shown) {
       const s = r.effective_status
       const pc = r.providers?.code ?? 'desconocido'
       matrix[s] = matrix[s] || {}
@@ -153,7 +162,7 @@ export default function Reports({ user }: { user: SessionUser }) {
       enTransito: byStatus.en_transito ?? 0,
       excepciones: byStatus.excepcion ?? 0,
     }
-  }, [rows])
+  }, [shown])
 
   // ── Chart configs (Chart.js, vanilla — no React coupling, works identically in Preact) ──────
   const statusChart: ChartConfiguration = useMemo(() => {
@@ -270,7 +279,7 @@ export default function Reports({ user }: { user: SessionUser }) {
       { key: 'received_at', label: 'Recibido' },
       { key: 'last_event_at', label: 'Ultimo evento' },
     ]
-    const flat = rows.map((p) => ({ ...p, provider: providerLabel(p.providers?.code) }))
+    const flat = shown.map((p) => ({ ...p, provider: providerLabel(p.providers?.code) }))
     downloadCSV(`reporte-detallado-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(flat, cols))
   }
 
@@ -282,6 +291,7 @@ export default function Reports({ user }: { user: SessionUser }) {
     summaryList(filters.providerIds, (id) => providerLabel(providers.find((p) => p.id === id)?.code) ?? id),
     summaryList(filters.statuses, (s) => STATUS_LABEL[s as ShipmentStatus] ?? s),
     summaryList(filters.services, (s) => SERVICE_LABEL[s] ?? s),
+    billingFilter !== 'all' && (billingFilter === 'sin' ? 'Sin facturar' : 'Facturadas'),
     (filters.from || filters.to) && `${filters.from || 'inicio'} – ${filters.to || 'hoy'}`,
   ]
     .filter(Boolean)
@@ -302,7 +312,7 @@ export default function Reports({ user }: { user: SessionUser }) {
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 class="text-2xl font-bold tracking-tight text-secondary">Reportes</h1>
-            <p class="text-sm text-gray-500">{rows.length} paquetes en el rango seleccionado.</p>
+            <p class="text-sm text-gray-500">{shown.length} paquetes en el rango seleccionado.</p>
           </div>
           <div class="flex flex-wrap items-end gap-2">
             <IconButton label="Actualizar" onClick={reload} disabled={loading}>
@@ -350,6 +360,11 @@ export default function Reports({ user }: { user: SessionUser }) {
               onChange={(v) => patch({ services: v.length ? v : undefined })}
               placeholder="Servicio"
             />
+            <select class={inputCls} value={billingFilter} onChange={(e) => setBillingFilter((e.target as HTMLSelectElement).value as 'all' | 'sin' | 'facturadas')}>
+              <option value="all">Facturación</option>
+              <option value="sin">Sin facturar</option>
+              <option value="facturadas">Facturadas</option>
+            </select>
             <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
           </div>
         </Card>
@@ -367,7 +382,7 @@ export default function Reports({ user }: { user: SessionUser }) {
             </div>
           </div>
           <div class="text-right text-xs text-gray-500">
-            {filterSummary || 'Sin filtros'} · {rows.length} paquetes
+            {filterSummary || 'Sin filtros'} · {shown.length} paquetes
             <div>Generado {fmtDateTime(new Date().toISOString())}</div>
           </div>
         </div>
@@ -381,12 +396,12 @@ export default function Reports({ user }: { user: SessionUser }) {
           {/* KPI strip */}
           {sections.visible('kpis') && (
             <div class="avoid-break grid grid-cols-2 gap-4 print:px-8 lg:grid-cols-4">
-              <Kpi label="Total" value={rows.length} trend={prev && <Trend current={rows.length} previous={prev.total} />} />
+              <Kpi label="Total" value={shown.length} trend={showTrend && prev && <Trend current={shown.length} previous={prev.total} />} />
               <Kpi
                 label="Entregados"
                 value={agg.entregados}
                 tone="text-orange-600"
-                trend={prev && <Trend current={agg.entregados} previous={prev.entregados} />}
+                trend={showTrend && prev && <Trend current={agg.entregados} previous={prev.entregados} />}
               />
               <Kpi label="En tránsito" value={agg.enTransito} tone="text-red-600" />
               <Kpi label="Excepciones" value={agg.excepciones} tone="text-gray-600" />
@@ -399,25 +414,25 @@ export default function Reports({ user }: { user: SessionUser }) {
               {sections.visible('chart-estado') && (
                 <Card class="avoid-break p-5">
                   <h3 class="mb-3 text-sm font-semibold text-secondary">Distribución por estado</h3>
-                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={statusChart} height={220} />}
+                  {shown.length === 0 ? <Empty /> : <ChartCanvas config={statusChart} height={220} />}
                 </Card>
               )}
               {sections.visible('chart-proveedor') && (
                 <Card class="avoid-break p-5">
                   <h3 class="mb-3 text-sm font-semibold text-secondary">Estado × proveedor</h3>
-                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={providerChart} height={220} />}
+                  {shown.length === 0 ? <Empty /> : <ChartCanvas config={providerChart} height={220} />}
                 </Card>
               )}
               {sections.visible('chart-servicio') && (
                 <Card class="avoid-break p-5">
                   <h3 class="mb-3 text-sm font-semibold text-secondary">Por servicio</h3>
-                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={serviceChart} height={220} />}
+                  {shown.length === 0 ? <Empty /> : <ChartCanvas config={serviceChart} height={220} />}
                 </Card>
               )}
               {sections.visible('chart-meses') && (
                 <Card class="avoid-break p-5">
                   <h3 class="mb-3 text-sm font-semibold text-secondary">Recibidos por mes</h3>
-                  {rows.length === 0 ? <Empty /> : <ChartCanvas config={monthChart} height={220} />}
+                  {shown.length === 0 ? <Empty /> : <ChartCanvas config={monthChart} height={220} />}
                 </Card>
               )}
             </div>
@@ -461,7 +476,7 @@ export default function Reports({ user }: { user: SessionUser }) {
                       </tr>
                     )
                   })}
-                  {rows.length === 0 && (
+                  {shown.length === 0 && (
                     <tr>
                       <td colspan={agg.providers.length + 2} class="px-4 py-6 text-center text-gray-400">
                         Sin resultados para estos filtros.
