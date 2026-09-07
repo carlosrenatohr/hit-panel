@@ -41,7 +41,6 @@ export default function InvoicePrint({
   const logo = b.logoUrl || FALLBACK_BRAND.logoUrl
   const currency = profile?.currency ?? 'USD'
   const subtotal = inv.lines.reduce((s, l) => s + (l.total || 0), 0)
-  const infoLines = [profile?.ruc && `RUC: ${profile.ruc}`, profile?.address, profile?.phone].filter(Boolean) as string[]
   return (
     <div class="invoice-print hidden bg-white p-10 text-[13px] leading-relaxed text-gray-900 print:block">
       {/* Header */}
@@ -82,23 +81,29 @@ export default function InvoicePrint({
           </tr>
         </thead>
         <tbody>
-          {inv.lines.map((l) => (
-            <tr key={l.lineNo} class="border-b border-gray-100">
-              <td class="py-2">
-                {normalizeDescription(l.description, l.freightType)}
-                {l.packageGuia && (
-                  <div class="text-[10px] text-gray-500">
-                    Guía {l.packageGuia}
-                    {l.packageTracking ? ` · Tracking ${l.packageTracking}` : ''}
-                  </div>
-                )}
-              </td>
-              <td class="py-2">{l.freightType ? FREIGHT_LABEL[l.freightType] : '—'}</td>
-              <td class="py-2 text-right">{l.quantityLbs ?? '—'}</td>
-              <td class="py-2 text-right">{fmtMoney(l.unitPrice, currency)}</td>
-              <td class="py-2 text-right font-medium">{fmtMoney(l.total, currency)}</td>
-            </tr>
-          ))}
+          {inv.lines.map((l) => {
+            // Resolve guia/tracking: prefer line snapshot, fall back to linked packages
+            const pkg = l.packageId ? inv.packages.find((p) => p.packageId === l.packageId) : null
+            const guia = l.packageGuia ?? pkg?.guia ?? null
+            const tracking = l.packageTracking ?? pkg?.tracking ?? null
+            return (
+              <tr key={l.lineNo} class="border-b border-gray-100">
+                <td class="py-2">
+                  {normalizeDescription(l.description, l.freightType)}
+                  {guia && (
+                    <div class="text-[10px] text-gray-500">
+                      Guía {guia}
+                      {tracking ? ` · Tracking ${tracking}` : ''}
+                    </div>
+                  )}
+                </td>
+                <td class="py-2">{l.freightType ? FREIGHT_LABEL[l.freightType] : '—'}</td>
+                <td class="py-2 text-right">{l.quantityLbs ?? '—'}</td>
+                <td class="py-2 text-right">{fmtMoney(l.unitPrice, currency)}</td>
+                <td class="py-2 text-right font-medium">{fmtMoney(l.total, currency)}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
 
