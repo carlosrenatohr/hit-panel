@@ -14,7 +14,14 @@ interface DraftLine {
   description: string
   /** Explicit rate table (overrides the client's default). null = client default. */
   rateTableId: string | null
+  /** Display-only: package guide + tracking this line bills (resolved from prefill or linked packages). */
+  guia: string | null
+  tracking: string | null
 }
+
+/** Prefill lines may carry display-only guia/tracking/packageId beyond the create shape. */
+interface PrefillLine { freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null; guia?: string | null; tracking?: string | null }
+interface InvoicePrefill extends Omit<Partial<CreateInvoiceInput>, 'lines'> { lines?: PrefillLine[] }
 
 interface DraftOther {
   conceptId: string
@@ -46,7 +53,7 @@ export default function InvoiceForm({
   onClose,
   onCreated,
 }: {
-  prefill?: Partial<CreateInvoiceInput>
+  prefill?: InvoicePrefill
   invoiceId?: string
   onClose: () => void
   onCreated: (v: InvoiceView) => void
@@ -59,8 +66,8 @@ export default function InvoiceForm({
   const [issueDate, setIssueDate] = useState(prefill?.issueDate ?? new Date().toISOString().slice(0, 10))
   const [observations, setObservations] = useState('')
   const [lines, setLines] = useState<DraftLine[]>(
-    prefill?.lines?.map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: String(l.quantityLbs), description: l.description ?? '', rateTableId: l.rateTableId ?? null })) ?? [
-      { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null },
+    prefill?.lines?.map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: String(l.quantityLbs), description: l.description ?? '', rateTableId: l.rateTableId ?? null, guia: l.guia ?? null, tracking: l.tracking ?? null })) ?? [
+      { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null },
     ],
   )
   const [others, setOthers] = useState<DraftOther[]>([])
@@ -90,13 +97,29 @@ export default function InvoiceForm({
           const freightLines = inv.lines.filter((l) => l.lineType === 'freight')
           const otherLines = inv.lines.filter((l) => l.lineType === 'other')
           setLines(
-            freightLines.map((l) => ({
-              freightType: (l.freightType ?? 'AIR') as FreightType,
-              tier: (l.priceTier ?? 'REGULAR') as PriceTier,
-              quantityLbs: String(l.quantityLbs ?? ''),
-              description: l.description ?? '',
-              rateTableId: null,
-            })) ?? [{ freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null }],
+            freightLines.map((l) => {
+              let guia = l.packageGuia ?? null
+              let tracking = l.packageTracking ?? null
+              if (!guia && !tracking) {
+                const pkg = l.packageId ? inv.packages.find((p) => p.packageId === l.packageId) : null
+                if (pkg) {
+                  guia = pkg.guia ?? null
+                  tracking = pkg.tracking ?? null
+                } else if (inv.packages.length === 1) {
+                  guia = inv.packages[0].guia ?? null
+                  tracking = inv.packages[0].tracking ?? null
+                }
+              }
+              return {
+                freightType: (l.freightType ?? 'AIR') as FreightType,
+                tier: (l.priceTier ?? 'REGULAR') as PriceTier,
+                quantityLbs: String(l.quantityLbs ?? ''),
+                description: l.description ?? '',
+                rateTableId: null,
+                guia,
+                tracking,
+              }
+            }),
           )
           setOthers(
             otherLines.map((l) => ({
@@ -171,7 +194,7 @@ export default function InvoiceForm({
   }
 
   function addFreightLine() {
-    setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null }])
+    setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null }])
   }
 
   function addOtherLine() {
@@ -261,6 +284,12 @@ export default function InvoiceForm({
               const tables = tablesFor(l.freightType)
               return (
                 <div key={i} class="rounded-lg border border-gray-100 p-2">
+                  {(l.guia || l.tracking) && (
+                    <div class="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]">
+                      {l.guia && <span class="font-semibold text-gray-700">Guía {l.guia}</span>}
+                      {l.tracking && <span class="font-mono text-gray-500">Tracking {l.tracking}</span>}
+                    </div>
+                  )}
                   <div class="grid grid-cols-12 items-end gap-2">
                     <label class="col-span-3 text-[11px] text-gray-500">
                       Flete
