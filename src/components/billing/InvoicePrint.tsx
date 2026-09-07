@@ -16,6 +16,14 @@ export interface InvoiceProfile {
 
 const FALLBACK_BRAND = { name: 'HIT Cargo', logoUrl: '/logo-mark.png' }
 
+// Normalize service type descriptions to proper Spanish labels.
+// Bulk invoices store lowercase service_type (aereo/maritimo) as description.
+const SERVICE_LABEL: Record<string, string> = { aereo: 'Aéreo', maritimo: 'Marítimo', paquete: 'Flete' }
+function normalizeDescription(desc: string | null, freightType: string | null): string {
+  if (!desc) return freightType ? FREIGHT_LABEL[freightType] : 'Otro cargo'
+  return SERVICE_LABEL[desc.toLowerCase()] ?? desc
+}
+
 // Pluggable print template. Hidden on screen (`hidden print:block`), isolated on
 // print by the `.invoice-print` rule in global.css. The brand and profile are the
 // issuing agency's (config endpoints) — never a hardcoded logo. Totals render as
@@ -90,7 +98,7 @@ export default function InvoicePrint({
           {inv.lines.map((l) => (
             <tr key={l.lineNo} class="border-b border-gray-100">
               <td class="py-2">
-                {l.description ?? (l.freightType ? FREIGHT_LABEL[l.freightType] : 'Otro cargo')}
+                {normalizeDescription(l.description, l.freightType)}
                 {l.packageGuia && (
                   <div class="text-[10px] text-gray-500">
                     Guía {l.packageGuia}
