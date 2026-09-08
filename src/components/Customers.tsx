@@ -1,7 +1,7 @@
-import { Ban, Flag, Pencil, Plus, Save, UserCheck, Users } from 'lucide-preact'
+import { Ban, Flag, Pencil, Plus, Save, Trash2, UserCheck, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
-import { customerApi, type Customer, type CustomerInput } from '../lib/customer'
+import { customerApi, type Customer, type CustomerDeletePreview, type CustomerInput } from '../lib/customer'
 import type { Role } from '../lib/types'
 import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, Spinner } from './ui'
 import ClientSearch from './ui/ClientSearch'
@@ -14,6 +14,14 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Desactivado' },
   { value: 'review', label: 'Revisión' },
 ]
+
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Borrador',
+  ISSUED: 'Emitida',
+  PARTIAL: 'Parcial',
+  PAID: 'Pagada',
+  VOID: 'Anulada',
+}
 
 export default function Customers({ role }: { role: Role }) {
   const canWrite = role === 'admin' || role === 'billing'
@@ -30,6 +38,9 @@ export default function Customers({ role }: { role: Role }) {
   const [error, setError] = useState<string | null>(null)
   const [rateCards, setRateCards] = useState<RateCardInfo[]>([])
   const [confirmAction, setConfirmAction] = useState<{ kind: 'save' } | { kind: 'toggle'; customer: Customer } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
+  const [deletePreview, setDeletePreview] = useState<CustomerDeletePreview | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     configApi.listRateCards().then(({ cards }) => setRateCards(cards)).catch(() => setRateCards([]))
@@ -117,6 +128,34 @@ export default function Customers({ role }: { role: Role }) {
     }
   }
 
+  /** Loads the impact summary first, then opens the delete confirmation with real data. */
+  async function requestDelete(customer: Customer) {
+    setError(null)
+    try {
+      const preview = await customerApi.deletePreview(customer.id)
+      setDeletePreview(preview)
+      setDeleteTarget(customer)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo cargar la vista previa del borrado.')
+    }
+  }
+
+  async function doDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await customerApi.delete(deleteTarget.id)
+      setDeleteTarget(null)
+      setDeletePreview(null)
+      setRevision((value) => value + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el cliente.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div class="space-y-4">
       <div class="flex items-center justify-between">
@@ -196,6 +235,70 @@ export default function Customers({ role }: { role: Role }) {
         loading={saving}
       />
 
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => { setDeleteTarget(null); setDeletePreview(null) }}
+        onConfirm={doDelete}
+        title="Eliminar cliente"
+        message={
+          <div class="space-y-3">
+            <p class="text-sm font-semibold text-red-700">
+              Vas a eliminar a «{deleteTarget?.name}». Esta acción no tiene vuelta atrás.
+            </p>
+            {deletePreview ? (
+              <div class="space-y-3 text-sm text-gray-600">
+                <div>
+                  {deletePreview.packageCount > 0 ? (
+                    <>
+                      <p class="font-medium text-gray-800">
+                        {deletePreview.packageCount} paquete{deletePreview.packageCount === 1 ? '' : 's'} relacionado{deletePreview.packageCount === 1 ? '' : 's'}:
+                      </p>
+                      <ul class="ml-4 list-disc">
+                        {deletePreview.packages.map((p, i) => (
+                          <li key={i} class="font-mono text-xs text-gray-500">
+                            {p.guia ?? '—'}{p.tracking ? ` · ${p.tracking}` : ''}
+                          </li>
+                        ))}
+                        {deletePreview.packageCount > deletePreview.packages.length && (
+                          <li class="text-xs text-gray-400">+ {deletePreview.packageCount - deletePreview.packages.length} más</li>
+                        )}
+                      </ul>
+                    </>
+                  ) : (
+                    <p>Sin paquetes relacionados.</p>
+                  )}
+                </div>
+                <div>
+                  {deletePreview.invoiceCount > 0 ? (
+                    <>
+                      <p class="font-medium text-gray-800">
+                        {deletePreview.invoiceCount} factura{deletePreview.invoiceCount === 1 ? '' : 's'} relacionada{deletePreview.invoiceCount === 1 ? '' : 's'}:
+                      </p>
+                      <ul class="ml-4 list-disc">
+                        {deletePreview.invoices.map((inv, i) => (
+                          <li key={i} class="font-mono text-xs text-gray-500">
+                            {inv.fiscalYear}-{inv.invoiceNumber} · {INVOICE_STATUS_LABEL[inv.status] ?? inv.status}
+                          </li>
+                        ))}
+                        {deletePreview.invoiceCount > deletePreview.invoices.length && (
+                          <li class="text-xs text-gray-400">+ {deletePreview.invoiceCount - deletePreview.invoices.length} más</li>
+                        )}
+                      </ul>
+                    </>
+                  ) : (
+                    <p>Sin facturas relacionadas.</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p class="text-sm text-gray-400">Cargando impacto…</p>
+            )}
+          </div>
+        }
+        confirmLabel="Eliminar"
+        loading={deleting}
+      />
+
       <Card class="p-3">
         <div class="flex flex-wrap gap-2">
           <ClientSearch
@@ -271,6 +374,9 @@ export default function Customers({ role }: { role: Role }) {
                               onClick={() => requestToggle(customer)}
                             >
                               {inactive ? <><UserCheck class="h-3.5 w-3.5" /> Reactivar</> : <><Ban class="h-3.5 w-3.5" /> Deshabilitar</>}
+                            </button>
+                            <button class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-600 hover:bg-red-50" onClick={() => requestDelete(customer)}>
+                              <Trash2 class="h-3.5 w-3.5" /> Eliminar
                             </button>
                           </div>
                         )}
