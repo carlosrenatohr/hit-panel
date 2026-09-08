@@ -2,25 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
 import { Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, X } from 'lucide-preact'
 import type { SessionUser } from '../lib/types'
-import { configApi, TIER_LABELS } from '../lib/config'
+import { configApi } from '../lib/config'
 import { customerApi } from '../lib/customer'
 import type { Customer } from '../lib/customer'
-import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateRow, RateTableInfo, PriceModel } from '../lib/config'
+import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateCardEntryInput, RateCardInfo, PriceModel } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { fmtMoney } from '../lib/format'
-import { Button, Card, Field, SectionTitle, Spinner, inputCls } from './ui'
+import { Button, Card, ConfirmDialog, Field, Modal, SectionTitle, Spinner, inputCls } from './ui'
 
 const BRANDING_BUCKET = 'branding'
 
-type Tab = 'info' | 'branding' | 'rates' | 'payments' | 'concepts' | 'audit'
+type Tab = 'info' | 'rates' | 'payments' | 'audit'
 
-// ─── Config > Información: agency profile + working currency ───────────────────
-function InfoTab({ canWrite }: { canWrite: boolean }) {
+// ─── Config > Información: agency profile + working currency + exchange rate ──
+function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   const [profile, setProfile] = useState<AgencyProfile | null>(null)
   const [ruc, setRuc] = useState('')
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
   const [currency, setCurrency] = useState<CurrencyCode>('USD')
+  const [rate, setRate] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +36,7 @@ function InfoTab({ canWrite }: { canWrite: boolean }) {
         setAddress(p.address ?? '')
         setPhone(p.phone ?? '')
         setCurrency(p.currency)
+        setRate(p.exchangeRateNioPerUsd != null ? String(p.exchangeRateNioPerUsd) : '')
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar la información.'))
       .finally(() => setLoading(false))
@@ -46,10 +48,21 @@ function InfoTab({ canWrite }: { canWrite: boolean }) {
   }
 
   async function save() {
+    const parsed = rate.trim() === '' ? null : Number(rate)
+    if (parsed != null && !(parsed > 0)) {
+      setError('La tasa de cambio debe ser un número mayor que cero.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
-      const updated = await configApi.updateInfo({ ruc: ruc.trim() || null, address: address.trim() || null, phone: phone.trim() || null, currency })
+      const updated = await configApi.updateInfo({
+        ruc: ruc.trim() || null,
+        address: address.trim() || null,
+        phone: phone.trim() || null,
+        currency,
+        exchangeRateNioPerUsd: parsed,
+      })
       setProfile(updated)
       showNotice('Información guardada.')
     } catch (e) {
@@ -94,9 +107,21 @@ function InfoTab({ canWrite }: { canWrite: boolean }) {
               ))}
             </div>
           </Field>
+          <Field label="Tasa de cambio (C$ por US$)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              class={inputCls}
+              value={rate}
+              disabled={!canWrite}
+              placeholder="37.00"
+              onChange={(e) => setRate((e.target as HTMLInputElement).value)}
+            />
+          </Field>
         </div>
         <p class="mt-3 text-xs text-gray-400">
-          RUC, dirección y teléfono (opcionales) aparecen bajo el nombre de la agencia en cada factura. La moneda define el símbolo de los montos: $ para USD, C$ para NIO.
+          RUC, dirección y teléfono (opcionales) aparecen bajo el nombre de la agencia en cada factura. La moneda define el símbolo de los montos: $ para USD, C$ para NIO. La tasa de cambio se captura manualmente (fuente: Manual) y se usará para conversiones futuras.
         </p>
         {canWrite && (
           <div class="mt-4 flex justify-end">
@@ -107,6 +132,7 @@ function InfoTab({ canWrite }: { canWrite: boolean }) {
           </div>
         )}
       </Card>
+      <BrandingTab user={user} canWrite={canWrite} />
     </div>
   )
 }
@@ -268,60 +294,37 @@ function PaymentsTab({ canWrite }: { canWrite: boolean }) {
   if (!catalogs) return <Spinner label="Cargando métodos de pago…" />
 
   return (
-    <div class="grid gap-4 lg:grid-cols-2">
-      <Card class="p-5">
-        <SectionTitle>Métodos de pago</SectionTitle>
-        <CatalogList
-          items={catalogs.methods}
-          canWrite={canWrite}
-          placeholder="Ej. Sinpe móvil"
-          onToggle={(it) =>
-            configApi.updatePaymentMethod(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))
-          }
-          onCreate={(name) => configApi.createPaymentMethod(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
-        />
-      </Card>
-      <Card class="p-5">
-        <SectionTitle>Bancos</SectionTitle>
-        <CatalogList
-          items={catalogs.banks}
-          canWrite={canWrite}
-          placeholder="Ej. BAC"
-          onToggle={(it) => configApi.updatePaymentBank(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
-          onCreate={(name) => configApi.createPaymentBank(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
-        />
-      </Card>
+    <div class="flex flex-col gap-4">
+      <div class="grid gap-4 lg:grid-cols-2">
+        <Card class="p-5">
+          <SectionTitle>Métodos de pago</SectionTitle>
+          <CatalogList
+            items={catalogs.methods}
+            canWrite={canWrite}
+            placeholder="Ej. Sinpe móvil"
+            onToggle={(it) =>
+              configApi.updatePaymentMethod(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))
+            }
+            onCreate={(name) => configApi.createPaymentMethod(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
+          />
+        </Card>
+        <Card class="p-5">
+          <SectionTitle>Bancos</SectionTitle>
+          <CatalogList
+            items={catalogs.banks}
+            canWrite={canWrite}
+            placeholder="Ej. BAC"
+            onToggle={(it) => configApi.updatePaymentBank(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
+            onCreate={(name) => configApi.createPaymentBank(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
+          />
+        </Card>
+      </div>
+      <ConceptosTab canWrite={canWrite} />
     </div>
   )
 }
 
 type RowDraft = { tier: string; price: string; cost: string; priceModel: string }
-
-/** A brand-new table starts with one empty draft row; the user names the tier
- *  (any name — tiers are dynamic text now) and fills price/cost. */
-function toDrafts(rows?: RateRow[]): RowDraft[] {
-  const src = rows ?? []
-  if (src.length === 0) return [{ tier: 'REGULAR', price: '', cost: '', priceModel: 'weight' }]
-  return src.map((r) => ({
-    tier: r.tier,
-    price: r.price === 0 ? '' : String(r.price),
-    cost: r.cost === null ? '' : String(r.cost),
-    priceModel: r.priceModel ?? 'weight',
-  }))
-}
-
-/** Only tiers with a name AND a price are saved — empty drafts never become
- *  0-price rows, and duplicate tier names collapse (last wins) so the upsert
- *  never hits the same (table, tier) twice in one request. */
-function toRows(drafts: RowDraft[]): RateRow[] {
-  const byTier = new Map<string, RateRow>()
-  for (const d of drafts) {
-    const tier = d.tier.trim()
-    if (!tier || d.price === '') continue
-    byTier.set(tier, { tier, price: Number(d.price) || 0, cost: d.cost === '' ? null : Number(d.cost) || 0, priceModel: (d.priceModel ?? 'weight') as PriceModel })
-  }
-  return [...byTier.values()]
-}
 
 export default function Configuracion({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('info')
@@ -329,10 +332,8 @@ export default function Configuracion({ user }: { user: SessionUser }) {
 
   const tabs: { key: Tab; label: string; icon: typeof Building2 }[] = [
     { key: 'info', label: 'Información', icon: Building2 },
-    { key: 'branding', label: 'Branding', icon: Building2 },
     { key: 'rates', label: 'Tarifas', icon: Table2 },
     { key: 'payments', label: 'Pagos', icon: ScrollText },
-    { key: 'concepts', label: 'Conceptos', icon: Table2 },
     { key: 'audit', label: 'Auditoría', icon: ScrollText },
   ]
 
@@ -358,11 +359,9 @@ export default function Configuracion({ user }: { user: SessionUser }) {
           )
         })}
       </div>
-      {tab === 'info' && <InfoTab canWrite={canWrite} />}
-      {tab === 'branding' && <BrandingTab user={user} canWrite={canWrite} />}
+      {tab === 'info' && <InfoTab user={user} canWrite={canWrite} />}
       {tab === 'rates' && <RatesTab user={user} canWrite={canWrite} />}
       {tab === 'payments' && <PaymentsTab canWrite={canWrite} />}
-      {tab === 'concepts' && <ConceptosTab canWrite={canWrite} />}
       {tab === 'audit' && <AuditTab user={user} />}
     </div>
   )
@@ -518,38 +517,70 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
 
 const FREIGHT_LABELS: Record<FreightType, string> = { AIR: 'Aéreo', MAR: 'Marítimo' }
 
+const PRICE_MODEL_LABELS: Record<PriceModel, string> = {
+  weight: 'Por peso (US$/lb)',
+  volume: 'Por volumen (US$/ft³)',
+  fixed: 'Monto fijo por paquete',
+}
+
+/** One editable card = the two AIR/MAR entries of the current published version. */
+type CardDraft = {
+  air: { name: string; price: string; cost: string }
+  mar: { name: string; price: string; cost: string }
+}
+
+function toCardDraft(card: RateCardInfo): CardDraft {
+  const entry = (s: 'AIR' | 'MAR') => card.currentVersion.entries.find((e) => e.serviceType === s)
+  const a = entry('AIR')
+  const m = entry('MAR')
+  return {
+    air: { name: a?.name ?? 'Regular', price: a ? String(a.price) : '', cost: a ? String(a.cost) : '' },
+    mar: { name: m?.name ?? 'Regular', price: m ? String(m.price) : '', cost: m ? String(m.cost) : '' },
+  }
+}
+
+/** Both entries must be complete (name + price + cost) — a card is a single AIR/MAR pair. */
+function draftToEntries(d: CardDraft): RateCardEntryInput[] {
+  const out: RateCardEntryInput[] = []
+  for (const key of ['air', 'mar'] as const) {
+    const f = d[key]
+    if (f.price === '') continue
+    out.push({
+      serviceType: key === 'air' ? 'AIR' : 'MAR',
+      name: f.name.trim() || 'Regular',
+      price: Number(f.price) || 0,
+      cost: f.cost === '' ? 0 : Number(f.cost) || 0,
+    })
+  }
+  return out
+}
+
 function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
-  const [tables, setTables] = useState<RateTableInfo[]>([])
-  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD')
-  const [clients, setClients] = useState<Customer[]>([])
-  const [assignClient, setAssignClient] = useState('')
-  const [assignTable, setAssignTable] = useState('')
+  const [cards, setCards] = useState<RateCardInfo[]>([])
+  const [currency, setCurrency] = useState<CurrencyCode>('USD')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newFreight, setNewFreight] = useState<FreightType>('AIR')
-  /** tableId → drafts; presence also means that table is in edit mode. */
-  const [editing, setEditing] = useState<Record<string, RowDraft[]>>({})
-  const [renaming, setRenaming] = useState<{ ids: string[]; name: string; label: string } | null>(null)
+  const [newModel, setNewModel] = useState<PriceModel>('weight')
+  const [modelNotice, setModelNotice] = useState<string | null>(null)
+  /** cardId → draft; presence means that card is in edit mode. */
+  const [editing, setEditing] = useState<Record<string, CardDraft>>({})
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
+  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'save' | 'rename'; id: string; name: string } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  // The Worker resolves the organization from the session (never the payload),
-  // so there is no org selector here — each user manages their own agency's rates.
+  // The Worker resolves the organization from the session (never the payload).
   const agency = user.agency
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [rates, info, clientsPage] = await Promise.all([
-        configApi.listRates(),
-        configApi.info().catch(() => null),
-        customerApi.list({ pageSize: 500 }).catch(() => ({ rows: [] as Customer[], count: 0 })),
-      ])
-      setTables(rates.tables)
+      const [rates, info] = await Promise.all([configApi.listRateCards(), configApi.info().catch(() => null)])
+      setCards(rates.cards)
       setEditing({})
       if (info) setCurrency(info.currency)
-      setClients(clientsPage.rows)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar las tarifas.')
     }
@@ -566,134 +597,113 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     window.setTimeout(() => setNotice(null), 4000)
   }
 
-  function updateDraft(tableId: string, sourceRows: RateRow[], index: number, field: 'tier' | 'price' | 'cost' | 'priceModel', value: string) {
-    setEditing((prev) => {
-      const drafts = prev[tableId] ?? toDrafts(sourceRows)
-      const next = [...drafts]
-      next[index] = { ...next[index], [field]: value }
-      return { ...prev, [tableId]: next }
-    })
+  function startEdit(card: RateCardInfo) {
+    setEditing((prev) => ({ ...prev, [card.id]: toCardDraft(card) }))
   }
 
-  function startEdit(t: RateTableInfo) {
-    setEditing((prev) => ({ ...prev, [t.id]: toDrafts(t.rows) }))
-  }
-
-  function cancelEdit(t: RateTableInfo) {
+  function cancelEdit(card: RateCardInfo) {
     setEditing((prev) => {
       const next = { ...prev }
-      delete next[t.id]
+      delete next[card.id]
       return next
     })
   }
 
-  function addDraftRow(t: RateTableInfo) {
+  function updateField(cardId: string, key: 'air' | 'mar', field: 'name' | 'price' | 'cost', value: string) {
     setEditing((prev) => {
-      const drafts = prev[t.id] ?? toDrafts(t.rows)
-      return { ...prev, [t.id]: [...drafts, { tier: '', price: '', cost: '', priceModel: 'weight' }] }
+      const draft = prev[cardId] ?? toCardDraft(cards.find((c) => c.id === cardId)!)
+      const next = { ...prev, [cardId]: { ...draft, [key]: { ...draft[key], [field]: value } } }
+      return next
     })
   }
 
-  function removeDraftRow(t: RateTableInfo, index: number) {
-    setEditing((prev) => {
-      const drafts = prev[t.id] ?? toDrafts(t.rows)
-      return { ...prev, [t.id]: drafts.filter((_, i) => i !== index) }
-    })
-  }
-
-  async function createTable() {
-    if (!newName.trim()) return
+  async function createCard() {
+    if (!newName.trim() || newModel !== 'weight') return
     setError(null)
     try {
-      const created = await configApi.createRate({ name: newName.trim(), freightType: newFreight })
+      const created = await configApi.createRateCard({
+        name: newName.trim(),
+        priceModel: 'weight',
+        entries: [
+          { serviceType: 'AIR', name: 'Regular', price: 0, cost: 0 },
+          { serviceType: 'MAR', name: 'Regular', price: 0, cost: 0 },
+        ],
+      })
+      setCards((prev) => [...prev, created])
+      setCreateOpen(false)
       setNewName('')
-      setTables((prev) => [...prev, { ...created, rows: created.rows ?? [] }])
-      setEditing((prev) => ({ ...prev, [created.id]: toDrafts(created.rows ?? []) }))
-      showNotice('Tabla de tarifas creada. Agrega los rangos y guarda.')
+      setNewModel('weight')
+      setModelNotice(null)
+      setEditing((prev) => ({ ...prev, [created.id]: toCardDraft(created) }))
+      showNotice('Tabla creada. Completa Aéreo y Marítimo y guarda.')
     } catch (e) {
       showError(e)
     }
   }
 
-  async function renameTables(ids: string[], name: string) {
-    if (!renaming || !renaming.name.trim()) return
-    if (!window.confirm(`¿Renombrar "${renaming.label}"? Esta acción se registra en el historial de auditoría.`)) return
-    setError(null)
-    try {
-      for (const id of ids) await configApi.renameRate(id, name)
-      setRenaming(null)
-      setTables((prev) => prev.map((t) => (ids.includes(t.id) ? { ...t, name } : t)))
-      showNotice('Tabla renombrada.')
-    } catch (e) {
-      showError(e)
-    }
+  function requestRename(id: string, name: string) {
+    setRenaming({ id, name })
   }
 
-  async function removeTable(id: string) {
-    if (!window.confirm('¿Eliminar esta tabla de tarifas? Los clientes que la usen quedan sin tarifa asignada.')) return
-    setError(null)
-    try {
-      await configApi.deleteRate(id)
-      setTables((prev) => prev.filter((t) => t.id !== id))
-      showNotice('Tabla eliminada.')
-    } catch (e) {
-      showError(e)
-    }
+  function doRename() {
+    if (!renaming?.name.trim()) return
+    setConfirm({ kind: 'rename', id: renaming.id, name: renaming.name.trim() })
   }
 
-  async function saveRows(id: string) {
-    const drafts = editing[id]
-    if (!drafts) return
-    const rows = toRows(drafts)
-    if (rows.length === 0) {
-      setError('Agrega al menos un rango con nombre y precio antes de guardar.')
+  function requestDelete(id: string, name: string) {
+    setConfirm({ kind: 'delete', id, name })
+  }
+
+  function requestSave(id: string) {
+    const draft = editing[id]
+    if (!draft) return
+    const entries = draftToEntries(draft)
+    if (entries.length !== 2 || entries.some((e) => !e.name.trim())) {
+      setError('Completa nombre, precio y costo de Aéreo y Marítimo antes de guardar.')
       return
     }
-    if (!window.confirm('¿Guardar los cambios en las tarifas de esta tabla? Esta acción se registra en el historial de auditoría.')) return
-    setSaving(id)
-    setError(null)
-    try {
-      await configApi.replaceRows(id, rows)
-      setTables((prev) => prev.map((t) => (t.id === id ? { ...t, rows } : t)))
-      setEditing((prev) => {
-        const next = { ...prev }
-        delete next[id]
-        return next
-      })
-      showNotice('Tarifas guardadas.')
-    } catch (e) {
-      showError(e)
-    }
-    setSaving(null)
+    setConfirm({ kind: 'save', id, name: cards.find((c) => c.id === id)?.name ?? '' })
   }
 
-  async function assignDefault() {
-    if (!assignClient) return
-    if (!window.confirm('¿Aplicar esta tarifa por defecto al cliente seleccionado?')) return
+  async function runConfirm() {
+    const c = confirm
+    if (!c) return
     setError(null)
     try {
-      await configApi.assignClientDefault(assignClient, assignTable || null)
-      showNotice(assignTable ? 'Tarifa por defecto asignada al cliente.' : 'Tarifa por defecto removida.')
-      setAssignClient('')
-      setAssignTable('')
+      if (c.kind === 'delete') {
+        await configApi.deleteRateCard(c.id)
+        setCards((prev) => prev.filter((x) => x.id !== c.id))
+        setEditing((prev) => {
+          const next = { ...prev }
+          delete next[c.id]
+          return next
+        })
+        showNotice('Tabla eliminada.')
+      } else if (c.kind === 'save') {
+        setSaving(c.id)
+        const updated = await configApi.replaceCardEntries(c.id, draftToEntries(editing[c.id]))
+        setCards((prev) => prev.map((x) => (x.id === c.id ? updated : x)))
+        setEditing((prev) => {
+          const next = { ...prev }
+          delete next[c.id]
+          return next
+        })
+        showNotice('Tarifas guardadas.')
+      } else {
+        const updated = await configApi.renameRateCard(c.id, c.name)
+        setCards((prev) => prev.map((x) => (x.id === c.id ? updated : x)))
+        setRenaming(null)
+        showNotice('Tabla renombrada.')
+      }
     } catch (e) {
       showError(e)
+    } finally {
+      setSaving(null)
+      setConfirm(null)
     }
   }
 
-  if (loading && tables.length === 0) return <Spinner label="Cargando tarifas…" />
-
-  // Group tables by name: "Estándar" renders as ONE card with its Aéreo and
-  // Marítimo blocks side by side.
-  const groups = useMemo(() => {
-    const g = new Map<string, RateTableInfo[]>()
-    for (const t of tables) {
-      const arr = g.get(t.name) ?? []
-      arr.push(t)
-      g.set(t.name, arr)
-    }
-    return [...g.entries()]
-  }, [tables])
+  if (loading && cards.length === 0) return <Spinner label="Cargando tarifas…" />
 
   return (
     <div class="flex flex-col gap-4">
@@ -701,34 +711,32 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       {notice && <p class="text-sm text-green-700">{notice}</p>}
 
       {canWrite && (
-        <Card>
-          <div class="flex flex-wrap items-end gap-3">
-            <Field label="Nueva tabla">
-              <input class={inputCls} value={newName} placeholder="Ej. Estándar" onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
-            </Field>
-            <Field label="Tipo">
-              <select class={inputCls} value={newFreight} onChange={(e) => setNewFreight((e.target as HTMLSelectElement).value as FreightType)}>
-                <option value="AIR">Aéreo</option>
-                <option value="MAR">Marítimo</option>
-              </select>
-            </Field>
-            <Button onClick={createTable} disabled={!newName.trim()}>
+        <Card class="p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold text-gray-800">Tablas de tarifas</div>
+              <p class="text-xs text-gray-500">
+                Cada tabla es un plan con dos precios: Aéreo y Marítimo. Para otro par de precios, crea otra tabla.
+              </p>
+            </div>
+            <Button onClick={() => setCreateOpen(true)}>
               <Plus class="h-4 w-4" aria-hidden="true" />
-              Crear
+              Nueva tabla
             </Button>
           </div>
         </Card>
       )}
 
-      {groups.map(([name, groupTables]) => {
-        const ids = groupTables.map((t) => t.id)
+      {cards.map((card) => {
+        const isEditing = canWrite && editing[card.id] !== undefined
+        const draft = editing[card.id] ?? toCardDraft(card)
         return (
-          <Card key={ids.join('-')}>
+          <Card key={card.id}>
             <div class="mb-3 flex items-center justify-between gap-2">
-              {renaming && renaming.ids.join('-') === ids.join('-') ? (
+              {renaming && renaming.id === card.id ? (
                 <div class="flex items-center gap-2">
-                  <input class={inputCls} value={renaming.name} onChange={(e) => setRenaming({ ids, name: (e.target as HTMLInputElement).value, label: renaming.label })} />
-                  <Button onClick={() => renameTables(ids, renaming.name.trim())} disabled={!renaming.name.trim()}>
+                  <input class={inputCls} value={renaming.name} onChange={(e) => setRenaming({ id: card.id, name: (e.target as HTMLInputElement).value })} />
+                  <Button onClick={doRename} disabled={!renaming.name.trim()}>
                     Guardar
                   </Button>
                   <Button variant="ghost" onClick={() => setRenaming(null)}>
@@ -736,166 +744,143 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                   </Button>
                 </div>
               ) : (
-                <div class="text-sm font-semibold text-gray-800">{name}</div>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-800">{card.name}</span>
+                  <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{PRICE_MODEL_LABELS[card.currentVersion.priceModel]}</span>
+                </div>
               )}
               <div class="flex items-center gap-2">
                 {canWrite && !renaming && (
                   <>
-                    <IconButtonSmall label="Renombrar" onClick={() => setRenaming({ ids, name, label: name })}>
+                    <IconButtonSmall label="Renombrar" onClick={() => requestRename(card.id, card.name)}>
                       <Pencil class="h-4 w-4" />
                     </IconButtonSmall>
-                    {groupTables.length === 1 && (
-                      <IconButtonSmall label="Eliminar" onClick={() => removeTable(groupTables[0].id)} danger>
-                        <Trash2 class="h-4 w-4" />
-                      </IconButtonSmall>
-                    )}
+                    <IconButtonSmall label="Eliminar" onClick={() => requestDelete(card.id, card.name)} danger>
+                      <Trash2 class="h-4 w-4" />
+                    </IconButtonSmall>
                   </>
                 )}
               </div>
             </div>
             <div class="grid gap-4 lg:grid-cols-2">
-              {groupTables.map((t) => {
-                const drafts = editing[t.id]
-                const isEditing = canWrite && drafts !== undefined
-                const rows = isEditing ? drafts : t.rows
+              {(['air', 'mar'] as const).map((key) => {
+                const entry = draft[key]
+                const label = key === 'air' ? 'Aéreo' : 'Marítimo'
                 return (
-                  <div key={t.id} class="rounded-lg border border-gray-100 p-3">
+                  <div key={key} class="rounded-lg border border-gray-100 p-3">
                     <div class="mb-2 flex items-center justify-between">
-                      <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{FREIGHT_LABELS[t.freightType]}</span>
+                      <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{label}</span>
                       {canWrite && !isEditing && (
-                        <Button variant="ghost" onClick={() => startEdit(t)}>
+                        <Button variant="ghost" onClick={() => startEdit(card)}>
                           <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
                           Editar
                         </Button>
                       )}
                     </div>
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                          <th class="py-2 pr-3">Tarifa</th>
-                          <th class="py-2 pr-3">Modelo</th>
-                          <th class="py-2 pr-3">Precio ({currency})</th>
-                          <th class="py-2">Costo ({currency})</th>
-                          {isEditing && <th class="py-2 w-8" aria-label="Quitar fila" />}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((r, i) => (
-                          <tr key={`${r.tier}-${i}`} class="border-b border-gray-100">
-                            <td class="py-1.5 pr-3 font-medium text-gray-700">
-                              {isEditing ? (
-                                <input class={inputCls} value={(r as RowDraft).tier} placeholder="Ej. VIP" onChange={(e) => updateDraft(t.id, t.rows, i, 'tier', (e.target as HTMLInputElement).value)} />
-                              ) : (
-                                <span>{TIER_LABELS[r.tier] ?? r.tier}</span>
-                              )}
-                            </td>
-                            <td class="py-1.5 pr-3">
-                              {isEditing ? (
-                                <select class={inputCls} value={(r as RowDraft).priceModel ?? 'weight'} onChange={(e) => updateDraft(t.id, t.rows, i, 'priceModel', (e.target as HTMLSelectElement).value)}>
-                                  <option value="weight">Por lb</option>
-                                  <option value="volume">Por ft³</option>
-                                  <option value="fixed">Fijo</option>
-                                </select>
-                              ) : (
-                                <span class="text-gray-500 text-xs">{((r as RateRow).priceModel ?? 'weight') === 'weight' ? 'lb' : (r as RateRow).priceModel === 'volume' ? 'ft³' : 'fijo'}</span>
-                              )}
-                            </td>
-                            <td class="py-1.5 pr-3">
-                              {isEditing ? (
-                                <input type="number" min="0" step="0.01" class={inputCls} value={(r as RowDraft).price} onChange={(e) => updateDraft(t.id, t.rows, i, 'price', (e.target as HTMLInputElement).value)} />
-                              ) : (
-                                <span class="text-gray-700">{fmtMoney(Number((r as RateRow).price), currency)}</span>
-                              )}
-                            </td>
-                            <td class="py-1.5">
-                              {isEditing ? (
-                                <input type="number" min="0" step="0.01" class={inputCls} value={(r as RowDraft).cost} placeholder="—" onChange={(e) => updateDraft(t.id, t.rows, i, 'cost', (e.target as HTMLInputElement).value)} />
-                              ) : (
-                                <span class="text-gray-500">{(r as RateRow).cost === null ? '—' : fmtMoney(Number((r as RateRow).cost), currency)}</span>
-                              )}
-                            </td>
-                            {isEditing && (
-                              <td class="py-1.5 text-right">
-                                <button type="button" aria-label="Quitar tarifa" class="text-gray-300 hover:text-red-500" onClick={() => removeDraftRow(t, i)}>
-                                  <Trash2 class="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                        {rows.length === 0 && (
-                          <tr>
-                            <td colspan={isEditing ? 4 : 3} class="py-2 text-sm text-gray-400">
-                              Sin rangos todavía.
-                            </td>
-                          </tr>
+                    <div class="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <div class="text-xs text-gray-400">Nombre</div>
+                        {isEditing ? (
+                          <input class={inputCls} value={entry.name} onChange={(e) => updateField(card.id, key, 'name', (e.target as HTMLInputElement).value)} />
+                        ) : (
+                          <div class="py-1.5 font-medium text-gray-700">{entry.name}</div>
                         )}
-                      </tbody>
-                    </table>
-                    {isEditing && (
-                      <div class="mt-2 flex items-center justify-between">
-                        <Button variant="ghost" onClick={() => addDraftRow(t)}>
-                          <Plus class="h-4 w-4" aria-hidden="true" />
-                          Agregar tarifa
-                        </Button>
-                        <div class="flex gap-2">
-                          <Button variant="ghost" onClick={() => cancelEdit(t)}>
-                            Cancelar
-                          </Button>
-                          <Button onClick={() => saveRows(t.id)} disabled={saving === t.id}>
-                            <Save class="h-4 w-4" aria-hidden="true" />
-                            {saving === t.id ? 'Guardando…' : 'Guardar'}
-                          </Button>
-                        </div>
                       </div>
-                    )}
+                      <div>
+                        <div class="text-xs text-gray-400">Precio ({currency})</div>
+                        {isEditing ? (
+                          <input type="number" min="0" step="0.01" class={inputCls} value={entry.price} onChange={(e) => updateField(card.id, key, 'price', (e.target as HTMLInputElement).value)} />
+                        ) : (
+                          <div class="py-1.5 text-gray-700">{fmtMoney(Number(entry.price), currency)}</div>
+                        )}
+                      </div>
+                      <div>
+                        <div class="text-xs text-gray-400">Costo ({currency})</div>
+                        {isEditing ? (
+                          <input type="number" min="0" step="0.01" class={inputCls} value={entry.cost} onChange={(e) => updateField(card.id, key, 'cost', (e.target as HTMLInputElement).value)} />
+                        ) : (
+                          <div class="py-1.5 text-gray-500">{fmtMoney(Number(entry.cost), currency)}</div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )
               })}
             </div>
+            {isEditing && (
+              <div class="mt-2 flex items-center justify-end gap-2">
+                <Button variant="ghost" onClick={() => cancelEdit(card)}>
+                  Cancelar
+                </Button>
+                <Button onClick={() => requestSave(card.id)} disabled={saving === card.id}>
+                  <Save class="h-4 w-4" aria-hidden="true" />
+                  {saving === card.id ? 'Guardando…' : 'Guardar'}
+                </Button>
+              </div>
+            )}
           </Card>
         )
       })}
 
-      {tables.length === 0 && (
+      {cards.length === 0 && (
         <Card>
           <p class="text-sm text-gray-500">No hay tablas de tarifas para esta organización.</p>
         </Card>
       )}
 
       {canWrite && (
-        <Card class="p-4">
-          <SectionTitle>Tarifa por defecto de un cliente</SectionTitle>
-          <div class="flex flex-wrap items-end gap-3">
-            <Field label="Cliente">
-              <select class={inputCls} value={assignClient} onChange={(e) => setAssignClient((e.target as HTMLSelectElement).value)}>
-                <option value="">Seleccionar cliente…</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+        <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Nueva tabla de tarifas" size="sm">
+          <div class="flex flex-col gap-4">
+            <Field label="Nombre">
+              <input class={inputCls} value={newName} placeholder="Ej. Estándar" autoFocus onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
+            </Field>
+            <Field label="Modelo de cobro">
+              <select
+                class={inputCls}
+                value={newModel}
+                onChange={(e) => {
+                  const m = (e.target as HTMLSelectElement).value as PriceModel
+                  setNewModel(m)
+                  setModelNotice(m === 'weight' ? null : 'En construcción — por ahora solo se soporta cobro por peso (US$/lb).')
+                }}
+              >
+                <option value="weight">{PRICE_MODEL_LABELS.weight}</option>
+                <option value="volume">{PRICE_MODEL_LABELS.volume}</option>
+                <option value="fixed">{PRICE_MODEL_LABELS.fixed}</option>
               </select>
             </Field>
-            <Field label="Tabla">
-              <select class={inputCls} value={assignTable} onChange={(e) => setAssignTable((e.target as HTMLSelectElement).value)}>
-                <option value="">(sin tarifa)</option>
-                {tables.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} · {FREIGHT_LABELS[t.freightType]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Button onClick={assignDefault} disabled={!assignClient}>
-              Aplicar
-            </Button>
+            {modelNotice && <p class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{modelNotice}</p>}
+            {newModel === 'weight' && (
+              <p class="text-xs text-gray-500">Se creará con Aéreo y Marítimo vacíos; completalos al editar y guarda.</p>
+            )}
+            <div class="mt-2 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={createCard} disabled={!newName.trim() || newModel !== 'weight'}>
+                <Plus class="h-4 w-4" aria-hidden="true" />
+                Crear
+              </Button>
+            </div>
           </div>
-          <p class="mt-2 text-xs text-gray-500">
-            Precarga la tarifa del cliente al facturarle de nuevo (el admin puede cambiarla en cada factura). No afecta paquetes existentes.
-          </p>
-        </Card>
+        </Modal>
       )}
+
+      <ConfirmDialog
+        open={confirm !== null}
+        onClose={() => setConfirm(null)}
+        onConfirm={runConfirm}
+        title={confirm?.kind === 'delete' ? 'Eliminar tabla' : confirm?.kind === 'save' ? 'Guardar tarifas' : 'Renombrar tabla'}
+        message={
+          confirm?.kind === 'delete'
+            ? `¿Eliminar "${confirm.name}"? Esta acción se registra en el historial de auditoría.`
+            : confirm?.kind === 'save'
+              ? `¿Guardar los cambios en "${confirm.name}"? Esta acción se registra en el historial de auditoría.`
+              : `¿Renombrar la tabla a "${confirm?.name}"? Esta acción se registra en el historial de auditoría.`
+        }
+        confirmLabel={confirm?.kind === 'delete' ? 'Eliminar' : 'Confirmar'}
+        loading={saving === confirm?.id}
+      />
     </div>
   )
 }

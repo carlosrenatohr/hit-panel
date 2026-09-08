@@ -33,9 +33,32 @@ vi.mock('../../lib/billing', () => ({
 
 vi.mock('../../lib/config', () => ({
   configApi: {
-    listRates: vi.fn().mockResolvedValue({ tables: [{ id: 't1', organizationId: 'hit', name: 'Estándar', freightType: 'AIR', createdAt: '', updatedAt: '', rows: [{ tier: 'REGULAR', price: 7, cost: 4.5, priceModel: 'weight' }] }] }),
+    listRateCards: vi.fn().mockResolvedValue({
+      organizationId: 'hit',
+      cards: [
+        {
+          id: 't1',
+          organizationId: 'hit',
+          name: 'Estándar',
+          structure: 'simple_pair',
+          createdAt: '',
+          updatedAt: '',
+          currentVersion: {
+            id: 'v1',
+            version: 1,
+            priceModel: 'weight',
+            currency: 'USD',
+            status: 'published',
+            entries: [
+              { id: 'e1', serviceType: 'AIR', name: 'Regular', unit: 'lb', price: 7, cost: 4.5 },
+              { id: 'e2', serviceType: 'MAR', name: 'Regular', unit: 'lb', price: 2.8, cost: 1.25 },
+            ],
+          },
+        },
+      ],
+    }),
     chargeConcepts: vi.fn().mockResolvedValue([]),
-    info: vi.fn().mockResolvedValue({ slug: 'hit', name: 'HIT Cargo', ruc: null, address: null, phone: null, currency: 'USD', isScrapable: true }),
+    info: vi.fn().mockResolvedValue({ slug: 'hit', name: 'HIT Cargo', ruc: null, address: null, phone: null, currency: 'USD', isScrapable: true, exchangeRateNioPerUsd: null, exchangeRateSource: 'manual', exchangeRateUpdatedAt: null }),
   },
 }))
 
@@ -112,7 +135,7 @@ describe('InvoiceForm guided flow', () => {
     fireEvent.click(screen.getByText('select-client-with-table'))
     await waitFor(() => expect(unbilledPackages).toHaveBeenCalled())
     fireEvent.click(screen.getByText('SG-1'))
-    await waitFor(() => expect(screen.getByText('Estándar - Aéreo')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Estándar')).toBeTruthy())
     fireEvent.click(screen.getByText('Crear factura'))
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     const payload = createInvoice.mock.calls[0][0]

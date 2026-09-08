@@ -17,6 +17,10 @@ export interface AgencyProfile {
   phone: string | null
   currency: CurrencyCode
   isScrapable: boolean
+  /** Córdobas per US dollar — manual today (default 37). */
+  exchangeRateNioPerUsd: number | null
+  exchangeRateSource: 'manual' | 'automatic'
+  exchangeRateUpdatedAt: string | null
 }
 
 export type CurrencyCode = 'USD' | 'NIO'
@@ -26,6 +30,7 @@ export interface AgencyInfoPatch {
   address?: string | null
   phone?: string | null
   currency?: CurrencyCode
+  exchangeRateNioPerUsd?: number | null
 }
 
 export interface PaymentCatalogItem {
@@ -76,6 +81,44 @@ export interface RateTableInfo {
   createdAt: string
   updatedAt: string
   rows: RateRow[]
+}
+
+// ─── Rate cards v2 (plan -> version -> AIR/MAR entries) ──────────────────────
+
+export interface RateCardEntry {
+  id: string
+  serviceType: FreightType
+  name: string
+  unit: string
+  price: number
+  cost: number
+}
+
+export interface RateCardVersion {
+  id: string
+  version: number
+  priceModel: PriceModel
+  currency: CurrencyCode
+  status: string
+  entries: RateCardEntry[]
+}
+
+export interface RateCardInfo {
+  id: string
+  organizationId: string
+  name: string
+  structure: string
+  currentVersion: RateCardVersion
+  createdAt: string
+  updatedAt: string
+}
+
+/** Write-side entry for create/update (unit defaults to lb; weight only today). */
+export interface RateCardEntryInput {
+  serviceType: FreightType
+  name: string
+  price: number
+  cost: number
 }
 
 export interface AuditLogEntry {
@@ -147,6 +190,17 @@ export const configApi = {
     api<{ organizationId: string; tables: RateTableInfo[] }>(
       `/rates${organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''}`,
     ),
+  // Rate cards v2:
+  listRateCards: (organizationId?: string) =>
+    api<{ organizationId: string; cards: RateCardInfo[] }>(
+      `/rates/v2${organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''}`,
+    ),
+  createRateCard: (input: { name: string; priceModel: PriceModel; entries: RateCardEntryInput[] }) =>
+    api<RateCardInfo>('/rates/v2', { method: 'POST', body: input }),
+  renameRateCard: (id: string, name: string) => api<RateCardInfo>(`/rates/v2/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } }),
+  deleteRateCard: (id: string) => api<{ ok: boolean }>(`/rates/v2/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  replaceCardEntries: (id: string, entries: RateCardEntryInput[]) =>
+    api<RateCardInfo>(`/rates/v2/${encodeURIComponent(id)}/entries`, { method: 'PUT', body: { entries } }),
   createRate: (input: { name: string; freightType: FreightType; organizationId?: string }) =>
     api<RateTableInfo>('/rates', { method: 'POST', body: input }),
    renameRate: (id: string, name: string) =>

@@ -1,6 +1,6 @@
-import { AlertTriangle, Biohazard, Clock, Loader2 } from 'lucide-preact'
+import { AlertTriangle, Biohazard, Clock, Loader2, X } from 'lucide-preact'
 import type { ComponentChildren, JSX } from 'preact'
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { STATUS_DOT, STATUS_LABEL, STATUS_SOFT } from '../lib/format'
 import type { ShipmentStatus } from '../lib/types'
 
@@ -176,3 +176,89 @@ export function DaysBadge({ days }: { days: number }) {
 
 export const inputCls =
   'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-primary focus:ring-1 focus:ring-primary'
+
+// ── Shared overlay (backlog P4-16) ─────────────────────────────────────────────
+// One Modal used by Clientes and Configuración; closes on Escape or backdrop
+// click, has role=dialog + aria-modal, and scrolls on mobile.
+
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  size = 'md',
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  children: ComponentChildren
+  size?: 'sm' | 'md' | 'lg'
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' }
+  return (
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div class={`w-full ${widths[size]} max-h-[90vh] overflow-y-auto rounded-lg bg-white p-6 shadow-xl`}>
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-secondary">{title}</h2>
+          <button type="button" class="text-gray-400 hover:text-gray-700" onClick={onClose} aria-label="Cerrar">
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+/** Confirmation overlay for destructive/audited actions (replaces window.confirm). */
+export function ConfirmDialog({
+  open,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmLabel = 'Confirmar',
+  variant = 'danger',
+  loading = false,
+}: {
+  open: boolean
+  onClose: () => void
+  onConfirm: () => void
+  title: string
+  message: string
+  confirmLabel?: string
+  variant?: 'danger' | 'warning'
+  loading?: boolean
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title={title} size="sm">
+      <p class="text-sm text-gray-600">{message}</p>
+      <div class="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={loading}>
+          Cancelar
+        </Button>
+        <Button variant={variant === 'danger' ? 'danger' : 'primary'} onClick={onConfirm} disabled={loading}>
+          {loading ? 'Guardando…' : confirmLabel}
+        </Button>
+      </div>
+    </Modal>
+  )
+}
