@@ -48,6 +48,15 @@ export interface CustomerInput {
   defaultRateCardId?: string | null
 }
 
+/** Impact summary for the delete confirmation dialog (samples capped at 5 per kind). */
+export interface CustomerDeletePreview {
+  client: Customer
+  packages: Array<{ guia: string | null; tracking: string | null }>
+  packageCount: number
+  invoices: Array<{ fiscalYear: number; invoiceNumber: number; status: string }>
+  invoiceCount: number
+}
+
 function qs(params: object): string {
   const p = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -68,4 +77,9 @@ export const customerApi = {
   get: (id: string) => workerApi<Customer>(`${API_BASE}/api/customer/clients/${id}`),
   create: (input: CustomerInput) => workerApi<Customer>(`${API_BASE}/api/customer/clients`, { method: 'POST', body: input }),
   update: (id: string, input: Partial<CustomerInput>) => workerApi<Customer>(`${API_BASE}/api/customer/clients/${id}`, { method: 'PATCH', body: input }),
+  /** Impact summary (packages + invoices) shown before confirming a delete. */
+  deletePreview: (id: string) => workerApi<CustomerDeletePreview>(`${API_BASE}/api/customer/clients/${id}/delete-preview`),
+  /** Soft delete (never physical) — hides the client from operational reads. */
+  delete: (id: string, reason?: string | null) =>
+    workerApi<{ id: string; deleted: true }>(`${API_BASE}/api/customer/clients/${id}`, { method: 'DELETE', body: { reason: reason ?? null } }),
 }

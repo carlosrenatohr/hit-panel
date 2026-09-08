@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/preact'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/preact'
 import Customers from './Customers'
 import { customerApi } from '../lib/customer'
 
@@ -19,6 +19,14 @@ vi.mock('../lib/customer', () => ({
     create: vi.fn(),
     update: vi.fn(),
     get: vi.fn(),
+    deletePreview: vi.fn().mockResolvedValue({
+      client: clients[0],
+      packages: [{ guia: '926791', tracking: 'TRK1' }, { guia: '926845', tracking: null }],
+      packageCount: 3,
+      invoices: [{ fiscalYear: 2026, invoiceNumber: 104, status: 'PAID' }],
+      invoiceCount: 2,
+    }),
+    delete: vi.fn(),
   },
 }))
 
@@ -85,5 +93,28 @@ describe('Customers', () => {
     fireEvent.click(screen.getAllByText('Editar')[0])
     expect(screen.getByLabelText('Nombre')).toHaveValue('Ana')
     expect(screen.getByLabelText('Casillero')).toHaveValue('5012')
+  })
+
+  it('deletes a client after showing the impact preview and confirming', async () => {
+    render(<Customers role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+
+    fireEvent.click(screen.getAllByRole('button', { name: /eliminar/i })[0])
+
+    await waitFor(() => expect(screen.getByText(/no tiene vuelta atrás/i)).toBeInTheDocument())
+    expect(screen.getByText('3 paquetes relacionados:')).toBeInTheDocument()
+    expect(screen.getByText('926791 · TRK1')).toBeInTheDocument()
+    expect(screen.getByText('2 facturas relacionadas:')).toBeInTheDocument()
+    expect(screen.getByText('2026-104 · Pagada')).toBeInTheDocument()
+
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Eliminar cliente' })).getByRole('button', { name: 'Eliminar' }))
+    await waitFor(() => expect(customerApi.delete).toHaveBeenCalled())
+    expect(customerApi.delete).toHaveBeenCalledWith('c1')
+  })
+
+  it('hides the delete action for staff', async () => {
+    render(<Customers role="staff" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /eliminar/i })).not.toBeInTheDocument()
   })
 })

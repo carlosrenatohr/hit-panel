@@ -243,7 +243,8 @@ export function ConfirmDialog({
   onClose: () => void
   onConfirm: () => void
   title: string
-  message: string
+  /** Text or rich content (lists, counts) rendered inside the dialog. */
+  message: ComponentChildren
   confirmLabel?: string
   variant?: 'danger' | 'warning'
   loading?: boolean
