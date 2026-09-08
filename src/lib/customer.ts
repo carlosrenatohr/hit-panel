@@ -13,6 +13,14 @@ export interface Customer {
   address: string | null
   /** Default rate table (preselects pricing on this client's next invoice). */
   defaultRateId: string | null
+  /** Company / sub-agency this client belongs to (nullable: personal clients have none). */
+  companyName?: string | null
+  /** Tax identifier (cédula / RUC) of the client or its company. */
+  taxId?: string | null
+  /** Lifecycle state — false = deactivated (packages hidden from dashboards until reactivated). */
+  active?: boolean
+  /** Total packages related to this client (derived from packages.client_id). */
+  packageCount?: number
 }
 
 export interface CustomerFilters {
