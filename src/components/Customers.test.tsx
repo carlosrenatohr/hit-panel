@@ -34,7 +34,7 @@ describe('Customers', () => {
     expect(screen.getByText('Luis')).toBeInTheDocument()
     expect(screen.getByText('Sara')).toBeInTheDocument()
     expect(screen.getAllByText('Activo').length).toBeGreaterThan(0)
-    expect(screen.getByText('Revisión')).toBeInTheDocument()
+    expect(screen.getByTitle('Requiere revisión')).toBeInTheDocument()
     expect(screen.getByText('Desactivado')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument()
@@ -76,5 +76,13 @@ describe('Customers', () => {
     fireEvent.click(screen.getByRole('button', { name: /reactivar/i }))
     await waitFor(() => expect(customerApi.update).toHaveBeenCalled())
     expect(customerApi.update).toHaveBeenCalledWith('c3', { active: true })
+  })
+
+  it('filters by status via MultiSelect', async () => {
+    render(<Customers role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Estado' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivado' }))
+    await waitFor(() => expect(customerApi.list).toHaveBeenCalledWith(expect.objectContaining({ statuses: ['inactive'] })))
   })
 })
