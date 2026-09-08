@@ -1,4 +1,4 @@
-import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, RefreshCw, StickyNote, Tag, X } from 'lucide-preact'
+import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, RefreshCw, StickyNote, Tag, Trash2, X } from 'lucide-preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import InvoiceForm from './billing/InvoiceForm'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -17,11 +17,19 @@ import {
   STATUS_ORDER,
   statusLabel,
 } from '../lib/format'
-import { addNote, addTag, getPackageDetail, setManualStatus } from '../lib/insforge'
+import { addNote, addTag, deletePackage, getPackageDetail, setManualStatus } from '../lib/insforge'
 import { refreshCooldownUntil, refreshPackage } from '../lib/refresh'
 import { configApi } from '../lib/config'
 import type { PackageDetail, ShipmentStatus, SessionUser } from '../lib/types'
-import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
+import { Button, ConfirmDialog, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
+
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Borrador',
+  ISSUED: 'Emitida',
+  PARTIAL: 'Parcial',
+  PAID: 'Pagada',
+  VOID: 'Anulada',
+}
 
 export default function ShipmentDetail({
   guia,
@@ -53,6 +61,9 @@ export default function ShipmentDetail({
   const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null)
   // Agencies with is_scrapable = false work manual-only: no re-scrape affordance.
   const [scrapable, setScrapable] = useState(true)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [invoiceInfo, setInvoiceInfo] = useState<{ fiscalYear: number; invoiceNumber: number; status: string } | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -184,6 +195,33 @@ export default function ShipmentDetail({
     navigator.clipboard?.writeText(tracking)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
+  }
+
+  /** Opens the delete confirmation, resolving the linked invoice info when present. */
+  function openDelete() {
+    setInvoiceInfo(null)
+    if (linkedInvoiceId && canBill) {
+      billingApi
+        .getInvoice(linkedInvoiceId)
+        .then((inv) => setInvoiceInfo({ fiscalYear: inv.fiscalYear, invoiceNumber: inv.invoiceNumber, status: inv.status }))
+        .catch(() => setInvoiceInfo(null))
+    }
+    setDeleteOpen(true)
+  }
+
+  async function confirmDelete() {
+    if (!d) return
+    setDeleteBusy(true)
+    setErr(null)
+    try {
+      await deletePackage(d.pkg.almacen_id)
+      setDeleteOpen(false)
+      onClose()
+    } catch (e) {
+      setErr((e as Error)?.message ?? 'No se pudo eliminar el paquete.')
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   const step = d ? PIPELINE_STEP[d.pkg.effective_status as ShipmentStatus] : 0
@@ -587,6 +625,13 @@ export default function ShipmentDetail({
                       </Button>
                     </div>
                   </div>
+
+                  <div class="border-t border-gray-100 pt-3">
+                    <div class="mb-1 text-xs font-medium text-red-500">Zona de riesgo</div>
+                    <Button variant="danger" onClick={openDelete} disabled={busy}>
+                      <Trash2 class="h-4 w-4" aria-hidden="true" /> Eliminar paquete
+                    </Button>
+                  </div>
                 </div>
               </section>
             )}
@@ -612,6 +657,47 @@ export default function ShipmentDetail({
           />
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={confirmDelete}
+        title="Eliminar paquete"
+        message={
+          <div class="space-y-3">
+            <p class="text-sm font-semibold text-red-700">
+              Vas a eliminar el paquete «{d?.pkg.almacen_id}». Esta acción no tiene vuelta atrás.
+            </p>
+            <ul class="space-y-1 text-sm text-gray-600">
+              <li>
+                Guía: <span class="font-mono text-xs text-gray-500">{d?.pkg.almacen_id}</span>
+              </li>
+              {d?.pkg.tracking_number && (
+                <li>
+                  Tracking: <span class="font-mono text-xs text-gray-500">{d.pkg.tracking_number}</span>
+                </li>
+              )}
+              <li>
+                Cliente: <span class="font-medium text-gray-800">{cleanName(d?.pkg.referencia_name)}</span>
+              </li>
+              <li>Eventos: {d?.events.length ?? 0}</li>
+              <li>Notas internas: {d?.notes.length ?? 0}</li>
+              <li>Etiquetas: {d?.tags.length ?? 0}</li>
+              <li>Notas del proveedor: {d?.providerNotes.length ?? 0}</li>
+              {linkedInvoiceId && (
+                <li>
+                  Factura relacionada:{' '}
+                  <span class="font-mono text-xs text-gray-500">
+                    {invoiceInfo ? `${invoiceInfo.fiscalYear}-${invoiceInfo.invoiceNumber} · ${INVOICE_STATUS_LABEL[invoiceInfo.status] ?? invoiceInfo.status}` : canBill ? 'Cargando…' : 'Sí'}
+                  </span>
+                </li>
+              )}
+            </ul>
+          </div>
+        }
+        confirmLabel="Eliminar"
+        loading={deleteBusy}
+      />
     </div>
   )
 }
