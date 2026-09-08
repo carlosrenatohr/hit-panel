@@ -13,6 +13,8 @@ export interface Customer {
   address: string | null
   /** Default rate table (preselects pricing on this client's next invoice). */
   defaultRateId: string | null
+  /** Default rate card (v2 plan) — takes precedence over defaultRateId. */
+  defaultRateCardId: string | null
   /** Company / sub-agency this client belongs to (nullable: personal clients have none). */
   companyName?: string | null
   /** Tax identifier (cédula / RUC) of the client or its company. */
@@ -43,6 +45,7 @@ export interface CustomerInput {
   taxId?: string | null
   active?: boolean
   defaultRateTableId?: string | null
+  defaultRateCardId?: string | null
 }
 
 function qs(params: object): string {

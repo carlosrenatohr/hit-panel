@@ -1,7 +1,7 @@
 import { Check, Plus, Trash2, X } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier, type UnbilledPackage } from '../../lib/billing'
-import { configApi, type ChargeConcept, type RateTableInfo } from '../../lib/config'
+import { configApi, type ChargeConcept, type RateCardInfo } from '../../lib/config'
 import type { Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner } from '../ui'
@@ -37,15 +37,6 @@ const LEGACY_TIERS: PriceTier[] = ['REGULAR', 'ESPECIAL', 'VIP', 'MADRES', 'DARI
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
-function tierPriceFromTable(table: RateTableInfo, tier: PriceTier): number | null {
-  const row = table.rows.find((r) => r.tier === tier)
-  return row && row.price != null ? row.price : null
-}
-
-function tableCost(tables: RateTableInfo[], tableId: string): number {
-  return tables.find((t) => t.id === tableId)?.rows.find((r) => r.cost != null)?.cost ?? 0
-}
-
 /** Invoice editor modal — used for both create and edit (DRAFT) flows.
  *  When `invoiceId` is provided, loads the existing invoice and submits via PATCH.
  *  Otherwise creates a new invoice via POST. */
@@ -61,7 +52,7 @@ export default function InvoiceForm({
   onCreated: (v: InvoiceView) => void
 }) {
   const isEdit = !!invoiceId
-  const [rateTables, setRateTables] = useState<RateTableInfo[]>([])
+  const [rateCards, setRateCards] = useState<RateCardInfo[]>([])
   const [catalog, setCatalog] = useState<CatalogEntry[]>([])
   const [concepts, setConcepts] = useState<ChargeConcept[]>([])
   const [clientName, setClientName] = useState(prefill?.clientName ?? '')
@@ -87,9 +78,9 @@ export default function InvoiceForm({
 
   useEffect(() => {
     configApi
-      .listRates()
-      .then(({ tables }) => setRateTables(tables))
-      .catch(() => setRateTables([]))
+      .listRateCards()
+      .then(({ cards }) => setRateCards(cards))
+      .catch(() => setRateCards([]))
     configApi
       .chargeConcepts()
       .then((cs) => setConcepts(cs.filter((c) => c.active)))
@@ -169,26 +160,26 @@ export default function InvoiceForm({
 
   const activeConcepts = useMemo(() => concepts.filter((c) => c.active), [concepts])
 
-  // Tables for a freight, labeled "Estándar - Aéreo" (the owner's requested UX).
-  const tablesFor = (f: FreightType) => rateTables.filter((t) => t.freightType === f)
-  const tableLabel = (t: RateTableInfo) => `${t.name} - ${FREIGHT_LABEL[t.freightType]}`
+  // Rate cards for a freight (each card prices AIR and MAR; the line picks by service).
+  const tablesFor = (f: FreightType) => rateCards.filter((c) => c.currentVersion.entries.some((e) => e.serviceType === f))
+  const tableLabel = (c: RateCardInfo) => c.name
 
-  /** The client's default rate table id when its freight type matches the line's —
-   *  preselects pricing visually; the backend resolves the final price. */
+  /** The client's default rate card when it offers the line's freight — preselects
+   *  visually; the backend resolves the final price (server stays authoritative). */
   const clientDefaultFor = (f: FreightType): string | null => {
     if (!clientDefaultRate) return null
-    const t = rateTables.find((x) => x.id === clientDefaultRate)
-    return t && t.freightType === f ? t.id : null
+    const c = rateCards.find((x) => x.id === clientDefaultRate)
+    return c && c.currentVersion.entries.some((e) => e.serviceType === f) ? c.id : null
   }
 
-  /** Tiers available for a line: the chosen table's rows, catalog fallback when
-   *  the agency has no tables for that freight. */
-  function tiersFor(freightType: FreightType, rateTableId: string | null): PriceTier[] {
-    if (rateTableId) {
-      const t = rateTables.find((x) => x.id === rateTableId)
-      if (t) return t.rows.map((r) => r.tier)
+  /** Tiers available for a line: the chosen card's entry name for that service,
+   *  legacy catalog fallback when the agency has no cards for that freight. */
+  function tiersFor(freightType: FreightType, rateCardId: string | null): PriceTier[] {
+    if (rateCardId) {
+      const c = rateCards.find((x) => x.id === rateCardId)
+      if (c) return c.currentVersion.entries.filter((e) => e.serviceType === freightType).map((e) => e.name)
     }
-    if (rateTables.some((x) => x.freightType === freightType)) return []
+    if (rateCards.some((x) => x.currentVersion.entries.some((e) => e.serviceType === freightType))) return []
     const entry = catalog.find((c) => c.freightType === freightType)
     return entry ? LEGACY_TIERS.filter((t) => entry.tiers[t] != null) : []
   }
@@ -196,14 +187,14 @@ export default function InvoiceForm({
   function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; profit: number } {
     const lbs = Number(l.quantityLbs) || 0
     if (l.rateTableId) {
-      const table = rateTables.find((t) => t.id === l.rateTableId)
-      const price = table ? tierPriceFromTable(table, l.tier) : null
-      if (price == null) return { unitPrice: null, total: 0, profit: 0 }
-      const total = round2(lbs * price)
-      const profit = round2(total - lbs * tableCost(rateTables, l.rateTableId))
-      return { unitPrice: price, total, profit }
+      const card = rateCards.find((c) => c.id === l.rateTableId)
+      const entry = card?.currentVersion.entries.find((e) => e.serviceType === l.freightType)
+      if (!entry) return { unitPrice: null, total: 0, profit: 0 }
+      const total = round2(lbs * entry.price)
+      const profit = round2(total - lbs * entry.cost)
+      return { unitPrice: entry.price, total, profit }
     }
-    // Client default / legacy: catalog preview (the server resolves the real table).
+    // Client default / legacy: catalog preview (the server resolves the real card).
     const entry = catalog.find((c) => c.freightType === l.freightType)
     const price = entry?.tiers[l.tier]
     if (price == null) return { unitPrice: null, total: 0, profit: 0 }
@@ -228,7 +219,7 @@ export default function InvoiceForm({
     for (const o of others) total += otherAmount(o)
     return { total: round2(total), profit: round2(profit) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, others, rateTables, catalog, activeConcepts])
+  }, [lines, others, rateCards, catalog, activeConcepts])
 
   function setLine(i: number, patch: Partial<DraftLine>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
@@ -338,7 +329,7 @@ export default function InvoiceForm({
                   setClientName(c.name)
                   if (!isEdit) {
                     setClientId(c.id)
-                    setClientDefaultRate(c.defaultRateId ?? null)
+                    setClientDefaultRate(c.defaultRateCardId ?? c.defaultRateId ?? null)
                     setSelectedIds([])
                     setLines([])
                   }
@@ -418,8 +409,8 @@ export default function InvoiceForm({
                       Tarifa
                       <select class={`${inputCls} mt-1 w-full`} value={l.rateTableId ?? ''} onChange={(e) => {
                         const id = (e.target as HTMLSelectElement).value || null
-                        const table = id ? rateTables.find((t) => t.id === id) : null
-                        setLine(i, { rateTableId: id, tier: table?.rows[0]?.tier ?? 'REGULAR' })
+                        const card = id ? rateCards.find((c) => c.id === id) : null
+                        setLine(i, { rateTableId: id, tier: card?.currentVersion.entries.find((en) => en.serviceType === l.freightType)?.name ?? 'REGULAR' })
                       }}>
                         <option value="">(tarifa del cliente)</option>
                         {tables.map((t) => <option key={t.id} value={t.id}>{tableLabel(t)}</option>)}

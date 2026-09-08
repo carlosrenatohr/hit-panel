@@ -82,7 +82,7 @@ export default function ClientSearch({
     const name = query.trim()
     if (!name) return
     // Build a minimal Customer-like object; the caller will persist via API.
-    onSelect({ id: '', name, nameNormalized: name.toLowerCase(), casillero: null, toReview: false, email: null, phone: null, address: null, defaultRateId: null })
+    onSelect({ id: '', name, nameNormalized: name.toLowerCase(), casillero: null, toReview: false, email: null, phone: null, address: null, defaultRateId: null, defaultRateCardId: null })
     setOpen(false)
   }
 

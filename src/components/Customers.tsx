@@ -1,10 +1,9 @@
-import { Ban, Flag, Pencil, Plus, Save, UserCheck, Users, X } from 'lucide-preact'
+import { Ban, Flag, Pencil, Plus, Save, UserCheck, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
-import { configApi } from '../lib/config'
+import { configApi, type RateCardInfo } from '../lib/config'
 import { customerApi, type Customer, type CustomerInput } from '../lib/customer'
-import type { RateTableInfo } from '../lib/config'
 import type { Role } from '../lib/types'
-import { Button, Card, Field, inputCls, SectionTitle, Spinner } from './ui'
+import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, Spinner } from './ui'
 import ClientSearch from './ui/ClientSearch'
 import { MultiSelect } from './ui/MultiSelect'
 
@@ -29,10 +28,11 @@ export default function Customers({ role }: { role: Role }) {
   const [saving, setSaving] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [rateTables, setRateTables] = useState<RateTableInfo[]>([])
+  const [rateCards, setRateCards] = useState<RateCardInfo[]>([])
+  const [confirmAction, setConfirmAction] = useState<{ kind: 'save' } | { kind: 'toggle'; customer: Customer } | null>(null)
 
   useEffect(() => {
-    configApi.listRates().then(({ tables }) => setRateTables(tables)).catch(() => setRateTables([]))
+    configApi.listRateCards().then(({ cards }) => setRateCards(cards)).catch(() => setRateCards([]))
   }, [])
 
   useEffect(() => {
@@ -57,19 +57,23 @@ export default function Customers({ role }: { role: Role }) {
 
   function openCreate() {
     setError(null)
-    setForm({ name: '', casillero: '', companyName: '', taxId: '', toReview: false, email: '', phone: '', address: '', defaultRateTableId: '' })
+    setForm({ name: '', casillero: '', companyName: '', taxId: '', toReview: false, email: '', phone: '', address: '', defaultRateCardId: '' })
   }
 
   function openEdit(customer: Customer) {
     setError(null)
-    setForm({ id: customer.id, name: customer.name, casillero: customer.casillero ?? '', companyName: customer.companyName ?? '', taxId: customer.taxId ?? '', toReview: customer.toReview, email: customer.email ?? '', phone: customer.phone ?? '', address: customer.address ?? '', defaultRateTableId: customer.defaultRateId ?? '' })
+    setForm({ id: customer.id, name: customer.name, casillero: customer.casillero ?? '', companyName: customer.companyName ?? '', taxId: customer.taxId ?? '', toReview: customer.toReview, email: customer.email ?? '', phone: customer.phone ?? '', address: customer.address ?? '', defaultRateCardId: customer.defaultRateCardId ?? '' })
+  }
+
+  function requestSave() {
+    if (!form) return
+    setConfirmAction({ kind: 'save' })
   }
 
   async function save() {
     if (!form) return
     const id = form.id
     const isEdit = !!id
-    if (!window.confirm(isEdit ? `¿Guardar los cambios del cliente "${form.name.trim()}"?` : `¿Crear el cliente "${form.name.trim()}"?`)) return
     setSaving(true)
     setError(null)
     try {
@@ -82,7 +86,7 @@ export default function Customers({ role }: { role: Role }) {
         address: form.address?.trim() || null,
         companyName: form.companyName?.trim() || null,
         taxId: form.taxId?.trim() || null,
-        defaultRateTableId: form.defaultRateTableId || null,
+        defaultRateCardId: form.defaultRateCardId || null,
       }
       if (isEdit && id) await customerApi.update(id, payload)
       else await customerApi.create(payload)
@@ -95,12 +99,12 @@ export default function Customers({ role }: { role: Role }) {
     }
   }
 
+  function requestToggle(customer: Customer) {
+    setConfirmAction({ kind: 'toggle', customer })
+  }
+
   async function toggleActive(customer: Customer) {
     const deactivating = customer.active !== false
-    const confirmMsg = deactivating
-      ? `¿Deshabilitar a "${customer.name}"? Sus paquetes quedarán fuera del dashboard hasta que lo reactives.`
-      : `¿Reactivar a "${customer.name}"? Sus paquetes volverán a aparecer en el dashboard.`
-    if (!window.confirm(confirmMsg)) return
     setActionId(customer.id)
     setError(null)
     try {
@@ -123,13 +127,9 @@ export default function Customers({ role }: { role: Role }) {
       {error && <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       {/* ── Create / edit modal ── */}
-      {form && (
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div class="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
-            <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-lg font-semibold text-secondary">{form.id ? 'Editar cliente' : 'Nuevo cliente'}</h2>
-              <button type="button" class="text-gray-400 hover:text-gray-700" onClick={() => setForm(null)} aria-label="Cerrar formulario"><X class="h-4 w-4" /></button>
-            </div>
+      <Modal open={form !== null} onClose={() => setForm(null)} title={form?.id ? 'Editar cliente' : 'Nuevo cliente'}>
+        {form && (
+          <>
             <div class="grid gap-3 sm:grid-cols-2">
               <Field label="Nombre">
                 <input class={inputCls} value={form.name} onInput={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })} autoFocus />
@@ -153,11 +153,11 @@ export default function Customers({ role }: { role: Role }) {
                 <input class={inputCls} value={form.address ?? ''} onInput={(e) => setForm({ ...form, address: (e.target as HTMLInputElement).value })} />
               </Field>
               <Field label="Tarifa por defecto">
-                <select class={inputCls} value={form.defaultRateTableId ?? ''} onChange={(e) => setForm({ ...form, defaultRateTableId: (e.target as HTMLSelectElement).value })}>
+                <select class={inputCls} value={form.defaultRateCardId ?? ''} onChange={(e) => setForm({ ...form, defaultRateCardId: (e.target as HTMLSelectElement).value })}>
                   <option value="">(sin tarifa asignada)</option>
-                  {rateTables.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} · {t.freightType === 'AIR' ? 'Aéreo' : 'Marítimo'}
+                  {rateCards.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>
@@ -169,11 +169,32 @@ export default function Customers({ role }: { role: Role }) {
             </div>
             <div class="mt-5 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setForm(null)}>Cancelar</Button>
-              <Button onClick={save} disabled={saving || !form.name.trim()}>{saving ? <Spinner /> : <><Save class="h-4 w-4" /> Guardar</>}</Button>
+              <Button onClick={requestSave} disabled={saving || !form.name.trim()}>{saving ? <Spinner /> : <><Save class="h-4 w-4" /> Guardar</>}</Button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => {
+          const action = confirmAction
+          setConfirmAction(null)
+          if (action?.kind === 'save') void save()
+          else if (action?.kind === 'toggle') void toggleActive(action.customer)
+        }}
+        title={confirmAction?.kind === 'toggle' ? (confirmAction.customer.active === false ? 'Reactivar cliente' : 'Deshabilitar cliente') : 'Guardar cliente'}
+        message={
+          confirmAction?.kind === 'toggle'
+            ? confirmAction.customer.active === false
+              ? `¿Reactivar a "${confirmAction.customer.name}"? Sus paquetes volverán a aparecer en el dashboard.`
+              : `¿Deshabilitar a "${confirmAction.customer.name}"? Sus paquetes quedarán fuera del dashboard hasta que lo reactives.`
+            : `¿Guardar el cliente "${form?.name.trim()}"?`
+        }
+        confirmLabel={confirmAction?.kind === 'toggle' ? 'Confirmar' : 'Guardar'}
+        loading={saving}
+      />
 
       <Card class="p-3">
         <div class="flex flex-wrap gap-2">
@@ -247,7 +268,7 @@ export default function Customers({ role }: { role: Role }) {
                             <button
                               class={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs hover:bg-gray-100 ${inactive ? 'text-green-700' : 'text-red-700'}`}
                               disabled={actionId === customer.id}
-                              onClick={() => toggleActive(customer)}
+                              onClick={() => requestToggle(customer)}
                             >
                               {inactive ? <><UserCheck class="h-3.5 w-3.5" /> Reactivar</> : <><Ban class="h-3.5 w-3.5" /> Deshabilitar</>}
                             </button>
