@@ -10,6 +10,8 @@ interface Props {
   allowCreate?: boolean
   placeholder?: string
   disabled?: boolean
+  /** Show inactive clients too (Clients module browsing). Default false → only active (new-process pickers). */
+  includeInactive?: boolean
   class?: string
 }
 
@@ -20,6 +22,9 @@ interface Props {
  *
  * allowCreate = true  → manual package creation (panel needs to pick or create a client)
  * allowCreate = false → rate assignment, invoice filters (pick only, no creation)
+ *
+ * Inactive clients are hidden by default (they can't be billed); pass
+ * includeInactive to browse the whole list (Clients module).
  */
 export default function ClientSearch({
   value,
@@ -28,6 +33,7 @@ export default function ClientSearch({
   allowCreate = false,
   placeholder = 'Buscar cliente…',
   disabled = false,
+  includeInactive = false,
   class: cls = '',
 }: Props) {
   const [query, setQuery] = useState(value)
@@ -47,7 +53,7 @@ export default function ClientSearch({
     const t = setTimeout(async () => {
       setLoading(true)
       try {
-        const { rows } = await customerApi.list({ search: query.trim(), pageSize: 8 })
+        const { rows } = await customerApi.list({ search: query.trim(), statuses: includeInactive ? undefined : ['active'], pageSize: 8 })
         setResults(rows)
         setOpen(true)
         setHighlight(0)
