@@ -91,8 +91,9 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
       {notice && <p class="text-sm text-green-700">{notice}</p>}
       <Card class="p-5">
         <div class="grid gap-6 lg:grid-cols-2">
-          {/* Left half: profile fields (name first) */}
+          {/* Left: agency logo, then the display name below it */}
           <div class="space-y-4">
+            <BrandingTab user={user} canWrite={canWrite} />
             <Field label="Nombre de la agencia">
               <input class={inputCls} value={name} disabled={!canWrite} placeholder="Ej. HIT Cargo" onChange={(e) => setName((e.target as HTMLInputElement).value)} />
             </Field>
@@ -102,16 +103,21 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
                 {profile?.nameLastUpdated && <> Último cambio: {fmtDate(profile.nameLastUpdated)}.</>}
               </p>
             )}
-            <div class="grid gap-4 sm:grid-cols-2">
-              <Field label="RUC">
-                <input class={inputCls} value={ruc} disabled={!canWrite} placeholder="Ej. J0310000123" onChange={(e) => setRuc((e.target as HTMLInputElement).value)} />
-              </Field>
-              <Field label="Teléfono">
-                <input class={inputCls} value={phone} disabled={!canWrite} placeholder="Ej. 5555-1234" onChange={(e) => setPhone((e.target as HTMLInputElement).value)} />
-              </Field>
+          </div>
+          {/* Right: contact fields, then currency + exchange rate, then helper text */}
+          <div class="space-y-4">
+            <div class="grid gap-3 sm:grid-cols-3">
               <Field label="Dirección">
-                <input class={inputCls} value={address} disabled={!canWrite} placeholder="Calle, ciudad" onChange={(e) => setAddress((e.target as HTMLInputElement).value)} />
+                <input class={`${inputCls} w-full min-w-0`} value={address} disabled={!canWrite} placeholder="Calle, ciudad" onChange={(e) => setAddress((e.target as HTMLInputElement).value)} />
               </Field>
+              <Field label="Número de teléfono">
+                <input class={`${inputCls} w-full min-w-0`} value={phone} disabled={!canWrite} placeholder="Ej. 5555-1234" onChange={(e) => setPhone((e.target as HTMLInputElement).value)} />
+              </Field>
+              <Field label="RUC">
+                <input class={`${inputCls} w-full min-w-0`} value={ruc} disabled={!canWrite} placeholder="Ej. J0310000123" onChange={(e) => setRuc((e.target as HTMLInputElement).value)} />
+              </Field>
+            </div>
+            <div class="grid gap-3 sm:grid-cols-2">
               <Field label="Moneda">
                 <div class="flex gap-2">
                   {(['USD', 'NIO'] as CurrencyCode[]).map((c) => (
@@ -154,10 +160,6 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
                 </Button>
               </div>
             )}
-          </div>
-          {/* Right half: agency logo (first thing shown, half width) */}
-          <div>
-            <BrandingTab user={user} canWrite={canWrite} />
           </div>
         </div>
       </Card>
