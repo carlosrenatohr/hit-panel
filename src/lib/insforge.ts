@@ -106,6 +106,10 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 
   let q = insforge.database.from('packages').select(LIST_COLS, { count: 'exact' })
 
+  // Soft-deleted packages are out of every operational read (RLS also hides them;
+  // this explicit filter keeps the query contract visible and independent of RLS).
+  q = q.is('deleted_at', null)
+
   if (f.organizationId) q = q.eq('organization_id', f.organizationId)
   if (f.search && f.search.trim()) {
     const s = f.search.trim().replace(/[(),*]/g, '')
@@ -146,6 +150,7 @@ export async function getPackageDetail(guia: string, organizationId?: string): P
     .from('packages')
     .select('*, providers(code,name,base_url), invoice_packages(invoice_id)')
     .eq('almacen_id', guia)
+    .is('deleted_at', null)
     // A guide can exist in both provider ledgers. Match the Worker lookup and use the newest row.
     .order('scraped_at', { ascending: false })
     .limit(1)
@@ -217,6 +222,12 @@ export async function setManualStatus(guia: string, status: string, note?: strin
   const { error } = await insforge.database.rpc('set_manual_status', {
     p_guia: guia, p_status: status, p_note: note ?? null,
   })
+  if (error) throw error
+}
+
+/** Soft delete (never physical) via the delete_package RPC — hides the package from every operational read. */
+export async function deletePackage(guia: string, reason?: string | null): Promise<void> {
+  const { error } = await insforge.database.rpc('delete_package', { p_guia: guia, p_reason: reason ?? null })
   if (error) throw error
 }
 

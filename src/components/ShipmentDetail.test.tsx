@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import ShipmentDetail from './ShipmentDetail';
+import { deletePackage } from '../lib/insforge';
 
 const mockDetail = vi.hoisted(() => ({
   pkg: {
@@ -54,6 +55,7 @@ vi.mock('../lib/insforge', () => ({
   setManualStatus: vi.fn().mockResolvedValue(undefined),
   addTag: vi.fn().mockResolvedValue(undefined),
   addNote: vi.fn().mockResolvedValue(undefined),
+  deletePackage: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../lib/config', () => ({
@@ -121,5 +123,32 @@ describe('ShipmentDetail', () => {
     });
 
     expect(screen.queryByText('Refrescar ahora')).toBeNull();
+  });
+
+  it('soft-deletes the package after showing the hard confirmation and closes the detail', async () => {
+    const onClose = vi.fn();
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={onClose} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: /eliminar paquete/i }));
+    await waitFor(() => expect(screen.getByText(/no tiene vuelta atrás/i)).toBeInTheDocument());
+    expect(screen.getByText('Eventos: 1')).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Eliminar paquete' })).getByRole('button', { name: 'Eliminar' }));
+    await waitFor(() => expect(deletePackage).toHaveBeenCalledWith('910500'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows the delete action for staff (is_writer) and hides it for viewers', async () => {
+    const staffUser = { ...adminUser, role: 'staff' as const };
+    const { unmount } = render(<ShipmentDetail guia="910500" user={staffUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+    expect(screen.getByRole('button', { name: /eliminar paquete/i })).toBeTruthy();
+    unmount();
+
+    const viewerUser = { ...adminUser, role: 'viewer' as const };
+    render(<ShipmentDetail guia="910500" user={viewerUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: /eliminar paquete/i })).toBeNull();
   });
 });
