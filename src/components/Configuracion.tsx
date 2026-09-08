@@ -17,6 +17,7 @@ type Tab = 'info' | 'rates' | 'payments' | 'audit'
 // ─── Config > Información: agency profile + working currency + exchange rate ──
 function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   const [profile, setProfile] = useState<AgencyProfile | null>(null)
+  const [name, setName] = useState('')
   const [ruc, setRuc] = useState('')
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
@@ -32,6 +33,7 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
       .info()
       .then((p) => {
         setProfile(p)
+        setName(p.name)
         setRuc(p.ruc ?? '')
         setAddress(p.address ?? '')
         setPhone(p.phone ?? '')
@@ -47,6 +49,11 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
     window.setTimeout(() => setNotice(null), 4000)
   }
 
+  const nameChanged = name.trim() !== (profile?.name ?? '')
+
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
+
   async function save() {
     const parsed = rate.trim() === '' ? null : Number(rate)
     if (parsed != null && !(parsed > 0)) {
@@ -56,17 +63,21 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
     setSaving(true)
     setError(null)
     try {
-      const updated = await configApi.updateInfo({
+      const payload: import('../lib/config').AgencyInfoPatch = {
         ruc: ruc.trim() || null,
         address: address.trim() || null,
         phone: phone.trim() || null,
         currency,
         exchangeRateNioPerUsd: parsed,
-      })
+      }
+      if (nameChanged) payload.name = name.trim()
+      const updated = await configApi.updateInfo(payload)
       setProfile(updated)
+      setName(updated.name)
       showNotice('Información guardada.')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar.')
+      const msg = e instanceof Error ? e.message : ''
+      setError(/once per month/i.test(msg) ? 'El nombre de la agencia solo se puede cambiar una vez cada mes.' : msg || 'No se pudo guardar.')
     } finally {
       setSaving(false)
     }
@@ -79,60 +90,77 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
       {error && <p class="text-sm text-red-600">{error}</p>}
       {notice && <p class="text-sm text-green-700">{notice}</p>}
       <Card class="p-5">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <Field label="RUC">
-            <input class={inputCls} value={ruc} disabled={!canWrite} placeholder="Ej. J0310000123" onChange={(e) => setRuc((e.target as HTMLInputElement).value)} />
-          </Field>
-          <Field label="Teléfono">
-            <input class={inputCls} value={phone} disabled={!canWrite} placeholder="Ej. 5555-1234" onChange={(e) => setPhone((e.target as HTMLInputElement).value)} />
-          </Field>
-          <Field label="Dirección">
-            <input class={inputCls} value={address} disabled={!canWrite} placeholder="Calle, ciudad" onChange={(e) => setAddress((e.target as HTMLInputElement).value)} />
-          </Field>
-          <Field label="Moneda">
-            <div class="flex gap-2">
-              {(['USD', 'NIO'] as CurrencyCode[]).map((c) => (
-                <button
-                  key={c}
-                  type="button"
+        <div class="grid gap-6 lg:grid-cols-2">
+          {/* Left half: profile fields (name first) */}
+          <div class="space-y-4">
+            <Field label="Nombre de la agencia">
+              <input class={inputCls} value={name} disabled={!canWrite} placeholder="Ej. HIT Cargo" onChange={(e) => setName((e.target as HTMLInputElement).value)} />
+            </Field>
+            {nameChanged && canWrite && (
+              <p class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                El nombre solo se puede cambiar una vez cada mes.
+                {profile?.nameLastUpdated && <> Último cambio: {fmtDate(profile.nameLastUpdated)}.</>}
+              </p>
+            )}
+            <div class="grid gap-4 sm:grid-cols-2">
+              <Field label="RUC">
+                <input class={inputCls} value={ruc} disabled={!canWrite} placeholder="Ej. J0310000123" onChange={(e) => setRuc((e.target as HTMLInputElement).value)} />
+              </Field>
+              <Field label="Teléfono">
+                <input class={inputCls} value={phone} disabled={!canWrite} placeholder="Ej. 5555-1234" onChange={(e) => setPhone((e.target as HTMLInputElement).value)} />
+              </Field>
+              <Field label="Dirección">
+                <input class={inputCls} value={address} disabled={!canWrite} placeholder="Calle, ciudad" onChange={(e) => setAddress((e.target as HTMLInputElement).value)} />
+              </Field>
+              <Field label="Moneda">
+                <div class="flex gap-2">
+                  {(['USD', 'NIO'] as CurrencyCode[]).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      disabled={!canWrite}
+                      onClick={() => setCurrency(c)}
+                      aria-pressed={currency === c}
+                      class={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+                        currency === c ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {c === 'USD' ? '$ USD' : 'C$ NIO'}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Tasa de cambio (C$ por US$)">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class={inputCls}
+                  value={rate}
                   disabled={!canWrite}
-                  onClick={() => setCurrency(c)}
-                  aria-pressed={currency === c}
-                  class={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
-                    currency === c ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {c === 'USD' ? '$ USD' : 'C$ NIO'}
-                </button>
-              ))}
+                  placeholder="37.00"
+                  onChange={(e) => setRate((e.target as HTMLInputElement).value)}
+                />
+              </Field>
             </div>
-          </Field>
-          <Field label="Tasa de cambio (C$ por US$)">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              class={inputCls}
-              value={rate}
-              disabled={!canWrite}
-              placeholder="37.00"
-              onChange={(e) => setRate((e.target as HTMLInputElement).value)}
-            />
-          </Field>
-        </div>
-        <p class="mt-3 text-xs text-gray-400">
-          RUC, dirección y teléfono (opcionales) aparecen bajo el nombre de la agencia en cada factura. La moneda define el símbolo de los montos: $ para USD, C$ para NIO. La tasa de cambio se captura manualmente (fuente: Manual) y se usará para conversiones futuras.
-        </p>
-        {canWrite && (
-          <div class="mt-4 flex justify-end">
-            <Button onClick={save} disabled={saving}>
-              <Save class="h-4 w-4" aria-hidden="true" />
-              {saving ? 'Guardando…' : 'Guardar'}
-            </Button>
+            <p class="text-xs text-gray-400">
+              RUC, dirección y teléfono (opcionales) aparecen bajo el nombre de la agencia en cada factura. La moneda define el símbolo de los montos: $ para USD, C$ para NIO. La tasa de cambio se captura manualmente (fuente: Manual) y se usará para conversiones futuras.
+            </p>
+            {canWrite && (
+              <div class="flex justify-end">
+                <Button onClick={save} disabled={saving}>
+                  <Save class="h-4 w-4" aria-hidden="true" />
+                  {saving ? 'Guardando…' : 'Guardar'}
+                </Button>
+              </div>
+            )}
           </div>
-        )}
+          {/* Right half: agency logo (first thing shown, half width) */}
+          <div>
+            <BrandingTab user={user} canWrite={canWrite} />
+          </div>
+        </div>
       </Card>
-      <BrandingTab user={user} canWrite={canWrite} />
     </div>
   )
 }
@@ -777,11 +805,11 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                         </Button>
                       )}
                     </div>
-                    <div class="grid grid-cols-3 gap-2 text-sm">
+                    <div class="grid grid-cols-3 gap-3 text-sm">
                       <div>
                         <div class="text-xs text-gray-400">Nombre</div>
                         {isEditing ? (
-                          <input class={inputCls} value={entry.name} onChange={(e) => updateField(card.id, key, 'name', (e.target as HTMLInputElement).value)} />
+                          <input class={`${inputCls} w-full min-w-0`} value={entry.name} onChange={(e) => updateField(card.id, key, 'name', (e.target as HTMLInputElement).value)} />
                         ) : (
                           <div class="py-1.5 font-medium text-gray-700">{entry.name}</div>
                         )}
@@ -789,7 +817,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                       <div>
                         <div class="text-xs text-gray-400">Precio ({currency})</div>
                         {isEditing ? (
-                          <input type="number" min="0" step="0.01" class={inputCls} value={entry.price} onChange={(e) => updateField(card.id, key, 'price', (e.target as HTMLInputElement).value)} />
+                          <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.price} onChange={(e) => updateField(card.id, key, 'price', (e.target as HTMLInputElement).value)} />
                         ) : (
                           <div class="py-1.5 text-gray-700">{fmtMoney(Number(entry.price), currency)}</div>
                         )}
@@ -797,7 +825,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                       <div>
                         <div class="text-xs text-gray-400">Costo ({currency})</div>
                         {isEditing ? (
-                          <input type="number" min="0" step="0.01" class={inputCls} value={entry.cost} onChange={(e) => updateField(card.id, key, 'cost', (e.target as HTMLInputElement).value)} />
+                          <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.cost} onChange={(e) => updateField(card.id, key, 'cost', (e.target as HTMLInputElement).value)} />
                         ) : (
                           <div class="py-1.5 text-gray-500">{fmtMoney(Number(entry.cost), currency)}</div>
                         )}
@@ -946,7 +974,7 @@ function AuditTab({ user }: { user: SessionUser }) {
 
   return (
     <div class="flex flex-col gap-3">
-      <Card>
+      <Card class="p-4">
         <div class="flex flex-wrap items-end gap-3">
           <Field label="Acción">
             <select class={inputCls} value={action} onChange={(e) => { setAction((e.target as HTMLSelectElement).value); setPage(1) }}>
