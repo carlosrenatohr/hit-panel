@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, X } from 'lucide-preact'
+import { Ban, Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, UserCheck, X } from 'lucide-preact'
 import type { SessionUser } from '../lib/types'
 import { configApi } from '../lib/config'
 import { customerApi } from '../lib/customer'
 import type { Customer } from '../lib/customer'
-import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogItem, PaymentCatalogs, RateCardEntryInput, RateCardInfo, PriceModel } from '../lib/config'
+import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogs, RateCardEntryInput, RateCardInfo, PriceModel } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { fmtMoney } from '../lib/format'
 import { Button, Card, ConfirmDialog, Field, Modal, SectionTitle, Spinner, inputCls } from './ui'
@@ -106,10 +106,17 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
           </div>
           {/* Right: contact fields, then currency + exchange rate, then helper text */}
           <div class="space-y-4">
-            <div class="grid gap-3 sm:grid-cols-3">
-              <Field label="Dirección">
-                <input class={`${inputCls} w-full min-w-0`} value={address} disabled={!canWrite} placeholder="Calle, ciudad" onChange={(e) => setAddress((e.target as HTMLInputElement).value)} />
-              </Field>
+            <Field label="Dirección">
+              <textarea
+                rows={2}
+                class={`${inputCls} w-full min-w-0 resize-y`}
+                value={address}
+                disabled={!canWrite}
+                placeholder="Calle, ciudad"
+                onChange={(e) => setAddress((e.target as HTMLTextAreaElement).value)}
+              />
+            </Field>
+            <div class="grid gap-3 sm:grid-cols-2">
               <Field label="Número de teléfono">
                 <input class={`${inputCls} w-full min-w-0`} value={phone} disabled={!canWrite} placeholder="Ej. 5555-1234" onChange={(e) => setPhone((e.target as HTMLInputElement).value)} />
               </Field>
@@ -167,149 +174,181 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   )
 }
 
-// ─── Config > Pagos: dynamic methods + banks catalogs ──────────────────────────
-function CatalogList({
+// ─── Config > Pagos: methods + banks + concepts (CRUD with shared Modal) ─────
+type CatalogItem = { id: string; name: string; active: boolean; suggestedPrice?: number | null }
+
+function CatalogTable({
+  title,
+  description,
+  label,
   items,
   canWrite,
-  onToggle,
+  withSuggestedPrice,
   onCreate,
-  placeholder,
+  onUpdate,
+  onToggle,
+  onDelete,
+  onError,
 }: {
-  items: PaymentCatalogItem[]
+  title: string
+  description: string
+  label: string
+  items: CatalogItem[]
   canWrite: boolean
-  onToggle: (item: PaymentCatalogItem) => void
-  onCreate: (name: string) => void
-  placeholder: string
+  withSuggestedPrice?: boolean
+  onCreate: (name: string, suggestedPrice: number | null) => Promise<void>
+  onUpdate: (id: string, patch: { name?: string; suggestedPrice?: number | null }) => Promise<void>
+  onToggle: (item: CatalogItem) => Promise<void>
+  onDelete: (item: CatalogItem) => Promise<void>
+  onError: (msg: string) => void
 }) {
-  const [newName, setNewName] = useState('')
-  return (
-    <div>
-      <ul class="divide-y divide-gray-100">
-        {items.map((it) => (
-          <li key={it.id} class="flex items-center justify-between py-2">
-            <span class={`text-sm ${it.active ? 'font-medium text-gray-800' : 'text-gray-400 line-through'}`}>{it.name}</span>
-            {canWrite && (
-              <button
-                type="button"
-                onClick={() => onToggle(it)}
-                class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${it.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}
-              >
-                {it.active ? 'Activo' : 'Inactivo'}
-              </button>
-            )}
-          </li>
-        ))}
-        {items.length === 0 && <li class="py-2 text-sm text-gray-400">Sin elementos.</li>}
-      </ul>
-      {canWrite && (
-        <div class="mt-3 flex items-end gap-2">
-          <Field label="Agregar">
-            <input class={inputCls} value={newName} placeholder={placeholder} onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
-          </Field>
-          <Button
-            variant="ghost"
-            disabled={!newName.trim()}
-            onClick={() => {
-              onCreate(newName.trim())
-              setNewName('')
-            }}
-          >
-            <Plus class="h-4 w-4" aria-hidden="true" />
-            Agregar
-          </Button>
-        </div>
-      )}
-    </div>
-  )
-}
+  const [form, setForm] = useState<{ id?: string; name: string; suggestedPrice: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<CatalogItem | null>(null)
+  const [busy, setBusy] = useState(false)
 
-// ─── Config > Conceptos: templates for custom extra invoice charges ─────────────
-function ConceptosTab({ canWrite }: { canWrite: boolean }) {
-  const [concepts, setConcepts] = useState<ChargeConcept[]>([])
-  const [newName, setNewName] = useState('')
-  const [newPrice, setNewPrice] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  const load = () => {
-    configApi
-      .chargeConcepts()
-      .then(setConcepts)
-      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los conceptos.'))
-  }
-  useEffect(load, [])
-
-  async function create() {
-    if (!newName.trim()) return
-    const price = newPrice.trim() === '' ? null : Number(newPrice)
-    if (price != null && !(price >= 0)) return setError('El valor sugerido debe ser un número positivo.')
+  async function save() {
+    if (!form) return
+    const name = form.name.trim()
+    if (!name) return
+    const suggestedPrice = withSuggestedPrice ? (form.suggestedPrice.trim() === '' ? null : Number(form.suggestedPrice)) : undefined
+    if (suggestedPrice != null && !(suggestedPrice >= 0)) {
+      onError('El valor sugerido debe ser un número positivo.')
+      return
+    }
+    setBusy(true)
     try {
-      await configApi.createChargeConcept(newName.trim(), price)
-      setNewName('')
-      setNewPrice('')
-      load()
+      if (form.id) await onUpdate(form.id, withSuggestedPrice ? { name, suggestedPrice } : { name })
+      else await onCreate(name, suggestedPrice ?? null)
+      setForm(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo crear el concepto.')
+      onError(e instanceof Error ? e.message : 'No se pudo guardar.')
+    } finally {
+      setBusy(false)
     }
   }
 
-  async function toggle(it: ChargeConcept) {
+  async function toggle(item: CatalogItem) {
     try {
-      await configApi.updateChargeConcept(it.id, { active: !it.active })
-      load()
+      await onToggle(item)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error')
+      onError(e instanceof Error ? e.message : 'No se pudo cambiar el estado.')
     }
   }
 
-  if (error && concepts.length === 0) return <p class="text-sm text-red-600">{error}</p>
+  async function remove() {
+    if (!deleteTarget) return
+    setBusy(true)
+    try {
+      await onDelete(deleteTarget)
+      setDeleteTarget(null)
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'No se pudo eliminar.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
-    <Card class="p-5">
-      <SectionTitle>Conceptos para "Otros" cargos</SectionTitle>
-      <p class="mb-3 text-xs text-gray-400">
-        Plantillas de cargos extra (ej. Delivery). El valor sugerido solo precarga el monto en la factura: el admin siempre puede ajustarlo. Solo aparecen en la factura si están activos.
-      </p>
-      {error && <p class="mb-2 text-sm text-red-600">{error}</p>}
-      <ul class="divide-y divide-gray-100">
-        {concepts.map((c) => (
-          <li key={c.id} class="flex items-center justify-between py-2">
-            <span class={`text-sm ${c.active ? 'font-medium text-gray-800' : 'text-gray-400 line-through'}`}>
-              {c.name}
-              {c.suggestedPrice != null && <span class="ml-2 text-xs text-gray-400">sugerido: {c.suggestedPrice.toFixed(2)}</span>}
-            </span>
-            {canWrite && (
-              <button
-                type="button"
-                onClick={() => toggle(c)}
-                class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}
-              >
-                {c.active ? 'Activo' : 'Inactivo'}
-              </button>
-            )}
-          </li>
-        ))}
-        {concepts.length === 0 && <li class="py-2 text-sm text-gray-400">Sin conceptos todavía.</li>}
-      </ul>
-      {canWrite && (
-        <div class="mt-3 flex items-end gap-2">
-          <Field label="Nombre">
-            <input class={inputCls} value={newName} placeholder="Ej. Delivery" onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
-          </Field>
-          <Field label="Valor sugerido (opcional)">
-            <input type="number" min="0" step="0.01" class={inputCls} value={newPrice} placeholder="Ej. 3.00" onChange={(e) => setNewPrice((e.target as HTMLInputElement).value)} />
-          </Field>
-          <Button variant="ghost" disabled={!newName.trim()} onClick={create}>
+    <Card class="overflow-hidden">
+      <SectionTitle class="justify-between">
+        <span>{title}</span>
+        {canWrite && (
+          <Button onClick={() => setForm({ name: '', suggestedPrice: '' })}>
             <Plus class="h-4 w-4" aria-hidden="true" />
-            Agregar
+            Nuevo {label}
           </Button>
-        </div>
-      )}
+        )}
+      </SectionTitle>
+      <p class="px-5 pt-3 text-xs text-gray-400">{description}</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
+              <th class="px-5 py-2">Nombre</th>
+              <th class="px-5 py-2">Estado</th>
+              <th class="px-5 py-2 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it) => (
+              <tr key={it.id} class="border-b border-gray-50">
+                <td class={`px-5 py-2 ${it.active ? 'font-medium text-gray-800' : 'text-gray-400 line-through'}`}>
+                  {it.name}
+                  {withSuggestedPrice && it.suggestedPrice != null && <span class="ml-2 text-xs text-gray-400">sugerido: {it.suggestedPrice.toFixed(2)}</span>}
+                </td>
+                <td class="px-5 py-2">
+                  <span class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${it.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {it.active ? 'Activo' : 'Desactivado'}
+                  </span>
+                </td>
+                <td class="px-5 py-2">
+                  {canWrite && (
+                    <div class="flex items-center justify-end gap-1">
+                      <IconButtonSmall label={`Editar ${label}`} onClick={() => setForm({ id: it.id, name: it.name, suggestedPrice: it.suggestedPrice != null ? String(it.suggestedPrice) : '' })}>
+                        <Pencil class="h-4 w-4" />
+                      </IconButtonSmall>
+                      <IconButtonSmall label={it.active ? `Desactivar ${label}` : `Activar ${label}`} onClick={() => toggle(it)}>
+                        {it.active ? <Ban class="h-4 w-4" /> : <UserCheck class="h-4 w-4" />}
+                      </IconButtonSmall>
+                      <IconButtonSmall label={`Eliminar ${label}`} onClick={() => setDeleteTarget(it)} danger>
+                        <Trash2 class="h-4 w-4" />
+                      </IconButtonSmall>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td colspan={3} class="px-5 py-4 text-sm text-gray-400">
+                  Sin elementos.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={form !== null} onClose={() => setForm(null)} title={form?.id ? `Editar ${label}` : `Nuevo ${label}`} size="sm">
+        {form && (
+          <div class="flex flex-col gap-4">
+            <Field label="Nombre">
+              <input class={inputCls} value={form.name} placeholder={`Ej. ${label}`} autoFocus onChange={(e) => setForm({ ...form, name: (e.target as HTMLInputElement).value })} />
+            </Field>
+            {withSuggestedPrice && (
+              <Field label="Valor sugerido (opcional)">
+                <input type="number" min="0" step="0.01" class={inputCls} value={form.suggestedPrice} placeholder="Ej. 3.00" onChange={(e) => setForm({ ...form, suggestedPrice: (e.target as HTMLInputElement).value })} />
+              </Field>
+            )}
+            <div class="mt-2 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setForm(null)} disabled={busy}>
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={busy || !form.name.trim()}>
+                <Save class="h-4 w-4" aria-hidden="true" />
+                {busy ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={remove}
+        title={`Eliminar ${label}`}
+        message={`¿Estás seguro de eliminar "${deleteTarget?.name}"? Esta acción no tiene retorno.`}
+        confirmLabel="Eliminar"
+        loading={busy}
+      />
     </Card>
   )
 }
 
 function PaymentsTab({ canWrite }: { canWrite: boolean }) {
   const [catalogs, setCatalogs] = useState<PaymentCatalogs | null>(null)
+  const [concepts, setConcepts] = useState<ChargeConcept[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const load = () => {
@@ -317,39 +356,56 @@ function PaymentsTab({ canWrite }: { canWrite: boolean }) {
       .paymentCatalogs()
       .then(setCatalogs)
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los catálogos de pago.'))
+    configApi.chargeConcepts().then(setConcepts).catch(() => {})
   }
   useEffect(load, [])
 
   if (error) return <p class="text-sm text-red-600">{error}</p>
   if (!catalogs) return <Spinner label="Cargando métodos de pago…" />
 
+  const fail = (msg: string) => setError(msg)
+
   return (
     <div class="flex flex-col gap-4">
       <div class="grid gap-4 lg:grid-cols-2">
-        <Card class="p-5">
-          <SectionTitle>Métodos de pago</SectionTitle>
-          <CatalogList
-            items={catalogs.methods}
-            canWrite={canWrite}
-            placeholder="Ej. Sinpe móvil"
-            onToggle={(it) =>
-              configApi.updatePaymentMethod(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))
-            }
-            onCreate={(name) => configApi.createPaymentMethod(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
-          />
-        </Card>
-        <Card class="p-5">
-          <SectionTitle>Bancos</SectionTitle>
-          <CatalogList
-            items={catalogs.banks}
-            canWrite={canWrite}
-            placeholder="Ej. BAC"
-            onToggle={(it) => configApi.updatePaymentBank(it.id, { active: !it.active }).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
-            onCreate={(name) => configApi.createPaymentBank(name).then(load).catch((e) => setError(e instanceof Error ? e.message : 'Error'))}
-          />
-        </Card>
+        <CatalogTable
+          title="Métodos de pago"
+          description="Formas de pago que se ofrecen al registrar un pago. Solo las activas se ofrecen."
+          label="método de pago"
+          items={catalogs.methods}
+          canWrite={canWrite}
+          onCreate={(name) => configApi.createPaymentMethod(name).then(load)}
+          onUpdate={(id, patch) => configApi.updatePaymentMethod(id, patch).then(load)}
+          onToggle={(it) => configApi.updatePaymentMethod(it.id, { active: !it.active }).then(load)}
+          onDelete={(it) => configApi.deletePaymentMethod(it.id).then(load)}
+          onError={fail}
+        />
+        <CatalogTable
+          title="Bancos"
+          description="Bancos disponibles para pagos. Solo los activos se ofrecen."
+          label="banco"
+          items={catalogs.banks}
+          canWrite={canWrite}
+          onCreate={(name) => configApi.createPaymentBank(name).then(load)}
+          onUpdate={(id, patch) => configApi.updatePaymentBank(id, patch).then(load)}
+          onToggle={(it) => configApi.updatePaymentBank(it.id, { active: !it.active }).then(load)}
+          onDelete={(it) => configApi.deletePaymentBank(it.id).then(load)}
+          onError={fail}
+        />
       </div>
-      <ConceptosTab canWrite={canWrite} />
+      <CatalogTable
+        title="Conceptos para 'Otros' cargos"
+        description="Plantillas de cargos extra (ej. Delivery). El valor sugerido solo precarga el monto en la factura: el admin siempre puede ajustarlo. Solo aparecen en la factura si están activos."
+        label="concepto"
+        items={concepts}
+        canWrite={canWrite}
+        withSuggestedPrice
+        onCreate={(name, suggestedPrice) => configApi.createChargeConcept(name, suggestedPrice).then(load)}
+        onUpdate={(id, patch) => configApi.updateChargeConcept(id, patch).then(load)}
+        onToggle={(it) => configApi.updateChargeConcept(it.id, { active: !it.active }).then(load)}
+        onDelete={(it) => configApi.deleteChargeConcept(it.id).then(load)}
+        onError={fail}
+      />
     </div>
   )
 }

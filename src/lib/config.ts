@@ -182,14 +182,17 @@ export const configApi = {
   createPaymentMethod: (name: string) => api<PaymentCatalogItem>('/payments/methods', { method: 'POST', body: { name } }),
   updatePaymentMethod: (id: string, patch: { name?: string; active?: boolean }) =>
     api<{ ok: boolean }>(`/payments/methods/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
+  deletePaymentMethod: (id: string) => api<{ ok: boolean }>(`/payments/methods/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   createPaymentBank: (name: string) => api<PaymentCatalogItem>('/payments/banks', { method: 'POST', body: { name } }),
   updatePaymentBank: (id: string, patch: { name?: string; active?: boolean }) =>
     api<{ ok: boolean }>(`/payments/banks/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
+  deletePaymentBank: (id: string) => api<{ ok: boolean }>(`/payments/banks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   chargeConcepts: () => api<ChargeConcept[]>('/concepts'),
   createChargeConcept: (name: string, suggestedPrice: number | null) =>
     api<ChargeConcept>('/concepts', { method: 'POST', body: { name, suggestedPrice } }),
   updateChargeConcept: (id: string, patch: { name?: string; active?: boolean; suggestedPrice?: number | null }) =>
     api<{ ok: boolean }>(`/concepts/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
+  deleteChargeConcept: (id: string) => api<{ ok: boolean }>(`/concepts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   listRates: (organizationId?: string) =>
     api<{ organizationId: string; tables: RateTableInfo[] }>(
       `/rates${organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''}`,
