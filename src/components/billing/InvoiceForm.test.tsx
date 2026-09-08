@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import type { InvoiceView, UnbilledPackage } from '../../lib/billing'
 import InvoiceForm from './InvoiceForm'
@@ -33,15 +33,18 @@ vi.mock('../../lib/billing', () => ({
 
 vi.mock('../../lib/config', () => ({
   configApi: {
-    listRates: vi.fn().mockResolvedValue({ tables: [] }),
+    listRates: vi.fn().mockResolvedValue({ tables: [{ id: 't1', organizationId: 'hit', name: 'Estándar', freightType: 'AIR', createdAt: '', updatedAt: '', rows: [{ tier: 'REGULAR', price: 7, cost: 4.5, priceModel: 'weight' }] }] }),
     chargeConcepts: vi.fn().mockResolvedValue([]),
     info: vi.fn().mockResolvedValue({ slug: 'hit', name: 'HIT Cargo', ruc: null, address: null, phone: null, currency: 'USD', isScrapable: true }),
   },
 }))
 
 vi.mock('../ui/ClientSearch', () => ({
-  default: ({ onSelect }: { onSelect: (c: { id: string; name: string }) => void }) => (
-    <button type="button" onClick={() => onSelect({ id: 'c1', name: 'Ana' })}>select-client</button>
+  default: ({ onSelect }: { onSelect: (c: { id: string; name: string; defaultRateId?: string | null }) => void }) => (
+    <>
+      <button type="button" onClick={() => onSelect({ id: 'c1', name: 'Ana' })}>select-client</button>
+      <button type="button" onClick={() => onSelect({ id: 'c2', name: 'Luis', defaultRateId: 't1' })}>select-client-with-table</button>
+    </>
   ),
 }))
 
@@ -51,6 +54,10 @@ function renderForm() {
   render(<InvoiceForm onClose={onClose} onCreated={onCreated} />)
   return { onCreated, onClose }
 }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -96,6 +103,20 @@ describe('InvoiceForm guided flow', () => {
     expect(payload.packageIds).toEqual(['p1'])
     expect(payload.lines[0]).toMatchObject({ packageId: 'p1', quantityLbs: 3, freightType: 'AIR' })
     expect(onCreated).toHaveBeenCalledWith(createdView)
+  })
+
+  it('preselects the client default rate table on guided freight lines', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderForm()
+    fireEvent.click(screen.getByText('select-client-with-table'))
+    await waitFor(() => expect(unbilledPackages).toHaveBeenCalled())
+    fireEvent.click(screen.getByText('SG-1'))
+    await waitFor(() => expect(screen.getByText('Estándar - Aéreo')).toBeTruthy())
+    fireEvent.click(screen.getByText('Crear factura'))
+    await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
+    const payload = createInvoice.mock.calls[0][0]
+    expect(payload.lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't1' })
   })
 
   it('edit mode keeps linked guides selected and lets the user add more', async () => {

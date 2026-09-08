@@ -66,6 +66,8 @@ export default function InvoiceForm({
   const [concepts, setConcepts] = useState<ChargeConcept[]>([])
   const [clientName, setClientName] = useState(prefill?.clientName ?? '')
   const [clientId, setClientId] = useState<string | null>(prefill?.clientId ?? null)
+  // Client's default rate table — preselects compatible freight lines (server stays the pricing authority).
+  const [clientDefaultRate, setClientDefaultRate] = useState<string | null>(null)
   const [clientPkgs, setClientPkgs] = useState<UnbilledPackage[]>([])
   const [pkgLoading, setPkgLoading] = useState(false)
   const [pkgErr, setPkgErr] = useState<string | null>(null)
@@ -171,6 +173,14 @@ export default function InvoiceForm({
   const tablesFor = (f: FreightType) => rateTables.filter((t) => t.freightType === f)
   const tableLabel = (t: RateTableInfo) => `${t.name} - ${FREIGHT_LABEL[t.freightType]}`
 
+  /** The client's default rate table id when its freight type matches the line's —
+   *  preselects pricing visually; the backend resolves the final price. */
+  const clientDefaultFor = (f: FreightType): string | null => {
+    if (!clientDefaultRate) return null
+    const t = rateTables.find((x) => x.id === clientDefaultRate)
+    return t && t.freightType === f ? t.id : null
+  }
+
   /** Tiers available for a line: the chosen table's rows, catalog fallback when
    *  the agency has no tables for that freight. */
   function tiersFor(freightType: FreightType, rateTableId: string | null): PriceTier[] {
@@ -225,7 +235,7 @@ export default function InvoiceForm({
   }
 
   function addFreightLine() {
-    setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null, packageId: null }])
+    setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: clientDefaultFor('AIR'), guia: null, tracking: null, packageId: null }])
   }
 
   /** Guided flow: select/deselect a package → one freight line per selected package. */
@@ -235,14 +245,15 @@ export default function InvoiceForm({
     setLines((ls) => {
       if (has) return ls.filter((l) => l.packageId !== pkg.packageId)
       if (ls.some((l) => l.packageId === pkg.packageId)) return ls
+      const freightType = pkg.freightType ?? (pkg.serviceType === 'maritimo' ? 'MAR' : 'AIR')
       return [
         ...ls,
         {
-          freightType: pkg.freightType ?? (pkg.serviceType === 'maritimo' ? 'MAR' : 'AIR'),
+          freightType,
           tier: 'REGULAR',
           quantityLbs: String(pkg.weightLb ?? ''),
           description: '',
-          rateTableId: null,
+          rateTableId: clientDefaultFor(freightType),
           guia: pkg.guia,
           tracking: pkg.tracking,
           packageId: pkg.packageId,
@@ -327,6 +338,7 @@ export default function InvoiceForm({
                   setClientName(c.name)
                   if (!isEdit) {
                     setClientId(c.id)
+                    setClientDefaultRate(c.defaultRateId ?? null)
                     setSelectedIds([])
                     setLines([])
                   }
@@ -394,7 +406,11 @@ export default function InvoiceForm({
                   <div class="grid grid-cols-12 items-end gap-2">
                     <label class="col-span-3 text-[11px] text-gray-500">
                       Flete
-                      <select class={`${inputCls} mt-1 w-full`} value={l.freightType} onChange={(e) => setLine(i, { freightType: (e.target as HTMLSelectElement).value as FreightType, rateTableId: null, tier: tiersFor((e.target as HTMLSelectElement).value as FreightType, null)[0] ?? 'REGULAR' })}>
+                      <select class={`${inputCls} mt-1 w-full`} value={l.freightType} onChange={(e) => {
+                        const f = (e.target as HTMLSelectElement).value as FreightType
+                        const tableId = clientDefaultFor(f)
+                        setLine(i, { freightType: f, rateTableId: tableId, tier: tiersFor(f, tableId)[0] ?? 'REGULAR' })
+                      }}>
                         {FREIGHTS.map((f) => <option key={f} value={f}>{FREIGHT_LABEL[f]}</option>)}
                       </select>
                     </label>

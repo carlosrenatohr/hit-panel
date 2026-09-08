@@ -1,4 +1,4 @@
-import { Ban, Pencil, Plus, Save, UserCheck, Users, X } from 'lucide-preact'
+import { Ban, Flag, Pencil, Plus, Save, UserCheck, Users, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi } from '../lib/config'
 import { customerApi, type Customer, type CustomerInput } from '../lib/customer'
@@ -6,8 +6,15 @@ import type { RateTableInfo } from '../lib/config'
 import type { Role } from '../lib/types'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner } from './ui'
 import ClientSearch from './ui/ClientSearch'
+import { MultiSelect } from './ui/MultiSelect'
 
 const PAGE_SIZE = 25
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Activo' },
+  { value: 'inactive', label: 'Desactivado' },
+  { value: 'review', label: 'Revisión' },
+]
 
 export default function Customers({ role }: { role: Role }) {
   const canWrite = role === 'admin' || role === 'billing'
@@ -15,7 +22,7 @@ export default function Customers({ role }: { role: Role }) {
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [reviewOnly, setReviewOnly] = useState(false)
+  const [statuses, setStatuses] = useState<string[]>([])
   const [form, setForm] = useState<(CustomerInput & { id?: string }) | null>(null)
   const [revision, setRevision] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -33,7 +40,7 @@ export default function Customers({ role }: { role: Role }) {
     setLoading(true)
     setError(null)
     customerApi
-      .list({ search: search || undefined, toReview: reviewOnly || undefined, page, pageSize: PAGE_SIZE })
+      .list({ search: search || undefined, statuses: statuses.length ? statuses : undefined, page, pageSize: PAGE_SIZE })
       .then((result) => {
         if (cancelled) return
         setRows(result.rows)
@@ -44,7 +51,7 @@ export default function Customers({ role }: { role: Role }) {
     return () => {
       cancelled = true
     }
-  }, [page, revision, reviewOnly, search])
+  }, [page, revision, statuses, search])
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
@@ -178,10 +185,14 @@ export default function Customers({ role }: { role: Role }) {
             placeholder="Buscar cliente…"
             class="min-w-64 flex-1"
           />
-          <label class="flex items-center gap-2 px-2 text-sm text-gray-600">
-            <input type="checkbox" checked={reviewOnly} onChange={(e) => { setReviewOnly((e.target as HTMLInputElement).checked); setPage(1) }} />
-            Solo revisión
-          </label>
+          <div class="min-w-40">
+            <MultiSelect
+              options={STATUS_OPTIONS}
+              selected={statuses}
+              onChange={(v) => { setStatuses(v); setPage(1) }}
+              placeholder="Estado"
+            />
+          </div>
         </div>
       </Card>
 
@@ -208,13 +219,20 @@ export default function Customers({ role }: { role: Role }) {
                   const inactive = customer.active === false
                   return (
                     <tr key={customer.id} class="border-b border-gray-50">
-                      <td class="px-4 py-2 font-medium text-secondary">{customer.name}</td>
+                      <td class="px-4 py-2 font-medium text-secondary">
+                        <span class="inline-flex items-center gap-1.5">
+                          {customer.name}
+                          {customer.toReview && (
+                            <span title="Requiere revisión" class="inline-flex text-yellow-500">
+                              <Flag class="h-3.5 w-3.5" aria-hidden="true" />
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td class="px-4 py-2 text-gray-500">{customer.casillero || '—'}</td>
                       <td class="px-4 py-2">
                         {inactive ? (
                           <span class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Desactivado</span>
-                        ) : customer.toReview ? (
-                          <span class="rounded-full bg-yellow-50 px-2 py-0.5 text-xs font-medium text-yellow-700">Revisión</span>
                         ) : (
                           <span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Activo</span>
                         )}
