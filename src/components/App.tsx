@@ -19,6 +19,9 @@ export type View = 'overview' | 'shipments' | 'reports' | 'facturacion' | 'custo
 export default function App() {
   const [user, setUser] = useState<SessionUser | null>(null)
   const [loading, setLoading] = useState(true)
+  // Bumped after a package is soft-deleted so the Shipments list refetches
+  // (the deleted row must leave the table without losing filters/page).
+  const [listReload, setListReload] = useState(0)
   const route = useRoute()
   const view = route.view
   const detail = route.guia
@@ -60,7 +63,7 @@ export default function App() {
   return (
     <Shell user={user} view={view} onView={(v) => navigate({ view: v })} onLogout={logout}>
       {view === 'overview' && <Overview user={user} onOpen={(guia) => navigate({ view, guia })} onGoShipments={() => navigate({ view: 'shipments' })} />}
-      {view === 'shipments' && <Shipments user={user} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
+      {view === 'shipments' && <Shipments user={user} refreshToken={listReload} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
       {view === 'reports' && <Reports user={user} />}
       {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
       {view === 'customers' && user.role !== 'viewer' && <Customers role={user.role} />}
@@ -71,7 +74,7 @@ export default function App() {
         />
       )}
       {view === 'configuracion' && user.role !== 'viewer' && <Configuracion user={user} />}
-      {detail && <ShipmentDetail guia={detail} user={user} onClose={() => navigate({ view })} />}
+      {detail && <ShipmentDetail guia={detail} user={user} onClose={() => navigate({ view })} onDeleted={() => setListReload((v) => v + 1)} />}
     </Shell>
   )
 }

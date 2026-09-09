@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/preact';
 import Shipments from './Shipments';
+import { listPackages } from '../lib/insforge';
 
 const mockPkgs = vi.hoisted(() => [
   {
@@ -100,5 +101,15 @@ describe('Shipments', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/2 resultados/).length).toBeGreaterThan(0);
     });
+  });
+
+  it('refetches the list when refreshToken changes (e.g. after a soft delete)', async () => {
+    const { rerender } = render(<Shipments user={mockUser} onOpen={() => {}} refreshToken={0} />);
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThanOrEqual(1));
+    const before = vi.mocked(listPackages).mock.calls.length;
+
+    rerender(<Shipments user={mockUser} onOpen={() => {}} refreshToken={1} />);
+
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before));
   });
 });
