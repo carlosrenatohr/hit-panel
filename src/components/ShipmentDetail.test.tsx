@@ -127,7 +127,8 @@ describe('ShipmentDetail', () => {
 
   it('soft-deletes the package after showing the hard confirmation and closes the detail', async () => {
     const onClose = vi.fn();
-    render(<ShipmentDetail guia="910500" user={adminUser} onClose={onClose} />);
+    const onDeleted = vi.fn();
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={onClose} onDeleted={onDeleted} />);
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByRole('button', { name: /eliminar paquete/i }));
@@ -136,6 +137,7 @@ describe('ShipmentDetail', () => {
 
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Eliminar paquete' })).getByRole('button', { name: 'Eliminar' }));
     await waitFor(() => expect(deletePackage).toHaveBeenCalledWith('910500'));
+    expect(onDeleted).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
 

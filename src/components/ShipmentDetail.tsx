@@ -35,10 +35,13 @@ export default function ShipmentDetail({
   guia,
   user,
   onClose,
+  onDeleted,
 }: {
   guia: string
   user: SessionUser
   onClose: () => void
+  /** Called after a successful soft delete so the parent list can refresh. */
+  onDeleted?: () => void
 }) {
   const [d, setD] = useState<PackageDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -216,6 +219,7 @@ export default function ShipmentDetail({
     try {
       await deletePackage(d.pkg.almacen_id)
       setDeleteOpen(false)
+      onDeleted?.()
       onClose()
     } catch (e) {
       setErr((e as Error)?.message ?? 'No se pudo eliminar el paquete.')

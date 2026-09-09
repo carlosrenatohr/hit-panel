@@ -70,7 +70,7 @@ function pageWindow(current: number, total: number): (number | '…')[] {
   return out
 }
 
-export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen: (guia: string) => void }) {
+export default function Shipments({ user, onOpen, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; refreshToken?: number }) {
   const colPrefs = useColumnPrefs()
   const visibleCols = colPrefs.columns
     .filter((c) => c.visible)
@@ -236,7 +236,7 @@ export default function Shipments({ user, onOpen }: { user: SessionUser; onOpen:
     return () => {
       cancelled = true
     }
-  }, [filters, page])
+  }, [filters, page, refreshToken])
 
   function reload() {
     setLoading(true)

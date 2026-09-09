@@ -110,6 +110,8 @@ describe('Customers', () => {
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Eliminar cliente' })).getByRole('button', { name: 'Eliminar' }))
     await waitFor(() => expect(customerApi.delete).toHaveBeenCalled())
     expect(customerApi.delete).toHaveBeenCalledWith('c1')
+    // The list refetches after a soft delete (revision bump) — the row must leave the table.
+    await waitFor(() => expect(vi.mocked(customerApi.list).mock.calls.length).toBeGreaterThanOrEqual(2))
   })
 
   it('hides the delete action for staff', async () => {
