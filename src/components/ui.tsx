@@ -135,6 +135,21 @@ export function IconButton({
   )
 }
 
+/** Immediate hover tooltip (pure CSS — no JS delay). Wrap an icon-only button. */
+export function Tooltip({ text, children }: { text: string; children: ComponentChildren }) {
+  return (
+    <span class="group relative inline-flex">
+      {children}
+      <span
+        role="tooltip"
+        class="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1.5 hidden w-max max-w-56 -translate-x-1/2 whitespace-normal rounded-lg bg-secondary px-2.5 py-1.5 text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-100 group-hover:block group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
+
 export function Field({ label, children }: { label: string; children: ComponentChildren }) {
   return (
     <label class="flex flex-col gap-1 text-xs font-medium text-gray-500">
