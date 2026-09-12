@@ -167,6 +167,12 @@ export function fmtUsd(n?: number | null): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
+/** Weight in pounds, e.g. 1234.5 -> "1.235 lb". Null/NaN -> "—". */
+export function fmtLbs(n?: number | null): string {
+  if (n == null || isNaN(n)) return '—'
+  return `${Math.round(n).toLocaleString('en-US')} lb`
+}
+
 /** Money with the agency's working currency symbol: $ for USD, C$ for NIO (córdobas). */
 export function fmtMoney(n: number | null | undefined, currency: 'USD' | 'NIO' | undefined): string {
   if (n == null || isNaN(n)) return '—'

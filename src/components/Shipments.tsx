@@ -70,7 +70,7 @@ function pageWindow(current: number, total: number): (number | '…')[] {
   return out
 }
 
-export default function Shipments({ user, onOpen, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; refreshToken?: number }) {
+export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; refreshToken?: number }) {
   const colPrefs = useColumnPrefs()
   const visibleCols = colPrefs.columns
     .filter((c) => c.visible)
@@ -220,6 +220,16 @@ export default function Shipments({ user, onOpen, refreshToken }: { user: Sessio
     }, 350)
     return () => clearTimeout(t)
   }, [searchInput])
+
+  // Seed the search box from the Clientes cards (?cliente=NAME) the first time
+  // the view mounts — a later navigation clears it so the filter isn't sticky.
+  useEffect(() => {
+    if (clientSeed) {
+      setSearchInput(clientSeed)
+      setPage(1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let cancelled = false

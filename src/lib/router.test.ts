@@ -12,20 +12,26 @@ describe('router', () => {
     expect(pathFor('configuracion')).toBe('/configuracion')
   })
 
+  it('carries a ?cliente= seed into /envios and parses it back', () => {
+    expect(pathFor('shipments', null, 'Ana María')).toBe(`/envios?cliente=${encodeURIComponent('Ana María')}`)
+    expect(parseRoute(`/envios?cliente=${encodeURIComponent('Ana María')}`)).toEqual({ view: 'shipments', guia: null, cliente: 'Ana María' })
+    expect(parseRoute('/envios')).toEqual({ view: 'shipments', guia: null, cliente: null })
+  })
+
   it('encodes the detail guia into /envio/:guia and back', () => {
     const guia = '123-456/ABC'
     expect(pathFor('shipments', guia)).toBe(`/envio/${encodeURIComponent(guia)}`)
-    expect(parseRoute(`/envio/${encodeURIComponent(guia)}`)).toEqual({ view: 'shipments', guia })
+    expect(parseRoute(`/envio/${encodeURIComponent(guia)}`)).toEqual({ view: 'shipments', guia, cliente: null })
   })
 
   it('parses unknown paths as overview', () => {
-    expect(parseRoute('/whatever')).toEqual({ view: 'overview', guia: null })
-    expect(parseRoute('/')).toEqual({ view: 'overview', guia: null })
+    expect(parseRoute('/whatever')).toEqual({ view: 'overview', guia: null, cliente: null })
+    expect(parseRoute('/')).toEqual({ view: 'overview', guia: null, cliente: null })
   })
 
   it('falls back to overview on invalid percent-encoding in /envio/:guia', () => {
-    expect(parseRoute('/envio/%zz')).toEqual({ view: 'overview', guia: null })
-    expect(parseRoute('/envio/%E0%A4%A')).toEqual({ view: 'overview', guia: null })
+    expect(parseRoute('/envio/%zz')).toEqual({ view: 'overview', guia: null, cliente: null })
+    expect(parseRoute('/envio/%E0%A4%A')).toEqual({ view: 'overview', guia: null, cliente: null })
   })
 
   it('navigate() pushes state and notifies the route listener', () => {
