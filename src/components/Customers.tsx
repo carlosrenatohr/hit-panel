@@ -1,11 +1,16 @@
-import { Ban, Flag, Pencil, Plus, Save, Trash2, UserCheck, Users } from 'lucide-preact'
+import { Archive, Ban, Flag, History, Pencil, Plus, Save, UserCheck, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
-import { customerApi, type Customer, type CustomerDeletePreview, type CustomerInput } from '../lib/customer'
+import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput } from '../lib/customer'
 import type { Role } from '../lib/types'
-import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, Spinner } from './ui'
+import { navigate } from '../lib/router'
+import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, Spinner, Tooltip } from './ui'
 import ClientSearch from './ui/ClientSearch'
 import { MultiSelect } from './ui/MultiSelect'
+import { DateRangePicker } from './DateRangePicker'
+import CustomerCards from './CustomerCards'
+import { CUSTOMER_COLUMN_DEFS, CustomerColumnPicker, useCustomerColumnPrefs } from './CustomerColumns'
+import CustomerTimeline from './CustomerTimeline'
 
 const PAGE_SIZE = 25
 
@@ -23,13 +28,25 @@ const INVOICE_STATUS_LABEL: Record<string, string> = {
   VOID: 'Anulada',
 }
 
+type CustomersTab = 'clientes' | 'bitacora'
+
 export default function Customers({ role }: { role: Role }) {
   const canWrite = role === 'admin' || role === 'billing'
+  const colPrefs = useCustomerColumnPrefs()
+  const visibleCols = colPrefs.columns
+    .filter((c) => c.visible)
+    .map((c) => CUSTOMER_COLUMN_DEFS.find((d) => d.key === c.key))
+    .filter((d): d is (typeof CUSTOMER_COLUMN_DEFS)[number] => !!d)
+
+  const [tab, setTab] = useState<CustomersTab>('clientes')
   const [rows, setRows] = useState<Customer[]>([])
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [statuses, setStatuses] = useState<string[]>([])
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [stats, setStats] = useState<CustomerAggregateStats | null>(null)
   const [form, setForm] = useState<(CustomerInput & { id?: string }) | null>(null)
   const [revision, setRevision] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -38,9 +55,15 @@ export default function Customers({ role }: { role: Role }) {
   const [error, setError] = useState<string | null>(null)
   const [rateCards, setRateCards] = useState<RateCardInfo[]>([])
   const [confirmAction, setConfirmAction] = useState<{ kind: 'save' } | { kind: 'toggle'; customer: Customer } | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
-  const [deletePreview, setDeletePreview] = useState<CustomerDeletePreview | null>(null)
-  const [deleting, setDeleting] = useState(false)
+  const [archiveTarget, setArchiveTarget] = useState<Customer | null>(null)
+  const [archivePreview, setArchivePreview] = useState<CustomerDeletePreview | null>(null)
+  const [archiving, setArchiving] = useState(false)
+  const [timeline, setTimeline] = useState<{ customer: Customer; events: CustomerEvent[]; loading: boolean } | null>(null)
+  // Global bitácora tab — reuses the config audit trail scoped to clients.
+  const [auditRows, setAuditRows] = useState<CustomerEvent[]>([])
+  const [auditCount, setAuditCount] = useState(0)
+  const [auditPage, setAuditPage] = useState(1)
+  const [auditLoading, setAuditLoading] = useState(false)
 
   useEffect(() => {
     configApi.listRateCards().then(({ cards }) => setRateCards(cards)).catch(() => setRateCards([]))
@@ -51,7 +74,7 @@ export default function Customers({ role }: { role: Role }) {
     setLoading(true)
     setError(null)
     customerApi
-      .list({ search: search || undefined, statuses: statuses.length ? statuses : undefined, page, pageSize: PAGE_SIZE })
+      .list({ search: search || undefined, statuses: statuses.length ? statuses : undefined, from: from || undefined, to: to || undefined, page, pageSize: PAGE_SIZE })
       .then((result) => {
         if (cancelled) return
         setRows(result.rows)
@@ -62,9 +85,40 @@ export default function Customers({ role }: { role: Role }) {
     return () => {
       cancelled = true
     }
-  }, [page, revision, statuses, search])
+  }, [page, revision, statuses, search, from, to])
+
+  // KPI cards follow the same range as the table.
+  useEffect(() => {
+    let cancelled = false
+    customerApi
+      .stats(from || undefined, to || undefined)
+      .then((s) => !cancelled && setStats(s))
+      .catch(() => !cancelled && setStats(null))
+    return () => {
+      cancelled = true
+    }
+  }, [from, to, revision])
+
+  // Global bitácora: all client events, newest first.
+  useEffect(() => {
+    let cancelled = false
+    setAuditLoading(true)
+    configApi
+      .audit({ entityType: 'billing_client', page: auditPage, pageSize: PAGE_SIZE })
+      .then((res) => {
+        if (cancelled) return
+        setAuditRows(res.rows as CustomerEvent[])
+        setAuditCount(res.count)
+      })
+      .catch(() => !cancelled && setAuditRows([]))
+      .finally(() => !cancelled && setAuditLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [auditPage, revision])
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
+  const auditTotalPages = Math.max(1, Math.ceil(auditCount / PAGE_SIZE))
 
   function openCreate() {
     setError(null)
@@ -128,38 +182,63 @@ export default function Customers({ role }: { role: Role }) {
     }
   }
 
-  /** Loads the impact summary first, then opens the delete confirmation with real data. */
-  async function requestDelete(customer: Customer) {
+  /** Loads the impact summary first, then opens the archive confirmation with real data. */
+  async function requestArchive(customer: Customer) {
     setError(null)
     try {
       const preview = await customerApi.deletePreview(customer.id)
-      setDeletePreview(preview)
-      setDeleteTarget(customer)
+      setArchivePreview(preview)
+      setArchiveTarget(customer)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo cargar la vista previa del borrado.')
+      setError(e instanceof Error ? e.message : 'No se pudo cargar el impacto del archivado.')
     }
   }
 
-  async function doDelete() {
-    if (!deleteTarget) return
-    setDeleting(true)
+  async function doArchive() {
+    if (!archiveTarget) return
+    setArchiving(true)
     setError(null)
     try {
-      await customerApi.delete(deleteTarget.id)
-      setDeleteTarget(null)
-      setDeletePreview(null)
+      await customerApi.delete(archiveTarget.id)
+      setArchiveTarget(null)
+      setArchivePreview(null)
       setRevision((value) => value + 1)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo eliminar el cliente.')
+      setError(e instanceof Error ? e.message : 'No se pudo archivar el cliente.')
     } finally {
-      setDeleting(false)
+      setArchiving(false)
     }
+  }
+
+  async function openTimeline(customer: Customer) {
+    setError(null)
+    setTimeline({ customer, events: [], loading: true })
+    try {
+      const { rows } = await customerApi.events(customer.id)
+      setTimeline({ customer, events: rows, loading: false })
+    } catch (e) {
+      setTimeline({ customer, events: [], loading: false })
+      setError(e instanceof Error ? e.message : 'No se pudo cargar la bitácora.')
+    }
+  }
+
+  /** Cards "top cliente" link back to Envíos with that client's name seeded. */
+  function viewClientPackages(name: string) {
+    navigate({ view: 'shipments', cliente: name })
   }
 
   return (
     <div class="space-y-4">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <h1 class="flex items-center gap-2 text-lg font-bold text-secondary"><Users class="h-5 w-5" /> Clientes</h1>
+        <div class="flex items-center gap-1 rounded-lg bg-gray-100 p-0.5">
+          <button type="button" onClick={() => setTab('clientes')} class={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'clientes' ? 'bg-white text-secondary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+            Clientes
+          </button>
+          <button type="button" onClick={() => setTab('bitacora')} class={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'bitacora' ? 'bg-white text-secondary shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+            <History class="h-3.5 w-3.5" aria-hidden="true" /> Bitácora
+          </button>
+        </div>
         {canWrite && <Button onClick={openCreate}><Plus class="h-4 w-4" /> Nuevo cliente</Button>}
       </div>
 
@@ -236,31 +315,31 @@ export default function Customers({ role }: { role: Role }) {
       />
 
       <ConfirmDialog
-        open={deleteTarget !== null}
-        onClose={() => { setDeleteTarget(null); setDeletePreview(null) }}
-        onConfirm={doDelete}
-        title="Eliminar cliente"
+        open={archiveTarget !== null}
+        onClose={() => { setArchiveTarget(null); setArchivePreview(null) }}
+        onConfirm={doArchive}
+        title="Archivar cliente"
         message={
           <div class="space-y-3">
-            <p class="text-sm font-semibold text-red-700">
-              Vas a eliminar a «{deleteTarget?.name}». Esta acción no tiene vuelta atrás.
+            <p class="text-sm font-semibold text-amber-700">
+              Vas a archivar a «{archiveTarget?.name}». Se oculta de la operación (sin borrarlo) y sus paquetes/facturas dejan de mostrarse. Podés deshacerlo reactivando el cliente.
             </p>
-            {deletePreview ? (
+            {archivePreview ? (
               <div class="space-y-3 text-sm text-gray-600">
                 <div>
-                  {deletePreview.packageCount > 0 ? (
+                  {archivePreview.packageCount > 0 ? (
                     <>
                       <p class="font-medium text-gray-800">
-                        {deletePreview.packageCount} paquete{deletePreview.packageCount === 1 ? '' : 's'} relacionado{deletePreview.packageCount === 1 ? '' : 's'}:
+                        {archivePreview.packageCount} paquete{archivePreview.packageCount === 1 ? '' : 's'} relacionado{archivePreview.packageCount === 1 ? '' : 's'}:
                       </p>
                       <ul class="ml-4 list-disc">
-                        {deletePreview.packages.map((p, i) => (
+                        {archivePreview.packages.map((p, i) => (
                           <li key={i} class="font-mono text-xs text-gray-500">
                             {p.guia ?? '—'}{p.tracking ? ` · ${p.tracking}` : ''}
                           </li>
                         ))}
-                        {deletePreview.packageCount > deletePreview.packages.length && (
-                          <li class="text-xs text-gray-400">+ {deletePreview.packageCount - deletePreview.packages.length} más</li>
+                        {archivePreview.packageCount > archivePreview.packages.length && (
+                          <li class="text-xs text-gray-400">+ {archivePreview.packageCount - archivePreview.packages.length} más</li>
                         )}
                       </ul>
                     </>
@@ -269,19 +348,19 @@ export default function Customers({ role }: { role: Role }) {
                   )}
                 </div>
                 <div>
-                  {deletePreview.invoiceCount > 0 ? (
+                  {archivePreview.invoiceCount > 0 ? (
                     <>
                       <p class="font-medium text-gray-800">
-                        {deletePreview.invoiceCount} factura{deletePreview.invoiceCount === 1 ? '' : 's'} relacionada{deletePreview.invoiceCount === 1 ? '' : 's'}:
+                        {archivePreview.invoiceCount} factura{archivePreview.invoiceCount === 1 ? '' : 's'} relacionada{archivePreview.invoiceCount === 1 ? '' : 's'}:
                       </p>
                       <ul class="ml-4 list-disc">
-                        {deletePreview.invoices.map((inv, i) => (
+                        {archivePreview.invoices.map((inv, i) => (
                           <li key={i} class="font-mono text-xs text-gray-500">
                             {inv.fiscalYear}-{inv.invoiceNumber} · {INVOICE_STATUS_LABEL[inv.status] ?? inv.status}
                           </li>
                         ))}
-                        {deletePreview.invoiceCount > deletePreview.invoices.length && (
-                          <li class="text-xs text-gray-400">+ {deletePreview.invoiceCount - deletePreview.invoices.length} más</li>
+                        {archivePreview.invoiceCount > archivePreview.invoices.length && (
+                          <li class="text-xs text-gray-400">+ {archivePreview.invoiceCount - archivePreview.invoices.length} más</li>
                         )}
                       </ul>
                     </>
@@ -295,101 +374,155 @@ export default function Customers({ role }: { role: Role }) {
             )}
           </div>
         }
-        confirmLabel="Eliminar"
-        loading={deleting}
+        confirmLabel="Archivar"
+        loading={archiving}
       />
 
-      <Card class="p-3">
-        <div class="flex flex-wrap gap-2">
-          <ClientSearch
-            value={search}
-            includeInactive
-            onSelect={(c) => { setSearch(c.name); setPage(1) }}
-            onClear={() => { setSearch(''); setPage(1) }}
-            placeholder="Buscar cliente…"
-            class="min-w-64 flex-1"
-          />
-          <div class="min-w-40">
-            <MultiSelect
-              options={STATUS_OPTIONS}
-              selected={statuses}
-              onChange={(v) => { setStatuses(v); setPage(1) }}
-              placeholder="Estado"
-            />
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle class="justify-between"><span>{count} clientes</span><span class="text-xs font-normal text-gray-400">Página {page} de {totalPages}</span></SectionTitle>
-        {loading ? (
-          <div class="p-6"><Spinner label="Cargando clientes…" /></div>
-        ) : rows.length === 0 ? (
-          <div class="p-6 text-sm text-gray-400">No hay clientes para estos filtros.</div>
+      {/* ── Per-client timeline modal ── */}
+      <Modal open={timeline !== null} onClose={() => setTimeline(null)} title={timeline ? `Bitácora · ${timeline.customer.name}` : ''}>
+        {timeline?.loading ? (
+          <div class="p-6"><Spinner label="Cargando bitácora…" /></div>
         ) : (
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
-              <thead>
-                <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
-                  <th class="px-4 py-2">Nombre</th>
-                  <th class="px-4 py-2">Casillero</th>
-                  <th class="px-4 py-2">Estado</th>
-                  <th class="px-4 py-2 text-center">Paquetes</th>
-                  <th class="px-4 py-2 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((customer) => {
-                  const inactive = customer.active === false
-                  return (
-                    <tr key={customer.id} class="border-b border-gray-50">
-                      <td class="px-4 py-2 font-medium text-secondary">
-                        <span class="inline-flex items-center gap-1.5">
-                          {customer.name}
-                          {customer.toReview && (
-                            <span title="Requiere revisión" class="inline-flex text-yellow-500">
-                              <Flag class="h-3.5 w-3.5" aria-hidden="true" />
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td class="px-4 py-2 text-gray-500">{customer.casillero || '—'}</td>
-                      <td class="px-4 py-2">
-                        {inactive ? (
-                          <span class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Desactivado</span>
-                        ) : (
-                          <span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Activo</span>
-                        )}
-                      </td>
-                      <td class="px-4 py-2 text-center">
-                        <span class="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{customer.packageCount ?? 0}</span>
-                      </td>
-                      <td class="px-4 py-2">
-                        {canWrite && (
-                          <div class="flex items-center justify-end gap-2">
-                            <button class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100" onClick={() => openEdit(customer)}><Pencil class="h-3.5 w-3.5" /> Editar</button>
-                            <button
-                              class={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs hover:bg-gray-100 ${inactive ? 'text-green-700' : 'text-red-700'}`}
-                              disabled={actionId === customer.id}
-                              onClick={() => requestToggle(customer)}
-                            >
-                              {inactive ? <><UserCheck class="h-3.5 w-3.5" /> Reactivar</> : <><Ban class="h-3.5 w-3.5" /> Deshabilitar</>}
-                            </button>
-                            <button class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-600 hover:bg-red-50" onClick={() => requestDelete(customer)}>
-                              <Trash2 class="h-3.5 w-3.5" /> Eliminar
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div class="max-h-[60vh] overflow-y-auto scroll-thin">
+            <CustomerTimeline events={timeline?.events ?? []} />
           </div>
         )}
-        {totalPages > 1 && <div class="flex justify-center gap-2 border-t border-gray-100 p-3"><Button variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Anterior</Button><Button variant="ghost" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Siguiente</Button></div>}
-      </Card>
+      </Modal>
+
+      {tab === 'bitacora' ? (
+        <Card>
+          <SectionTitle class="justify-between"><span>Bitácora de clientes</span><span class="text-xs font-normal text-gray-400">Página {auditPage} de {auditTotalPages}</span></SectionTitle>
+          {auditLoading ? (
+            <div class="p-6"><Spinner label="Cargando bitácora…" /></div>
+          ) : auditRows.length === 0 ? (
+            <div class="p-6 text-sm text-gray-400">Sin eventos registrados.</div>
+          ) : (
+            <div class="max-h-[70vh] overflow-y-auto px-3">
+              <CustomerTimeline events={auditRows} />
+            </div>
+          )}
+          {auditTotalPages > 1 && <div class="flex justify-center gap-2 border-t border-gray-100 p-3"><Button variant="ghost" disabled={auditPage <= 1} onClick={() => setAuditPage((value) => value - 1)}>Anterior</Button><Button variant="ghost" disabled={auditPage >= auditTotalPages} onClick={() => setAuditPage((value) => value + 1)}>Siguiente</Button></div>}
+        </Card>
+      ) : (
+        <>
+          <Card class="p-3">
+            <div class="flex flex-wrap gap-2">
+              <ClientSearch
+                value={search}
+                includeInactive
+                onSelect={(c) => { setSearch(c.name); setPage(1) }}
+                onClear={() => { setSearch(''); setPage(1) }}
+                placeholder="Buscar cliente…"
+                class="min-w-64 flex-1"
+              />
+              <div class="min-w-40">
+                <MultiSelect
+                  options={STATUS_OPTIONS}
+                  selected={statuses}
+                  onChange={(v) => { setStatuses(v); setPage(1) }}
+                  placeholder="Estado"
+                />
+              </div>
+              <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f ?? ''); setTo(t ?? ''); setPage(1) }} />
+              <CustomerColumnPicker prefs={colPrefs} />
+            </div>
+          </Card>
+
+          {stats && <CustomerCards stats={stats} onViewClient={viewClientPackages} />}
+
+          <Card>
+            <SectionTitle class="justify-between"><span>{count} clientes</span><span class="text-xs font-normal text-gray-400">Página {page} de {totalPages}</span></SectionTitle>
+            {loading ? (
+              <div class="p-6"><Spinner label="Cargando clientes…" /></div>
+            ) : rows.length === 0 ? (
+              <div class="p-6 text-sm text-gray-400">No hay clientes para estos filtros.</div>
+            ) : (
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                  <thead>
+                    <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
+                      <th class="px-4 py-2">Nombre</th>
+                      {visibleCols.map((col) => (
+                        <th key={col.key} class="px-4 py-2">{col.label}</th>
+                      ))}
+                      <th class="px-4 py-2">Estado</th>
+                      <th class="px-4 py-2 text-center">Paquetes</th>
+                      <th class="px-4 py-2 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((customer) => {
+                      const inactive = customer.active === false
+                      return (
+                        <tr key={customer.id} class="border-b border-gray-50">
+                          <td class="px-4 py-2 font-medium text-secondary">
+                            <span class="inline-flex items-center gap-1.5">
+                              {customer.name}
+                              {customer.toReview && (
+                                <span title="Requiere revisión" class="inline-flex text-yellow-500">
+                                  <Flag class="h-3.5 w-3.5" aria-hidden="true" />
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          {visibleCols.map((col) => (
+                            <td key={col.key} class="px-4 py-2">{col.render(customer)}</td>
+                          ))}
+                          <td class="px-4 py-2">
+                            {inactive ? (
+                              <span class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Desactivado</span>
+                            ) : (
+                              <span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Activo</span>
+                            )}
+                          </td>
+                          <td class="px-4 py-2 text-center">
+                            <span class="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{customer.packageCount ?? 0}</span>
+                          </td>
+                          <td class="px-4 py-2">
+                            <div class="flex items-center justify-end gap-1">
+                              <Tooltip text="Ver bitácora de este cliente">
+                                <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700" aria-label="Ver bitácora" onClick={() => openTimeline(customer)}>
+                                  <History class="h-4 w-4" />
+                                </button>
+                              </Tooltip>
+                              {canWrite && (
+                                <>
+                                  <Tooltip text="Editar datos del cliente">
+                                    <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700" aria-label="Editar cliente" onClick={() => openEdit(customer)}>
+                                      <Pencil class="h-4 w-4" />
+                                    </button>
+                                  </Tooltip>
+                                  <Tooltip text={inactive ? 'Reactivar cliente: sus paquetes vuelven a aparecer' : 'Deshabilitar cliente: oculta sus paquetes del dashboard'}>
+                                    <button
+                                      type="button"
+                                      class={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 ${inactive ? 'text-green-700' : 'text-gray-400 hover:text-gray-700'}`}
+                                      aria-label={inactive ? 'Reactivar cliente' : 'Deshabilitar cliente'}
+                                      disabled={actionId === customer.id}
+                                      onClick={() => requestToggle(customer)}
+                                    >
+                                      {inactive ? <UserCheck class="h-4 w-4" /> : <Ban class="h-4 w-4" />}
+                                    </button>
+                                  </Tooltip>
+                                  <Tooltip text="Archivar cliente: lo oculta sin borrarlo (paquetes y facturas dejan de mostrarse)">
+                                    <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label="Archivar cliente" onClick={() => requestArchive(customer)}>
+                                      <Archive class="h-4 w-4" />
+                                    </button>
+                                  </Tooltip>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {totalPages > 1 && <div class="flex justify-center gap-2 border-t border-gray-100 p-3"><Button variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Anterior</Button><Button variant="ghost" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Siguiente</Button></div>}
+          </Card>
+        </>
+      )}
     </div>
   )
 }
