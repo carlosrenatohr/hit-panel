@@ -23,6 +23,14 @@ export interface Customer {
   active?: boolean
   /** Total packages related to this client (derived from packages.client_id). */
   packageCount?: number
+  /** Summed weight (lb) of marítimo packages within the filter range. */
+  weightMaritimo?: number
+  /** Summed weight (lb) of aéreo packages within the filter range. */
+  weightAereo?: number
+  /** Count of marítimo packages within the filter range. */
+  countMaritimo?: number
+  /** Count of aéreo packages within the filter range. */
+  countAereo?: number
 }
 
 export interface CustomerFilters {
@@ -30,8 +38,38 @@ export interface CustomerFilters {
   /** Lifecycle statuses (active|inactive|review), OR'd. Omitted = all clients. */
   statuses?: string[]
   toReview?: boolean
+  /** Reception-date range (received_at), same semantics as the Shipments filter. */
+  from?: string
+  to?: string
   page?: number
   pageSize?: number
+}
+
+/** KPI-card aggregates for the whole agency within a date range. */
+export interface CustomerAggregateStats {
+  totalWeightLb: number
+  weightMaritimo: number
+  weightAereo: number
+  packageCountTotal: number
+  packageCountMaritimo: number
+  packageCountAereo: number
+  topMaritimo: { clientId: string; name: string; weightLb: number } | null
+  topAereo: { clientId: string; name: string; weightLb: number } | null
+}
+
+/** One event on a client's timeline (from audit_logs). */
+export interface CustomerEvent {
+  id: string
+  organizationId: string
+  actorId: string | null
+  actorEmail: string | null
+  actorType: string
+  action: string
+  entityType: string
+  entityId: string | null
+  requestId: string | null
+  metadata: Record<string, unknown> | null
+  createdAt: string
 }
 
 export interface CustomerInput {
@@ -77,6 +115,11 @@ export const customerApi = {
   get: (id: string) => workerApi<Customer>(`${API_BASE}/api/customer/clients/${id}`),
   create: (input: CustomerInput) => workerApi<Customer>(`${API_BASE}/api/customer/clients`, { method: 'POST', body: input }),
   update: (id: string, input: Partial<CustomerInput>) => workerApi<Customer>(`${API_BASE}/api/customer/clients/${id}`, { method: 'PATCH', body: input }),
+  /** KPI aggregates for the client cards (weights + package counts + top clients). */
+  stats: (from?: string, to?: string) => workerApi<CustomerAggregateStats>(`${API_BASE}/api/customer/stats${qs({ from, to })}`),
+  /** Event timeline for a single client (audit_logs). */
+  events: (id: string, page = 1, pageSize = 50) =>
+    workerApi<{ rows: CustomerEvent[]; count: number }>(`${API_BASE}/api/customer/clients/${id}/events${qs({ page, pageSize })}`),
   /** Impact summary (packages + invoices) shown before confirming a delete. */
   deletePreview: (id: string) => workerApi<CustomerDeletePreview>(`${API_BASE}/api/customer/clients/${id}/delete-preview`),
   /** Soft delete (never physical) — hides the client from operational reads. */

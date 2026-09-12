@@ -10,7 +10,10 @@ const clients = vi.hoisted(() => [
 ])
 
 vi.mock('../lib/config', () => ({
-  configApi: { listRateCards: vi.fn().mockResolvedValue({ organizationId: 'hit', cards: [] }) },
+  configApi: {
+    listRateCards: vi.fn().mockResolvedValue({ organizationId: 'hit', cards: [] }),
+    audit: vi.fn().mockResolvedValue({ organizationId: 'hit', rows: [], count: 0 }),
+  },
 }))
 
 vi.mock('../lib/customer', () => ({
@@ -19,6 +22,13 @@ vi.mock('../lib/customer', () => ({
     create: vi.fn(),
     update: vi.fn(),
     get: vi.fn(),
+    stats: vi.fn().mockResolvedValue({
+      totalWeightLb: 100, weightMaritimo: 60, weightAereo: 40,
+      packageCountTotal: 12, packageCountMaritimo: 7, packageCountAereo: 5,
+      topMaritimo: { clientId: 'c1', name: 'Ana', weightLb: 50 },
+      topAereo: null,
+    }),
+    events: vi.fn().mockResolvedValue({ rows: [], count: 0 }),
     deletePreview: vi.fn().mockResolvedValue({
       client: clients[0],
       packages: [{ guia: '926791', tracking: 'TRK1' }, { guia: '926845', tracking: null }],
@@ -28,6 +38,10 @@ vi.mock('../lib/customer', () => ({
     }),
     delete: vi.fn(),
   },
+}))
+
+vi.mock('../lib/router', () => ({
+  navigate: vi.fn(),
 }))
 
 describe('Customers', () => {
@@ -90,33 +104,61 @@ describe('Customers', () => {
   it('editing a client preloads its fields', async () => {
     render(<Customers role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
-    fireEvent.click(screen.getAllByText('Editar')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /editar cliente/i })[0])
     expect(screen.getByLabelText('Nombre')).toHaveValue('Ana')
     expect(screen.getByLabelText('Casillero')).toHaveValue('5012')
   })
 
-  it('deletes a client after showing the impact preview and confirming', async () => {
+  it('archives a client after showing the impact preview and confirming', async () => {
     render(<Customers role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
 
-    fireEvent.click(screen.getAllByRole('button', { name: /eliminar/i })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /archivar cliente/i })[0])
 
-    await waitFor(() => expect(screen.getByText(/no tiene vuelta atrás/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/se oculta de la operación/i)).toBeInTheDocument())
     expect(screen.getByText('3 paquetes relacionados:')).toBeInTheDocument()
     expect(screen.getByText('926791 · TRK1')).toBeInTheDocument()
     expect(screen.getByText('2 facturas relacionadas:')).toBeInTheDocument()
     expect(screen.getByText('2026-104 · Pagada')).toBeInTheDocument()
 
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Eliminar cliente' })).getByRole('button', { name: 'Eliminar' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Archivar cliente' })).getByRole('button', { name: 'Archivar' }))
     await waitFor(() => expect(customerApi.delete).toHaveBeenCalled())
     expect(customerApi.delete).toHaveBeenCalledWith('c1')
     // The list refetches after a soft delete (revision bump) — the row must leave the table.
     await waitFor(() => expect(vi.mocked(customerApi.list).mock.calls.length).toBeGreaterThanOrEqual(2))
   })
 
-  it('hides the delete action for staff', async () => {
+  it('hides the archive action for staff', async () => {
     render(<Customers role="staff" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /eliminar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /archivar cliente/i })).not.toBeInTheDocument()
+  })
+
+  it('renders the KPI cards with the top client linking to Envíos', async () => {
+    const { navigate } = await import('../lib/router')
+    render(<Customers role="admin" />)
+    await waitFor(() => expect(screen.getByText('Libras facturadas')).toBeInTheDocument())
+    expect(screen.getByText('100 lb')).toBeInTheDocument()
+    expect(screen.getByText('Top cliente marítimo')).toBeInTheDocument()
+    const link = screen.getByRole('button', { name: /ver paquetes de ana/i })
+    expect(link).toBeInTheDocument()
+    fireEvent.click(link)
+    expect(navigate).toHaveBeenCalledWith({ view: 'shipments', cliente: 'Ana' })
+  })
+
+  it('shows the per-client timeline modal when opening the bitácora', async () => {
+    const evt = { id: '1', organizationId: 'hit', actorId: 'u1', actorEmail: 'a@t.com', actorType: 'user', action: 'client.update', entityType: 'billing_client', entityId: 'c1', requestId: null, metadata: {}, createdAt: '2026-09-10T00:00:00Z' }
+    vi.mocked(customerApi.events).mockResolvedValueOnce({ rows: [evt], count: 1 })
+    render(<Customers role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByRole('button', { name: /ver bitácora/i })[0])
+    await waitFor(() => expect(screen.getByText('Datos actualizados')).toBeInTheDocument())
+  })
+
+  it('switches to the global Bitácora tab listing client events', async () => {
+    render(<Customers role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Bitácora' }))
+    await waitFor(() => expect(screen.getByText('Bitácora de clientes')).toBeInTheDocument())
   })
 })
