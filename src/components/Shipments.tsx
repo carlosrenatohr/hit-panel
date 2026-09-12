@@ -11,7 +11,6 @@ import {
   officeFlag,
   providerLabel,
   SERVICE_EMOJI,
-  STATUS_LABEL,
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
@@ -19,6 +18,7 @@ import { createPackage, exportPackages, getProviders, listPackages } from '../li
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, ShipmentStatus, SessionUser } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
+import LifecycleOverview, { type ServiceFilter } from './shipments/LifecycleOverview'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
 import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
@@ -86,6 +86,9 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
   const [rows, setRows] = useState<Pkg[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  // Per-status totals for the lifecycle cards (see the summary effect below).
+  const [summary, setSummary] = useState<Partial<Record<ShipmentStatus, number>>>({})
+  const [summaryLoading, setSummaryLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [showCal, setShowCal] = useState(false)
@@ -257,6 +260,44 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
       .finally(() => setLoading(false))
   }
 
+  // Per-status totals for the lifecycle cards: one lightweight count-read per status (pageSize:1),
+  // same pattern Reports uses for its period comparison. Respects the transport tab and the other
+  // top-level filters, but NEVER the active status — so every counter stays visible while a card
+  // filters the table. Keyed on the raw filter fields, not `filters`, so page/sort changes don't
+  // refire the counters.
+  useEffect(() => {
+    let cancelled = false
+    setSummaryLoading(true)
+    const base: ListFilters = {
+      organizationId: selectedOrg,
+      search: filters.search,
+      providerId: filters.providerId,
+      service: filters.service,
+      from: filters.from,
+      to: filters.to,
+    }
+    Promise.all(
+      STATUS_ORDER.map((s) =>
+        listPackages({ ...base, statuses: [s], page: 1, pageSize: 1 }).then((r) => [s, r.count] as const),
+      ),
+    )
+      .then((rows) => {
+        if (cancelled) return
+        const next: Partial<Record<ShipmentStatus, number>> = {}
+        for (const [s, c] of rows) next[s] = c
+        setSummary(next)
+      })
+      .catch(() => {
+        if (!cancelled) setSummary({})
+      })
+      .finally(() => {
+        if (!cancelled) setSummaryLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [filters.search, filters.providerId, filters.service, filters.from, filters.to, selectedOrg])
+
   function patch(p: Partial<ListFilters>) {
     setFilters((f) => ({ ...f, ...p }))
     setPage(1)
@@ -356,6 +397,15 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
         </div>
       </div>
 
+      <LifecycleOverview
+        counts={summary}
+        loading={summaryLoading}
+        activeStatus={filters.status as ShipmentStatus | undefined}
+        service={(filters.service ?? 'all') as ServiceFilter}
+        onServiceChange={(v) => patch({ service: v === 'all' ? undefined : v })}
+        onStatusChange={(s) => patch({ status: s })}
+      />
+
       {showCal && (
         <MonthCalendar
           title="Recepción en Miami por día"
@@ -366,7 +416,7 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
 
       {/* Filters */}
       <Card class="p-4">
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-7">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <div class="relative col-span-2 lg:col-span-2">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
             <input
@@ -383,19 +433,6 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
                 {providerLabel(p.code)}
               </option>
             ))}
-          </select>
-          <select class={inputCls} onChange={(e) => patch({ status: (e.target as HTMLSelectElement).value || undefined })}>
-            <option value="">Todos los estados</option>
-            {STATUS_ORDER.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
-          <select class={inputCls} onChange={(e) => patch({ service: (e.target as HTMLSelectElement).value || undefined })}>
-            <option value="">Aéreo y marítimo</option>
-            <option value="aereo">Aéreo</option>
-            <option value="maritimo">Marítimo</option>
           </select>
           <select
             class={inputCls}
