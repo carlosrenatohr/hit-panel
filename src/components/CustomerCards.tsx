@@ -1,9 +1,8 @@
-import { Anchor, Package, Plane, Scale, Trophy, Users } from 'lucide-preact'
+import { Anchor, GripVertical, Package, Plane, Scale, Search, SlidersHorizontal, Trophy, Users, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import type { CustomerAggregateStats } from '../lib/customer'
 import { fmtLbs } from '../lib/format'
-import { Card } from './ui'
-import { MultiSelect } from './ui/MultiSelect'
+import { Button, Card, IconButton, inputCls } from './ui'
 
 interface CardDef {
   key: string
@@ -12,7 +11,6 @@ interface CardDef {
   render: (s: CustomerAggregateStats) => string | null
 }
 
-/** KPI card catalog — each entry is toggleable from the "Tarjetas" multiselect. */
 const CARD_DEFS: CardDef[] = [
   { key: 'librasTotal', label: 'Libras facturadas', icon: Scale, render: (s) => fmtLbs(s.totalWeightLb) },
   { key: 'librasMaritimo', label: 'Libras marítimo', icon: Anchor, render: (s) => fmtLbs(s.weightMaritimo) },
@@ -22,28 +20,27 @@ const CARD_DEFS: CardDef[] = [
   { key: 'paquetesAereo', label: 'Paquetes aéreo', icon: Plane, render: (s) => String(s.packageCountAereo) },
 ]
 
-const CARD_OPTIONS = [
-  ...CARD_DEFS.map((d) => ({ value: d.key, label: d.label })),
-  { value: 'topMaritimo', label: 'Top cliente marítimo' },
-  { value: 'topAereo', label: 'Top cliente aéreo' },
+const ALL_CARD_OPTIONS = [
+  ...CARD_DEFS.map((d) => ({ key: d.key, label: d.label })),
+  { key: 'topMaritimo', label: 'Top cliente marítimo' },
+  { key: 'topAereo', label: 'Top cliente aéreo' },
 ]
 
-const DEFAULT_HIDDEN_CARDS = new Set(['paquetesMaritimo', 'paquetesAereo'])
+const DEFAULT_HIDDEN = new Set(['paquetesMaritimo', 'paquetesAereo'])
 const STORAGE_KEY = 'hit-panel:customers:cards:v1'
 
 function loadHidden(): string[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return [...DEFAULT_HIDDEN_CARDS]
+    if (!raw) return [...DEFAULT_HIDDEN]
     const saved = JSON.parse(raw) as string[]
-    const known = new Set(CARD_OPTIONS.map((o) => o.value))
+    const known = new Set(ALL_CARD_OPTIONS.map((o) => o.key))
     return saved.filter((v) => known.has(v))
   } catch {
-    return [...DEFAULT_HIDDEN_CARDS]
+    return [...DEFAULT_HIDDEN]
   }
 }
 
-/** Top client card with a link back to Envíos filtered by that client's name. */
 function TopClientCard({ title, top, onViewClient }: { title: string; top: { name: string; weightLb: number } | null; onViewClient: (name: string) => void }) {
   return (
     <Card class="flex flex-col p-4">
@@ -65,9 +62,93 @@ function TopClientCard({ title, top, onViewClient }: { title: string; top: { nam
   )
 }
 
-/** Responsive KPI grid — the module's summary cards, toggleable by the user. */
+function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => void; hidden: string[]; onApply: (next: string[]) => void }) {
+  const [draft, setDraft] = useState<string[]>(hidden)
+  const [search, setSearch] = useState('')
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+
+  function toggleDraft(key: string) {
+    setDraft((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])
+  }
+
+  function reorderDraft(from: number, to: number) {
+    setDraft((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  const q = search.trim().toLowerCase()
+  const filtered = ALL_CARD_OPTIONS.filter((c) => !q || c.label.toLowerCase().includes(q))
+
+  return (
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div class="w-full max-w-sm rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div class="border-b border-gray-100 p-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-base font-bold text-secondary">Personalizar tarjetas</h2>
+            <IconButton label="Cerrar" onClick={onClose}>
+              <X class="h-4 w-4" aria-hidden="true" />
+            </IconButton>
+          </div>
+          <p class="mt-0.5 text-xs text-gray-500">Elegí qué tarjetas KPI se muestran en el resumen.</p>
+        </div>
+
+        <div class="p-3">
+          <div class="relative mb-2">
+            <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+            <input
+              class={`${inputCls} w-full pl-8 text-sm`}
+              placeholder="Buscar tarjeta…"
+              value={search}
+              onInput={(e) => setSearch((e.target as HTMLInputElement).value)}
+            />
+          </div>
+
+          <div class="scroll-thin max-h-72 overflow-y-auto">
+            <ul>
+              {filtered.map((c, i) => (
+                <li
+                  key={c.key}
+                  draggable
+                  onDragStart={() => setDragIdx(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragIdx !== null && dragIdx !== i) reorderDraft(dragIdx, i)
+                    setDragIdx(null)
+                  }}
+                  class="flex cursor-grab items-center gap-2 rounded-lg px-2 py-2 active:cursor-grabbing hover:bg-gray-50"
+                >
+                  <GripVertical class="h-4 w-4 shrink-0 text-gray-300" aria-hidden="true" />
+                  <label class="flex flex-1 items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={!draft.includes(c.key)} onChange={() => toggleDraft(c.key)} />
+                    {c.label}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between border-t border-gray-100 p-3">
+          <button type="button" class="text-xs font-medium text-primary hover:underline" onClick={() => setDraft([...DEFAULT_HIDDEN])}>
+            Restablecer
+          </button>
+          <div class="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button onClick={() => { onApply(draft); onClose() }}>Guardar</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CustomerCards({ stats, onViewClient }: { stats: CustomerAggregateStats; onViewClient: (name: string) => void }) {
   const [hidden, setHidden] = useState<string[]>(loadHidden)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(hidden))
@@ -83,9 +164,9 @@ export default function CustomerCards({ stats, onViewClient }: { stats: Customer
         <span class="flex items-center gap-1.5 text-xs font-medium text-gray-400">
           <Users class="h-3.5 w-3.5" aria-hidden="true" /> Resumen del rango
         </span>
-        <div class="w-44">
-          <MultiSelect options={CARD_OPTIONS} selected={hidden} onChange={setHidden} placeholder="Tarjetas" />
-        </div>
+        <Button variant="ghost" onClick={() => setPickerOpen(true)}>
+          <SlidersHorizontal class="h-4 w-4" aria-hidden="true" /> Tarjetas
+        </Button>
       </div>
       <div class="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
         {metricCards.map((d) => {
@@ -106,6 +187,9 @@ export default function CustomerCards({ stats, onViewClient }: { stats: Customer
         {showTopMar && <TopClientCard title="Top cliente marítimo" top={stats.topMaritimo} onViewClient={onViewClient} />}
         {showTopAer && <TopClientCard title="Top cliente aéreo" top={stats.topAereo} onViewClient={onViewClient} />}
       </div>
+      {pickerOpen && (
+        <CardPickerModal onClose={() => setPickerOpen(false)} hidden={hidden} onApply={setHidden} />
+      )}
     </div>
   )
 }

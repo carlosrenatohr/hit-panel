@@ -49,14 +49,15 @@ describe('Customers', () => {
     vi.clearAllMocks()
   })
 
-  it('renders clients with lifecycle statuses and package counts', async () => {
+  it('renders clients with package counts and status icons', async () => {
     render(<Customers role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     expect(screen.getByText('Luis')).toBeInTheDocument()
     expect(screen.getByText('Sara')).toBeInTheDocument()
-    expect(screen.getAllByText('Activo').length).toBeGreaterThan(0)
+    // Inactive client has a "Deshabilitado" Ban icon next to the name.
+    expect(screen.getAllByTitle('Deshabilitado').length).toBeGreaterThan(0)
+    // Review flag is still next to the name.
     expect(screen.getByTitle('Requiere revisión')).toBeInTheDocument()
-    expect(screen.getByText('Desactivado')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument()
   })
