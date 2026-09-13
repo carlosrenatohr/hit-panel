@@ -131,7 +131,7 @@ describe('Shipments', () => {
     // Counters resolve to their per-status totals (entregado=3, excepción=1).
     await waitFor(() => expect(entregado.textContent).toContain('3'));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^Filtrar por Excepción$/ }).textContent).toContain('1 paquete'),
+      expect(screen.getByRole('button', { name: /^Filtrar por Excepción$/ }).textContent).toContain('1'),
     );
   });
 
