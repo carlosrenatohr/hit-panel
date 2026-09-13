@@ -1,4 +1,4 @@
-import { Archive, Ban, Flag, History, Layers, Pencil, Plus, Save, UserCheck, Users } from 'lucide-preact'
+import { Archive, Ban, Flag, History, Layers, Pencil, Plus, Save, SlidersHorizontal, UserCheck, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
 import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput } from '../lib/customer'
@@ -7,11 +7,33 @@ import { navigate } from '../lib/router'
 import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, Spinner, Tooltip } from './ui'
 import ClientSearch from './ui/ClientSearch'
 import { DateRangePicker } from './DateRangePicker'
-import CustomerCards from './CustomerCards'
+import CustomerCards, { CardPickerModal, ALL_CARD_OPTIONS, DEFAULT_CARD_HIDDEN, CARD_STORAGE_KEY, loadCardHidden } from './CustomerCards'
 import { CUSTOMER_COLUMN_DEFS, CustomerColumnPicker, useCustomerColumnPrefs } from './CustomerColumns'
 import CustomerTimeline from './CustomerTimeline'
 
 const PAGE_SIZE = 25
+
+const FILTER_STORAGE_KEY = 'hit-panel:customers:filters:v2'
+
+function defaultMonthRange() {
+  const now = new Date()
+  const first = new Date(now.getFullYear(), now.getMonth(), 1)
+  const ymd = (d: Date) => d.toISOString().slice(0, 10)
+  return { from: ymd(first), to: ymd(now) }
+}
+
+function loadFilters(): { statuses: string[]; search: string; from: string; to: string } {
+  try {
+    const raw = localStorage.getItem(FILTER_STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore */ }
+  const d = defaultMonthRange()
+  return { statuses: [], search: '', from: d.from, to: d.to }
+}
+
+function saveFilters(data: { statuses: string[]; search: string; from: string; to: string }) {
+  try { localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(data)) } catch { /* ignore */ }
+}
 
 const INVOICE_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -41,6 +63,9 @@ const STATUS_TABS: StatusTab[] = [
 export default function Customers({ role }: { role: Role }) {
   const canWrite = role === 'admin' || role === 'billing'
   const colPrefs = useCustomerColumnPrefs()
+  const savedFilters = loadFilters()
+  const [cardHidden, setCardHidden] = useState<string[]>(loadCardHidden)
+  const [cardPickerOpen, setCardPickerOpen] = useState(false)
   const visibleCols = colPrefs.columns
     .filter((c) => c.visible)
     .map((c) => CUSTOMER_COLUMN_DEFS.find((d) => d.key === c.key))
@@ -55,10 +80,10 @@ export default function Customers({ role }: { role: Role }) {
   const [rows, setRows] = useState<Customer[]>([])
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [search, setSearch] = useState(savedFilters.search)
+  const [statuses, setStatuses] = useState<string[]>(savedFilters.statuses)
+  const [from, setFrom] = useState(savedFilters.from)
+  const [to, setTo] = useState(savedFilters.to)
   const [stats, setStats] = useState<CustomerAggregateStats | null>(null)
   const [form, setForm] = useState<(CustomerInput & { id?: string }) | null>(null)
   const [revision, setRevision] = useState(0)
@@ -81,6 +106,9 @@ export default function Customers({ role }: { role: Role }) {
     configApi.listRateCards().then(({ cards }) => setRateCards(cards)).catch(() => setRateCards([]))
   }, [])
 
+  useEffect(() => { saveFilters({ statuses, search, from, to }) }, [statuses, search, from, to])
+  useEffect(() => { try { localStorage.setItem(CARD_STORAGE_KEY, JSON.stringify(cardHidden)) } catch { /* */ } }, [cardHidden])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -100,11 +128,11 @@ export default function Customers({ role }: { role: Role }) {
   useEffect(() => {
     let cancelled = false
     customerApi
-      .stats(from || undefined, to || undefined)
+      .stats(from || undefined, to || undefined, statuses.length ? statuses : undefined)
       .then((s) => !cancelled && setStats(s))
       .catch(() => !cancelled && setStats(null))
     return () => { cancelled = true }
-  }, [from, to, revision])
+  }, [from, to, statuses, revision])
 
   useEffect(() => {
     let cancelled = false
@@ -395,7 +423,7 @@ export default function Customers({ role }: { role: Role }) {
           {auditLoading ? (
             <div class="p-6"><Spinner label="Cargando bitácora…" /></div>
           ) : auditRows.length === 0 ? (
-            <div class="p-6 text-sm text-gray-400">Sin eventos registrados.</div>
+            <div class="p-6 text-sm text-gray-400">Sin eventos todavía — se registran al crear, editar, deshabilitar o archivar clientes.</div>
           ) : (
             <div class="max-h-[70vh] overflow-y-auto px-3">
               <CustomerTimeline events={auditRows} />
@@ -405,7 +433,27 @@ export default function Customers({ role }: { role: Role }) {
         </Card>
       ) : (
         <>
-          <Card class="p-3">
+          <Card class="space-y-2 p-3">
+            <div class="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
+              {STATUS_TABS.map((t) => {
+                const Icon = t.icon
+                const active = activeTabKey === t.key
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => { setStatuses(t.filter); setPage(1) }}
+                    aria-pressed={active}
+                    class={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                      active ? t.activeCls : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    }`}
+                  >
+                    <Icon class="h-3.5 w-3.5" aria-hidden="true" />
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
             <div class="flex flex-wrap items-center gap-2">
               <ClientSearch
                 value={search}
@@ -415,32 +463,21 @@ export default function Customers({ role }: { role: Role }) {
                 placeholder="Buscar cliente…"
                 class="w-56 sm:w-64"
               />
-              <div class="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
-                {STATUS_TABS.map((t) => {
-                  const Icon = t.icon
-                  const active = activeTabKey === t.key
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => { setStatuses(t.filter); setPage(1) }}
-                      aria-pressed={active}
-                      class={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
-                        active ? t.activeCls : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                      }`}
-                    >
-                      <Icon class="h-3.5 w-3.5" aria-hidden="true" />
-                      {t.label}
-                    </button>
-                  )
-                })}
-              </div>
               <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f ?? ''); setTo(t ?? ''); setPage(1) }} />
-              <CustomerColumnPicker prefs={colPrefs} />
+              <div class="ml-auto flex items-center gap-1">
+                <CustomerColumnPicker prefs={colPrefs} />
+                <Button variant="ghost" onClick={() => setCardPickerOpen(true)}>
+                  <SlidersHorizontal class="h-4 w-4" aria-hidden="true" /> Tarjetas
+                </Button>
+              </div>
             </div>
           </Card>
 
-          {stats && <CustomerCards stats={stats} onViewClient={viewClientPackages} />}
+          {cardPickerOpen && (
+            <CardPickerModal onClose={() => setCardPickerOpen(false)} hidden={cardHidden} onApply={setCardHidden} />
+          )}
+
+          {stats && <CustomerCards stats={stats} onViewClient={viewClientPackages} hidden={cardHidden} onApply={setCardHidden} />}
 
           <Card>
             <SectionTitle class="justify-between"><span>{count} clientes</span><span class="text-xs font-normal text-gray-400">Página {page} de {totalPages}</span></SectionTitle>
@@ -450,15 +487,17 @@ export default function Customers({ role }: { role: Role }) {
               <div class="p-6 text-sm text-gray-400">No hay clientes para estos filtros.</div>
             ) : (
               <div class="overflow-x-auto">
-                <table class="min-w-[900px] w-full text-left text-sm">
+              <table class="min-w-[900px] w-full text-left text-sm">
                   <thead>
                     <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
                       <th class="px-4 py-2" rowSpan={2}>Nombre</th>
-                      {visibleCols.map((col) => (
-                        <th key={col.key} class="px-4 py-2" rowSpan={2}>{col.label}</th>
-                      ))}
+                      {visibleCols
+                        .filter((c) => !showWeightGroup || (c.key !== 'maritimo' && c.key !== 'aereo'))
+                        .map((col) => (
+                          <th key={col.key} class="px-4 py-2" rowSpan={2}>{col.label}</th>
+                        ))}
                       {showWeightGroup && (
-                        <th class="px-4 py-2 text-center" colSpan={2} title="Peso total en libras (total de paquetes)">Volumen total en libras (total paquetes)</th>
+                        <th class="px-4 py-2 text-center" colSpan={2} title="Volumen total en libras (total paquetes)">Volumen total en libras (total paquetes)</th>
                       )}
                       {showSingleMar && (
                         <th class="px-4 py-2" rowSpan={2} title="Peso total en libras (total de paquetes)">Marítimo</th>
@@ -471,8 +510,8 @@ export default function Customers({ role }: { role: Role }) {
                     </tr>
                     {showWeightGroup && (
                       <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
-                        {visibleCols.some((c) => c.key === 'maritimo') && <th class="px-4 py-2" title="Peso total en libras (total de paquetes)">Marítimo</th>}
-                        {visibleCols.some((c) => c.key === 'aereo') && <th class="px-4 py-2" title="Peso total en libras (total de paquetes)">Aéreo</th>}
+                        {weightColsVisible.some((c) => c.key === 'maritimo') && <th class="px-4 py-2" title="Peso total en libras (total de paquetes)">Marítimo</th>}
+                        {weightColsVisible.some((c) => c.key === 'aereo') && <th class="px-4 py-2" title="Peso total en libras (total de paquetes)">Aéreo</th>}
                       </tr>
                     )}
                   </thead>
@@ -496,8 +535,13 @@ export default function Customers({ role }: { role: Role }) {
                               )}
                             </span>
                           </td>
-                          {visibleCols.map((col) => (
-                            <td key={col.key} class="px-4 py-2">{col.render(customer)}</td>
+                          {visibleCols
+                            .filter((c) => !showWeightGroup || (c.key !== 'maritimo' && c.key !== 'aereo'))
+                            .map((col) => (
+                              <td key={col.key} class="px-4 py-2">{col.render(customer)}</td>
+                            ))}
+                          {showWeightGroup && weightColsVisible.map((wc) => (
+                            <td key={wc.key} class="px-4 py-2">{wc.render(customer)}</td>
                           ))}
                           <td class="px-4 py-2 text-center">
                             <span class="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{customer.packageCount ?? 0}</span>
