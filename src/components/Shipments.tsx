@@ -11,7 +11,6 @@ import {
   officeFlag,
   providerLabel,
   SERVICE_EMOJI,
-  STATUS_LABEL,
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
@@ -19,6 +18,7 @@ import { createPackage, exportPackages, getProviders, listPackages } from '../li
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, ShipmentStatus, SessionUser } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
+import LifecycleOverview, { TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
 import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
@@ -81,11 +81,23 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
   const selectedOrg = user.agency // tenant is pinned: a user only sees their own agency
   const [providers, setProviders] = useState<Provider[]>([])
   const [searchInput, setSearchInput] = useState('')
-  const [filters, setFilters] = useState<ListFilters>({ sortCol: 'status_rank', ascending: true })
+  // Default window is the current month (matches the DateRangePicker 'Este mes' preset).
+  const [filters, setFilters] = useState<ListFilters>(() => {
+    const now = new Date()
+    return {
+      sortCol: 'status_rank',
+      ascending: true,
+      from: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+      to: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+    }
+  })
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<Pkg[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  // Per-status totals for the lifecycle cards (see the summary effect below).
+  const [summary, setSummary] = useState<Partial<Record<ShipmentStatus, number>>>({})
+  const [summaryLoading, setSummaryLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [showCal, setShowCal] = useState(false)
@@ -257,6 +269,44 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
       .finally(() => setLoading(false))
   }
 
+  // Per-status totals for the lifecycle cards: one lightweight count-read per status (pageSize:1),
+  // same pattern Reports uses for its period comparison. Respects the transport tab and the other
+  // top-level filters, but NEVER the active status — so every counter stays visible while a card
+  // filters the table. Keyed on the raw filter fields, not `filters`, so page/sort changes don't
+  // refire the counters.
+  useEffect(() => {
+    let cancelled = false
+    setSummaryLoading(true)
+    const base: ListFilters = {
+      organizationId: selectedOrg,
+      search: filters.search,
+      providerId: filters.providerId,
+      service: filters.service,
+      from: filters.from,
+      to: filters.to,
+    }
+    Promise.all(
+      STATUS_ORDER.map((s) =>
+        listPackages({ ...base, statuses: [s], page: 1, pageSize: 1 }).then((r) => [s, r.count] as const),
+      ),
+    )
+      .then((rows) => {
+        if (cancelled) return
+        const next: Partial<Record<ShipmentStatus, number>> = {}
+        for (const [s, c] of rows) next[s] = c
+        setSummary(next)
+      })
+      .catch(() => {
+        if (!cancelled) setSummary({})
+      })
+      .finally(() => {
+        if (!cancelled) setSummaryLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [filters.search, filters.providerId, filters.service, filters.from, filters.to, selectedOrg])
+
   function patch(p: Partial<ListFilters>) {
     setFilters((f) => ({ ...f, ...p }))
     setPage(1)
@@ -356,17 +406,24 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
         </div>
       </div>
 
-      {showCal && (
-        <MonthCalendar
-          title="Recepción en Miami por día"
-          legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
-          loadEvents={loadRecvMonth}
-        />
-      )}
+      {/* Top controls — transport type + date range on the same level */}
+      <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Tipo de transporte</span>
+          <TransportTabs
+            value={(filters.service ?? 'all') as ServiceFilter}
+            onChange={(v) => patch({ service: v === 'all' ? undefined : v })}
+          />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Periodo</span>
+          <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
+        </div>
+      </div>
 
-      {/* Filters */}
+      {/* Search + filters — between the transport selector and the lifecycle cards */}
       <Card class="p-4">
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-7">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div class="relative col-span-2 lg:col-span-2">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
             <input
@@ -384,39 +441,44 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
               </option>
             ))}
           </select>
-          <select class={inputCls} onChange={(e) => patch({ status: (e.target as HTMLSelectElement).value || undefined })}>
-            <option value="">Todos los estados</option>
-            {STATUS_ORDER.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
-          <select class={inputCls} onChange={(e) => patch({ service: (e.target as HTMLSelectElement).value || undefined })}>
-            <option value="">Aéreo y marítimo</option>
-            <option value="aereo">Aéreo</option>
-            <option value="maritimo">Marítimo</option>
-          </select>
-          <select
-            class={inputCls}
-            value={`${filters.sortCol}:${filters.ascending ? 'asc' : 'desc'}`}
-            onChange={(e) => {
-              const v = (e.target as HTMLSelectElement).value
-              const [col, dir] = v.split(':')
-              patch({ sortCol: col, ascending: dir === 'asc' })
-            }}
-          >
-            {SORTS.map((s) => (
-              <option key={s.col} value={`${s.col}:${s.dir}`}>
-                {s.label} {s.col === 'status_rank' ? '🎯' : s.dir === 'asc' ? '↑' : '↓'}
-              </option>
-            ))}
-          </select>
-          <div class="col-span-2 lg:col-span-1">
-            <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
+          <div class="flex items-center gap-2">
+            <label for="shipments-sort" class="whitespace-nowrap text-xs font-medium text-gray-500">
+              Ordenar por
+            </label>
+            <select
+              id="shipments-sort"
+              class={`${inputCls} min-w-0 flex-1`}
+              value={`${filters.sortCol}:${filters.ascending ? 'asc' : 'desc'}`}
+              onChange={(e) => {
+                const v = (e.target as HTMLSelectElement).value
+                const [col, dir] = v.split(':')
+                patch({ sortCol: col, ascending: dir === 'asc' })
+              }}
+            >
+              {SORTS.map((s) => (
+                <option key={s.col} value={`${s.col}:${s.dir}`}>
+                  {s.label} {s.col === 'status_rank' ? '🎯' : s.dir === 'asc' ? '↑' : '↓'}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </Card>
+
+      <LifecycleOverview
+        counts={summary}
+        loading={summaryLoading}
+        activeStatus={filters.status as ShipmentStatus | undefined}
+        onStatusChange={(s) => patch({ status: s })}
+      />
+
+      {showCal && (
+        <MonthCalendar
+          title="Recepción en Miami por día"
+          legend={[{ kind: 'recibido', label: 'Recibido', dot: 'bg-primary' }]}
+          loadEvents={loadRecvMonth}
+        />
+      )}
 
       {err && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
 

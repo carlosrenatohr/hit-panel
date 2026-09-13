@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/preact';
+import { render, screen, waitFor, fireEvent } from '@testing-library/preact';
 import Shipments from './Shipments';
-import { listPackages } from '../lib/insforge';
+import { listPackages, type ListFilters } from '../lib/insforge';
 
 const mockPkgs = vi.hoisted(() => [
   {
@@ -65,7 +65,11 @@ const mockPkgs = vi.hoisted(() => [
 ]);
 
 vi.mock('../lib/insforge', () => ({
-  listPackages: vi.fn().mockResolvedValue({ rows: mockPkgs, count: 2 }),
+  listPackages: vi.fn().mockImplementation((f: ListFilters) => {
+    const st = f.statuses?.[0] ?? f.status;
+    const count = st === 'entregado' ? 3 : st === 'excepcion' ? 1 : 2;
+    return Promise.resolve({ rows: mockPkgs, count });
+  }),
   getProviders: vi.fn().mockResolvedValue([]),
   exportPackages: vi.fn().mockResolvedValue(mockPkgs),
 }));
@@ -111,5 +115,45 @@ describe('Shipments', () => {
     rerender(<Shipments user={mockUser} onOpen={() => {}} refreshToken={1} />);
 
     await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('renders the lifecycle cards with their status counts', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    const entregado = await screen.findByRole('button', { name: /^Filtrar por Entregado$/ });
+    expect(screen.getByRole('button', { name: /^Filtrar por En bodega Miami$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Filtrar por En tránsito$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Filtrar por En destino/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Filtrar por Parcial$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Filtrar por Excepción$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Filtrar por Desconocido$/ })).toBeTruthy();
+
+    // Counters resolve to their per-status totals (entregado=3, excepción=1).
+    await waitFor(() => expect(entregado.textContent).toContain('3'));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Filtrar por Excepción$/ }).textContent).toContain('1'),
+    );
+  });
+
+  it('filters the table when a lifecycle card is clicked', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Filtrar por Entregado$/ }));
+
+    await waitFor(() => {
+      const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+      expect(calls.some((f) => f.status === 'entregado')).toBe(true);
+    });
+  });
+
+  it('filters by transport type when a tab is clicked', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Aéreo/ }));
+
+    await waitFor(() => {
+      const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+      expect(calls.some((f) => f.service === 'aereo')).toBe(true);
+    });
   });
 });
