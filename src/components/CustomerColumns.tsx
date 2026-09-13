@@ -2,7 +2,6 @@ import type { JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { GripVertical, Lock, Search, SlidersHorizontal, X } from 'lucide-preact'
 import type { Customer } from '../lib/customer'
-import { fmtLbs } from '../lib/format'
 import { Button, IconButton, inputCls } from './ui'
 
 export interface CustomerColumnDef {
@@ -11,11 +10,11 @@ export interface CustomerColumnDef {
   render: (c: Customer) => JSX.Element | string
 }
 
-/** Weight cell: summed lb with the package count in parentheses — the module's headline metric. */
+/** Weight cell: number with package count in parentheses — "lb" lives in the grouped header. */
 function WeightCell({ weight, count }: { weight?: number; count?: number }) {
   return (
     <span class="whitespace-nowrap tabular-nums text-gray-700">
-      {fmtLbs(weight ?? 0)} <span class="text-gray-400">({count ?? 0})</span>
+      {Math.round(weight ?? 0).toLocaleString('en-US')} <span class="text-gray-400">({count ?? 0})</span>
     </span>
   )
 }
@@ -29,12 +28,12 @@ export const CUSTOMER_COLUMN_DEFS: CustomerColumnDef[] = [
   { key: 'address', label: 'Dirección', render: (c) => <span class="text-gray-500">{c.address || '—'}</span> },
   {
     key: 'maritimo',
-    label: 'Marítimo (lb)',
+    label: 'Marítimo',
     render: (c) => <WeightCell weight={c.weightMaritimo} count={c.countMaritimo} />,
   },
   {
     key: 'aereo',
-    label: 'Aéreo (lb)',
+    label: 'Aéreo',
     render: (c) => <WeightCell weight={c.weightAereo} count={c.countAereo} />,
   },
 ]

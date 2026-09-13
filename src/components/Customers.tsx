@@ -1,4 +1,4 @@
-import { Archive, Ban, Flag, History, Pencil, Plus, Save, UserCheck, Users } from 'lucide-preact'
+import { Archive, Ban, Flag, History, Layers, Pencil, Plus, Save, UserCheck, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
 import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput } from '../lib/customer'
@@ -6,19 +6,12 @@ import type { Role } from '../lib/types'
 import { navigate } from '../lib/router'
 import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, Spinner, Tooltip } from './ui'
 import ClientSearch from './ui/ClientSearch'
-import { MultiSelect } from './ui/MultiSelect'
 import { DateRangePicker } from './DateRangePicker'
 import CustomerCards from './CustomerCards'
 import { CUSTOMER_COLUMN_DEFS, CustomerColumnPicker, useCustomerColumnPrefs } from './CustomerColumns'
 import CustomerTimeline from './CustomerTimeline'
 
 const PAGE_SIZE = 25
-
-const STATUS_OPTIONS = [
-  { value: 'active', label: 'Activo' },
-  { value: 'inactive', label: 'Desactivado' },
-  { value: 'review', label: 'Revisión' },
-]
 
 const INVOICE_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -30,6 +23,21 @@ const INVOICE_STATUS_LABEL: Record<string, string> = {
 
 type CustomersTab = 'clientes' | 'bitacora'
 
+interface StatusTab {
+  key: string
+  label: string
+  icon: typeof Layers
+  filter: string[]
+  activeCls: string
+}
+
+const STATUS_TABS: StatusTab[] = [
+  { key: 'all', label: 'Todos', icon: Layers, filter: [], activeCls: 'border-primary bg-primary/10 text-primary' },
+  { key: 'active', label: 'Activos', icon: UserCheck, filter: ['active'], activeCls: 'border-green-500 bg-green-50 text-green-700' },
+  { key: 'inactive', label: 'Desactivados', icon: Ban, filter: ['inactive'], activeCls: 'border-red-400 bg-red-50 text-red-600' },
+  { key: 'review', label: 'Revisión', icon: Flag, filter: ['review'], activeCls: 'border-amber-400 bg-amber-50 text-amber-700' },
+]
+
 export default function Customers({ role }: { role: Role }) {
   const canWrite = role === 'admin' || role === 'billing'
   const colPrefs = useCustomerColumnPrefs()
@@ -37,6 +45,11 @@ export default function Customers({ role }: { role: Role }) {
     .filter((c) => c.visible)
     .map((c) => CUSTOMER_COLUMN_DEFS.find((d) => d.key === c.key))
     .filter((d): d is (typeof CUSTOMER_COLUMN_DEFS)[number] => !!d)
+
+  const weightColsVisible = visibleCols.filter((c) => c.key === 'maritimo' || c.key === 'aereo')
+  const showWeightGroup = weightColsVisible.length >= 2
+  const showSingleMar = weightColsVisible.some((c) => c.key === 'maritimo') && !showWeightGroup
+  const showSingleAer = weightColsVisible.some((c) => c.key === 'aereo') && !showWeightGroup
 
   const [tab, setTab] = useState<CustomersTab>('clientes')
   const [rows, setRows] = useState<Customer[]>([])
@@ -59,7 +72,6 @@ export default function Customers({ role }: { role: Role }) {
   const [archivePreview, setArchivePreview] = useState<CustomerDeletePreview | null>(null)
   const [archiving, setArchiving] = useState(false)
   const [timeline, setTimeline] = useState<{ customer: Customer; events: CustomerEvent[]; loading: boolean } | null>(null)
-  // Global bitácora tab — reuses the config audit trail scoped to clients.
   const [auditRows, setAuditRows] = useState<CustomerEvent[]>([])
   const [auditCount, setAuditCount] = useState(0)
   const [auditPage, setAuditPage] = useState(1)
@@ -82,24 +94,18 @@ export default function Customers({ role }: { role: Role }) {
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'No se pudieron cargar los clientes.'))
       .finally(() => !cancelled && setLoading(false))
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [page, revision, statuses, search, from, to])
 
-  // KPI cards follow the same range as the table.
   useEffect(() => {
     let cancelled = false
     customerApi
       .stats(from || undefined, to || undefined)
       .then((s) => !cancelled && setStats(s))
       .catch(() => !cancelled && setStats(null))
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [from, to, revision])
 
-  // Global bitácora: all client events, newest first.
   useEffect(() => {
     let cancelled = false
     setAuditLoading(true)
@@ -112,9 +118,7 @@ export default function Customers({ role }: { role: Role }) {
       })
       .catch(() => !cancelled && setAuditRows([]))
       .finally(() => !cancelled && setAuditLoading(false))
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [auditPage, revision])
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
@@ -182,7 +186,6 @@ export default function Customers({ role }: { role: Role }) {
     }
   }
 
-  /** Loads the impact summary first, then opens the archive confirmation with real data. */
   async function requestArchive(customer: Customer) {
     setError(null)
     try {
@@ -222,10 +225,11 @@ export default function Customers({ role }: { role: Role }) {
     }
   }
 
-  /** Cards "top cliente" link back to Envíos with that client's name seeded. */
   function viewClientPackages(name: string) {
     navigate({ view: 'shipments', cliente: name })
   }
+
+  const activeTabKey = STATUS_TABS.find((t) => JSON.stringify(t.filter) === JSON.stringify(statuses))?.key ?? 'all'
 
   return (
     <div class="space-y-4">
@@ -244,7 +248,6 @@ export default function Customers({ role }: { role: Role }) {
 
       {error && <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-      {/* ── Create / edit modal ── */}
       <Modal open={form !== null} onClose={() => setForm(null)} title={form?.id ? 'Editar cliente' : 'Nuevo cliente'}>
         {form && (
           <>
@@ -274,9 +277,7 @@ export default function Customers({ role }: { role: Role }) {
                 <select class={inputCls} value={form.defaultRateCardId ?? ''} onChange={(e) => setForm({ ...form, defaultRateCardId: (e.target as HTMLSelectElement).value })}>
                   <option value="">(sin tarifa asignada)</option>
                   {rateCards.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </Field>
@@ -378,7 +379,6 @@ export default function Customers({ role }: { role: Role }) {
         loading={archiving}
       />
 
-      {/* ── Per-client timeline modal ── */}
       <Modal open={timeline !== null} onClose={() => setTimeline(null)} title={timeline ? `Bitácora · ${timeline.customer.name}` : ''}>
         {timeline?.loading ? (
           <div class="p-6"><Spinner label="Cargando bitácora…" /></div>
@@ -406,22 +406,34 @@ export default function Customers({ role }: { role: Role }) {
       ) : (
         <>
           <Card class="p-3">
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <ClientSearch
                 value={search}
                 includeInactive
                 onSelect={(c) => { setSearch(c.name); setPage(1) }}
                 onClear={() => { setSearch(''); setPage(1) }}
                 placeholder="Buscar cliente…"
-                class="min-w-64 flex-1"
+                class="w-56 sm:w-64"
               />
-              <div class="min-w-40">
-                <MultiSelect
-                  options={STATUS_OPTIONS}
-                  selected={statuses}
-                  onChange={(v) => { setStatuses(v); setPage(1) }}
-                  placeholder="Estado"
-                />
+              <div class="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
+                {STATUS_TABS.map((t) => {
+                  const Icon = t.icon
+                  const active = activeTabKey === t.key
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => { setStatuses(t.filter); setPage(1) }}
+                      aria-pressed={active}
+                      class={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                        active ? t.activeCls : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                      }`}
+                    >
+                      <Icon class="h-3.5 w-3.5" aria-hidden="true" />
+                      {t.label}
+                    </button>
+                  )
+                })}
               </div>
               <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f ?? ''); setTo(t ?? ''); setPage(1) }} />
               <CustomerColumnPicker prefs={colPrefs} />
@@ -438,17 +450,31 @@ export default function Customers({ role }: { role: Role }) {
               <div class="p-6 text-sm text-gray-400">No hay clientes para estos filtros.</div>
             ) : (
               <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
+                <table class="min-w-[900px] w-full text-left text-sm">
                   <thead>
                     <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
-                      <th class="px-4 py-2">Nombre</th>
+                      <th class="px-4 py-2" rowSpan={2}>Nombre</th>
                       {visibleCols.map((col) => (
-                        <th key={col.key} class="px-4 py-2">{col.label}</th>
+                        <th key={col.key} class="px-4 py-2" rowSpan={2}>{col.label}</th>
                       ))}
-                      <th class="px-4 py-2">Estado</th>
-                      <th class="px-4 py-2 text-center">Paquetes</th>
-                      <th class="px-4 py-2 text-right">Acciones</th>
+                      {showWeightGroup && (
+                        <th class="px-4 py-2 text-center" colSpan={2} title="Peso total en libras (total de paquetes)">Volumen total en libras (total paquetes)</th>
+                      )}
+                      {showSingleMar && (
+                        <th class="px-4 py-2" rowSpan={2} title="Peso total en libras (total de paquetes)">Marítimo</th>
+                      )}
+                      {showSingleAer && (
+                        <th class="px-4 py-2" rowSpan={2} title="Peso total en libras (total de paquetes)">Aéreo</th>
+                      )}
+                      <th class="px-4 py-2 text-center" rowSpan={2}>Paquetes totales</th>
+                      <th class="px-4 py-2 text-right" rowSpan={2}>Acciones</th>
                     </tr>
+                    {showWeightGroup && (
+                      <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
+                        {visibleCols.some((c) => c.key === 'maritimo') && <th class="px-4 py-2" title="Peso total en libras (total de paquetes)">Marítimo</th>}
+                        {visibleCols.some((c) => c.key === 'aereo') && <th class="px-4 py-2" title="Peso total en libras (total de paquetes)">Aéreo</th>}
+                      </tr>
+                    )}
                   </thead>
                   <tbody>
                     {rows.map((customer) => {
@@ -463,18 +489,16 @@ export default function Customers({ role }: { role: Role }) {
                                   <Flag class="h-3.5 w-3.5" aria-hidden="true" />
                                 </span>
                               )}
+                              {inactive && (
+                                <span title="Deshabilitado" class="inline-flex text-red-500">
+                                  <Ban class="h-3.5 w-3.5" aria-hidden="true" />
+                                </span>
+                              )}
                             </span>
                           </td>
                           {visibleCols.map((col) => (
                             <td key={col.key} class="px-4 py-2">{col.render(customer)}</td>
                           ))}
-                          <td class="px-4 py-2">
-                            {inactive ? (
-                              <span class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Desactivado</span>
-                            ) : (
-                              <span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Activo</span>
-                            )}
-                          </td>
                           <td class="px-4 py-2 text-center">
                             <span class="inline-flex items-center justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{customer.packageCount ?? 0}</span>
                           </td>

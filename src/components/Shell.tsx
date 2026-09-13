@@ -121,7 +121,7 @@ export default function Shell({
       </aside>
 
       {/* Mobile top nav */}
-      <div class="flex flex-1 flex-col">
+      <div class="flex min-w-0 flex-1 flex-col">
         <header class="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 md:hidden print:hidden">
           <div class="flex items-center gap-2 font-bold tracking-tight text-secondary">
             <img src={brand.logo} alt={brand.name} class="h-7 w-7 object-contain" />
@@ -143,7 +143,7 @@ export default function Shell({
           </button>
         </header>
 
-        <main class="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main class="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6">{children}</main>
 
         <footer class="flex items-center justify-center gap-2 border-t border-gray-100 bg-white px-4 py-2 md:hidden print:hidden">
           <a
