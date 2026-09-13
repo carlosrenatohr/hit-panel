@@ -1,5 +1,5 @@
 import { Anchor, GripVertical, Package, Plane, Scale, Search, SlidersHorizontal, Trophy, Users, X } from 'lucide-preact'
-import { useEffect, useState } from 'preact/hooks'
+import { useState } from 'preact/hooks'
 import type { CustomerAggregateStats } from '../lib/customer'
 import { fmtLbs } from '../lib/format'
 import { Button, Card, IconButton, inputCls } from './ui'
@@ -20,24 +20,24 @@ const CARD_DEFS: CardDef[] = [
   { key: 'paquetesAereo', label: 'Paquetes aéreo', icon: Plane, render: (s) => String(s.packageCountAereo) },
 ]
 
-const ALL_CARD_OPTIONS = [
+export const ALL_CARD_OPTIONS = [
   ...CARD_DEFS.map((d) => ({ key: d.key, label: d.label })),
   { key: 'topMaritimo', label: 'Top cliente marítimo' },
   { key: 'topAereo', label: 'Top cliente aéreo' },
 ]
 
-const DEFAULT_HIDDEN = new Set(['paquetesMaritimo', 'paquetesAereo'])
-const STORAGE_KEY = 'hit-panel:customers:cards:v1'
+export const DEFAULT_CARD_HIDDEN = new Set(['paquetesMaritimo', 'paquetesAereo'])
+export const CARD_STORAGE_KEY = 'hit-panel:customers:cards:v1'
 
-function loadHidden(): string[] {
+export function loadCardHidden(): string[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return [...DEFAULT_HIDDEN]
+    const raw = localStorage.getItem(CARD_STORAGE_KEY)
+    if (!raw) return [...DEFAULT_CARD_HIDDEN]
     const saved = JSON.parse(raw) as string[]
     const known = new Set(ALL_CARD_OPTIONS.map((o) => o.key))
     return saved.filter((v) => known.has(v))
   } catch {
-    return [...DEFAULT_HIDDEN]
+    return [...DEFAULT_CARD_HIDDEN]
   }
 }
 
@@ -62,7 +62,7 @@ function TopClientCard({ title, top, onViewClient }: { title: string; top: { nam
   )
 }
 
-function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => void; hidden: string[]; onApply: (next: string[]) => void }) {
+export function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => void; hidden: string[]; onApply: (next: string[]) => void }) {
   const [draft, setDraft] = useState<string[]>(hidden)
   const [search, setSearch] = useState('')
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -133,7 +133,7 @@ function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => void; hi
         </div>
 
         <div class="flex items-center justify-between border-t border-gray-100 p-3">
-          <button type="button" class="text-xs font-medium text-primary hover:underline" onClick={() => setDraft([...DEFAULT_HIDDEN])}>
+          <button type="button" class="text-xs font-medium text-primary hover:underline" onClick={() => onApply([...DEFAULT_CARD_HIDDEN])}>
             Restablecer
           </button>
           <div class="flex gap-2">
@@ -146,27 +146,17 @@ function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => void; hi
   )
 }
 
-export default function CustomerCards({ stats, onViewClient }: { stats: CustomerAggregateStats; onViewClient: (name: string) => void }) {
-  const [hidden, setHidden] = useState<string[]>(loadHidden)
-  const [pickerOpen, setPickerOpen] = useState(false)
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(hidden))
-  }, [hidden])
-
+export default function CustomerCards({ stats, onViewClient, hidden, onApply }: { stats: CustomerAggregateStats; onViewClient: (name: string) => void; hidden: string[]; onApply: (next: string[]) => void }) {
   const showTopMar = !hidden.includes('topMaritimo')
   const showTopAer = !hidden.includes('topAereo')
   const metricCards = CARD_DEFS.filter((d) => !hidden.includes(d.key))
 
   return (
     <div class="space-y-2">
-      <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
         <span class="flex items-center gap-1.5 text-xs font-medium text-gray-400">
           <Users class="h-3.5 w-3.5" aria-hidden="true" /> Resumen del rango
         </span>
-        <Button variant="ghost" onClick={() => setPickerOpen(true)}>
-          <SlidersHorizontal class="h-4 w-4" aria-hidden="true" /> Tarjetas
-        </Button>
       </div>
       <div class="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
         {metricCards.map((d) => {
@@ -187,9 +177,6 @@ export default function CustomerCards({ stats, onViewClient }: { stats: Customer
         {showTopMar && <TopClientCard title="Top cliente marítimo" top={stats.topMaritimo} onViewClient={onViewClient} />}
         {showTopAer && <TopClientCard title="Top cliente aéreo" top={stats.topAereo} onViewClient={onViewClient} />}
       </div>
-      {pickerOpen && (
-        <CardPickerModal onClose={() => setPickerOpen(false)} hidden={hidden} onApply={setHidden} />
-      )}
     </div>
   )
 }

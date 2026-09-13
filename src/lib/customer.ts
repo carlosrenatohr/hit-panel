@@ -116,7 +116,7 @@ export const customerApi = {
   create: (input: CustomerInput) => workerApi<Customer>(`${API_BASE}/api/customer/clients`, { method: 'POST', body: input }),
   update: (id: string, input: Partial<CustomerInput>) => workerApi<Customer>(`${API_BASE}/api/customer/clients/${id}`, { method: 'PATCH', body: input }),
   /** KPI aggregates for the client cards (weights + package counts + top clients). */
-  stats: (from?: string, to?: string) => workerApi<CustomerAggregateStats>(`${API_BASE}/api/customer/stats${qs({ from, to })}`),
+  stats: (from?: string, to?: string, statuses?: string[]) => workerApi<CustomerAggregateStats>(`${API_BASE}/api/customer/stats${qs({ from, to, statuses })}`),
   /** Event timeline for a single client (audit_logs). */
   events: (id: string, page = 1, pageSize = 50) =>
     workerApi<{ rows: CustomerEvent[]; count: number }>(`${API_BASE}/api/customer/clients/${id}/events${qs({ page, pageSize })}`),
