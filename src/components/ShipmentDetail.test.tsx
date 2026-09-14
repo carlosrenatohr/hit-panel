@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import ShipmentDetail from './ShipmentDetail';
-import { deletePackage } from '../lib/insforge';
+import { deletePackage, setPackageClient } from '../lib/insforge';
 
 const mockDetail = vi.hoisted(() => ({
   pkg: {
@@ -13,6 +13,8 @@ const mockDetail = vi.hoisted(() => ({
     effective_status: 'en_almacen',
     raw_status: 'In Warehouse',
     service_type: 'aereo',
+    service_type_override: null,
+    effective_service_type: 'aereo',
     weight_lb: 5.2,
     volume_cf: null,
     pieces: 2,
@@ -31,6 +33,8 @@ const mockDetail = vi.hoisted(() => ({
     manual_status_by: null,
     manual_status_note: null,
     manual_status_at: null,
+    client_id: null,
+    billing_clients: null,
     provider_id: 'prov-1',
     providers: { id: 'prov-1', code: 'everest', name: 'Everest' },
   },
@@ -56,6 +60,8 @@ vi.mock('../lib/insforge', () => ({
   addTag: vi.fn().mockResolvedValue(undefined),
   addNote: vi.fn().mockResolvedValue(undefined),
   deletePackage: vi.fn().mockResolvedValue(undefined),
+  setPackageClient: vi.fn().mockResolvedValue(undefined),
+  setPackageService: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../lib/config', () => ({
@@ -65,6 +71,14 @@ vi.mock('../lib/config', () => ({
     paymentCatalogs: vi.fn().mockResolvedValue({ methods: [], banks: [] }),
     proxyPhotoUrl: vi.fn().mockResolvedValue(null),
   },
+}));
+
+vi.mock('./ui/ClientSearch', () => ({
+  default: ({ onSelect }: { onSelect: (c: { id: string; name: string }) => void }) => (
+    <button type="button" onClick={() => onSelect({ id: 'client-1', name: 'Test Client' })}>
+      Mock ClientSearch
+    </button>
+  ),
 }));
 
 const refreshPackage = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true, provider: 'everest' }));
@@ -103,7 +117,8 @@ describe('ShipmentDetail', () => {
   });
 
   it('refreshes the package when admin clicks "Refrescar ahora"', async () => {
-    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    const onChanged = vi.fn();
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} onChanged={onChanged} />);
     await waitFor(() => {
       expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
     });
@@ -112,6 +127,7 @@ describe('ShipmentDetail', () => {
 
     await waitFor(() => {
       expect(refreshPackage).toHaveBeenCalledWith('910500');
+      expect(onChanged).toHaveBeenCalled();
     });
   });
 
@@ -152,5 +168,30 @@ describe('ShipmentDetail', () => {
     render(<ShipmentDetail guia="910500" user={viewerUser} onClose={() => {}} />);
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
     expect(screen.queryByRole('button', { name: /eliminar paquete/i })).toBeNull();
+  });
+
+  it('assigns a billing client to the package', async () => {
+    const onChanged = vi.fn();
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} onChanged={onChanged} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByText('Mock ClientSearch'));
+
+    await waitFor(() => {
+      expect(setPackageClient).toHaveBeenCalledWith('910500', 'client-1');
+      expect(onChanged).toHaveBeenCalled();
+    });
+  });
+
+  it('shows the current service type and allows override', async () => {
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    // Current service type is displayed
+    expect(screen.getByText(/Actual: Aéreo/)).toBeTruthy();
+
+    // Override select is present
+    const select = screen.getByDisplayValue('Scraped (Aéreo)');
+    expect(select).toBeTruthy();
   });
 });

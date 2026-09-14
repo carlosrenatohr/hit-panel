@@ -8,7 +8,7 @@ export const insforge = createClient({ baseUrl, anonKey })
 
 // Lightweight column set for the list view (skip heavy/internal-only fields).
 const LIST_COLS =
-  'id,almacen_id,organization_id,tracking_number,status,manual_status,effective_status,service_type,weight_lb,pieces,origin_office,dest_office,referencia_name,photo_ref,received_at,last_event_at,scraped_at,provider_id,providers(code,name,base_url),invoice_packages(invoice_id,active)'
+  'id,almacen_id,organization_id,tracking_number,status,manual_status,effective_status,service_type,service_type_override,effective_service_type,weight_lb,pieces,origin_office,dest_office,referencia_name,client_id,billing_clients(name),photo_ref,received_at,last_event_at,scraped_at,provider_id,providers(code,name,base_url),invoice_packages(invoice_id,active)'
 
 // ── Auth ────────────────────────────────────────────────────────────────────────
 export async function signIn(email: string, password: string): Promise<void> {
@@ -120,8 +120,8 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   else if (f.providerId) q = q.eq('provider_id', f.providerId)
   if (f.statuses?.length) q = q.in('effective_status', f.statuses)
   else if (f.status) q = q.eq('effective_status', f.status)
-  if (f.services?.length) q = q.in('service_type', f.services)
-  else if (f.service) q = q.eq('service_type', f.service)
+  if (f.services?.length) q = q.in('effective_service_type', f.services)
+  else if (f.service) q = q.eq('effective_service_type', f.service)
   if (f.from) q = q.gte('received_at', f.from)
   // `to` is a date-only string; received_at is timestamptz. `lte('2026-07-10')` compares against
   // midnight and drops everything received later that day. Use `< next day` to include the whole day.
@@ -240,6 +240,24 @@ export async function addTag(guia: string, label: string, value?: string): Promi
 
 export async function addNote(guia: string, body: string): Promise<void> {
   const { error } = await insforge.database.rpc('add_package_note', { p_guia: guia, p_body: body })
+  if (error) throw error
+}
+
+/** Assign or clear a billing client on a package. Pass clientId = null to clear. */
+export async function setPackageClient(guia: string, clientId: string | null): Promise<void> {
+  const { error } = await insforge.database.rpc('set_package_client', {
+    p_guia: guia,
+    p_client_id: clientId ?? null,
+  })
+  if (error) throw error
+}
+
+/** Set or clear the service type override. Pass serviceType = null to clear. */
+export async function setPackageService(guia: string, serviceType: string | null): Promise<void> {
+  const { error } = await insforge.database.rpc('set_package_service', {
+    p_guia: guia,
+    p_service_type: serviceType ?? null,
+  })
   if (error) throw error
 }
 

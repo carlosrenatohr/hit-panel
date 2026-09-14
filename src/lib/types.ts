@@ -27,6 +27,8 @@ export interface Pkg {
   effective_status: ShipmentStatus
   raw_status: string | null
   service_type: ServiceType
+  service_type_override: ServiceType
+  effective_service_type: ServiceType
   weight_lb: number | null
   volume_cf: number | null
   pieces: number | null
@@ -41,6 +43,10 @@ export interface Pkg {
   photo_ref: string | null
   /** To-many embed: when present, the package has at least one linked invoice. */
   invoice_packages?: { invoice_id: string; active: boolean }[] | null
+  /** Billing client ID (nullable: unassigned). */
+  client_id: string | null
+  /** Embedded client name (from billing_clients join). */
+  billing_clients?: { name: string } | null
   received_at: string | null
   last_event_at: string | null
   scraped_at: string | null

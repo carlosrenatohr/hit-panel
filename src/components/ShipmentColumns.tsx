@@ -53,8 +53,8 @@ export const COLUMN_DEFS: ColumnDef[] = [
     key: 'service',
     label: 'Servicio',
     render: (p) => (
-      <span title={p.service_type ?? undefined}>
-        {p.service_type ? SERVICE_EMOJI[p.service_type] : '—'} {officeFlag(p.origin_office)}
+      <span title={p.effective_service_type ?? p.service_type ?? undefined}>
+        {p.effective_service_type ? SERVICE_EMOJI[p.effective_service_type] : '—'} {officeFlag(p.origin_office)}
       </span>
     ),
   },

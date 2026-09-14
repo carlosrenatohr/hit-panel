@@ -15,6 +15,7 @@ import {
 } from 'lucide-preact'
 import { STATUS_LABEL, STATUS_SOFT } from '../../lib/format'
 import type { ShipmentStatus } from '../../lib/types'
+import { SegmentedTabs, type SegmentedTab } from '../ui'
 
 export type ServiceFilter = 'all' | 'aereo' | 'maritimo'
 
@@ -33,35 +34,14 @@ const STATUS_ICON: Record<ShipmentStatus, typeof Warehouse> = {
   desconocido: HelpCircle,
 }
 
-/** Segmented selector for transport type — reuses the toggle pattern already used in Configuración. */
+/** Segmented selector for transport type — uses the shared SegmentedTabs component. */
 export function TransportTabs({ value, onChange }: { value: ServiceFilter; onChange: (v: ServiceFilter) => void }) {
-  const tabs: { key: ServiceFilter; label: string; icon: typeof Plane }[] = [
+  const tabs: SegmentedTab[] = [
     { key: 'all', label: 'Todos', icon: Layers },
     { key: 'aereo', label: 'Aéreo', icon: Plane },
     { key: 'maritimo', label: 'Marítimo', icon: Ship },
   ]
-  return (
-    <div class="flex flex-wrap items-center gap-2">
-      {tabs.map((t) => {
-        const Icon = t.icon
-        const active = value === t.key
-        return (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => onChange(t.key)}
-            aria-pressed={active}
-            class={`inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
-              active ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-            }`}
-          >
-            <Icon class="h-4 w-4" aria-hidden="true" />
-            {t.label}
-          </button>
-        )
-      })}
-    </div>
-  )
+  return <SegmentedTabs tabs={tabs} value={value} onChange={(k) => onChange(k as ServiceFilter)} />
 }
 
 function Arrow() {
