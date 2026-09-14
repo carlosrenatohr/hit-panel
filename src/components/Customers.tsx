@@ -1,9 +1,10 @@
-import { Archive, Ban, Flag, History, Layers, Pencil, Plus, Save, SlidersHorizontal, UserCheck, Users } from 'lucide-preact'
+import { Archive, Ban, Flag, History, Layers, Pencil, Plus, Save, SlidersHorizontal, UserCheck, Users, GitMerge } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
 import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput } from '../lib/customer'
-import type { Role } from '../lib/types'
+import type { Role, SessionUser } from '../lib/types'
 import { navigate } from '../lib/router'
+import { getSimilarClients, mergeClients, type SimilarClientPair } from '../lib/insforge'
 import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, SegmentedTabs, type SegmentedTab, Spinner, Tooltip } from './ui'
 import ClientSearch from './ui/ClientSearch'
 import { DateRangePicker } from './DateRangePicker'
@@ -60,7 +61,7 @@ const STATUS_TABS: StatusTab[] = [
   { key: 'review', label: 'Revisión', icon: Flag, filter: ['review'], activeCls: 'border-amber-400 bg-amber-50 text-amber-700' },
 ]
 
-export default function Customers({ role }: { role: Role }) {
+export default function Customers({ user, role }: { user: SessionUser; role: Role }) {
   const canWrite = role === 'admin' || role === 'billing'
   const colPrefs = useCustomerColumnPrefs()
   const savedFilters = loadFilters()
@@ -101,6 +102,11 @@ export default function Customers({ role }: { role: Role }) {
   const [auditCount, setAuditCount] = useState(0)
   const [auditPage, setAuditPage] = useState(1)
   const [auditLoading, setAuditLoading] = useState(false)
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false)
+  const [similarPairs, setSimilarPairs] = useState<SimilarClientPair[]>([])
+  const [similarLoading, setSimilarLoading] = useState(false)
+  const [mergingPair, setMergingPair] = useState<SimilarClientPair | null>(null)
+  const [merging, setMerging] = useState(false)
 
   useEffect(() => {
     configApi.listRateCards().then(({ cards }) => setRateCards(cards)).catch(() => setRateCards([]))
@@ -257,6 +263,38 @@ export default function Customers({ role }: { role: Role }) {
     navigate({ view: 'shipments', cliente: name })
   }
 
+  async function loadDuplicates() {
+    setDuplicatesOpen(true)
+    setSimilarLoading(true)
+    try {
+      const pairs = await getSimilarClients(user?.agency ?? 'hit')
+      setSimilarPairs(pairs)
+    } catch {
+      setSimilarPairs([])
+    } finally {
+      setSimilarLoading(false)
+    }
+  }
+
+  async function doMerge(pair: SimilarClientPair) {
+    setMergingPair(pair)
+    setMerging(true)
+    try {
+      const result = await mergeClients(pair.keepId, pair.keepId === pair.idA ? pair.idB : pair.idA)
+      if (result.ok) {
+        setSimilarPairs((prev) => prev.filter((p) => p.idA !== pair.idA || p.idB !== pair.idB))
+        setRevision((v) => v + 1)
+      } else {
+        setError(result.error ?? 'No se pudo fusionar.')
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al fusionar.')
+    } finally {
+      setMerging(false)
+      setMergingPair(null)
+    }
+  }
+
   const activeTabKey = STATUS_TABS.find((t) => JSON.stringify(t.filter) === JSON.stringify(statuses))?.key ?? 'all'
 
   return (
@@ -271,7 +309,12 @@ export default function Customers({ role }: { role: Role }) {
             <History class="h-3.5 w-3.5" aria-hidden="true" /> Bitácora
           </button>
         </div>
-        {canWrite && <Button onClick={openCreate}><Plus class="h-4 w-4" /> Nuevo cliente</Button>}
+        {canWrite && (
+          <>
+            <Button variant="ghost" onClick={loadDuplicates}><GitMerge class="h-4 w-4" /> Duplicados</Button>
+            <Button onClick={openCreate}><Plus class="h-4 w-4" /> Nuevo cliente</Button>
+          </>
+        )}
       </div>
 
       {error && <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
@@ -413,6 +456,37 @@ export default function Customers({ role }: { role: Role }) {
         ) : (
           <div class="max-h-[60vh] overflow-y-auto scroll-thin">
             <CustomerTimeline events={timeline?.events ?? []} />
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={duplicatesOpen} onClose={() => { setDuplicatesOpen(false); setSimilarPairs([]) }} title="Posibles duplicados">
+        {similarLoading ? (
+          <div class="p-6"><Spinner label="Buscando duplicados…" /></div>
+        ) : similarPairs.length === 0 ? (
+          <div class="p-6 text-sm text-gray-400">No se encontraron clientes similares.</div>
+        ) : (
+          <div class="max-h-[60vh] space-y-3 overflow-y-auto scroll-thin p-1">
+            {similarPairs.map((pair, i) => (
+              <Card key={`${pair.idA}-${pair.idB}`} class="flex items-center justify-between gap-3 p-3">
+                <div class="text-sm">
+                  <span class="font-semibold">{pair.nameA}</span>
+                  <span class="mx-2 text-gray-400">↔</span>
+                  <span class="font-semibold">{pair.nameB}</span>
+                  <span class="ml-2 text-xs text-gray-400">(similitud {Math.round(pair.score * 100)}%)</span>
+                  <div class="mt-1 text-xs text-gray-400">
+                    {pair.pkgA} paq. vs {pair.pkgB} paq. — quedarse con «{pair.keepName}»
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  disabled={merging}
+                  onClick={() => doMerge(pair)}
+                >
+                  {merging && mergingPair?.idA === pair.idA ? <Spinner /> : <><GitMerge class="h-4 w-4" /> Fusionar</>}
+                </Button>
+              </Card>
+            ))}
           </div>
         )}
       </Modal>

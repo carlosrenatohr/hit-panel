@@ -70,7 +70,7 @@ function pageWindow(current: number, total: number): (number | '…')[] {
   return out
 }
 
-export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; refreshToken?: number }) {
+export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; unassignedSeed?: boolean; refreshToken?: number }) {
   const colPrefs = useColumnPrefs()
   const visibleCols = colPrefs.columns
     .filter((c) => c.visible)
@@ -89,6 +89,7 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
       ascending: true,
       from: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
       to: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+      clientId: unassignedSeed ? 'null' : undefined,
     }
   })
   const [page, setPage] = useState(1)
