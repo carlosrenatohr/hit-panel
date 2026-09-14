@@ -145,13 +145,30 @@ describe('Customers', () => {
   it('renders the KPI cards with the top client linking to Envíos', async () => {
     const { navigate } = await import('../lib/router')
     render(<Customers user={mockUser} role="admin" />)
-    await waitFor(() => expect(screen.getByText('Libras facturadas')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Peso total registrado')).toBeInTheDocument())
     expect(screen.getByText('100 lb')).toBeInTheDocument()
-    expect(screen.getByText('Top cliente marítimo (todos)')).toBeInTheDocument()
+    expect(screen.getByText('Cliente #1 marítimo (todos)')).toBeInTheDocument()
     const link = screen.getByRole('button', { name: /ver paquetes de ana/i })
     expect(link).toBeInTheDocument()
     fireEvent.click(link)
     expect(navigate).toHaveBeenCalledWith({ view: 'shipments', cliente: 'Ana' })
+  })
+
+  it('enforces the max 8 visible cards in the card picker', async () => {
+    render(<Customers user={mockUser} role="admin" />)
+    await waitFor(() => expect(screen.getByText('Peso total registrado')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /tarjetas/i }))
+    await waitFor(() => expect(screen.getByText(/Visibles: 8\/8/)).toBeInTheDocument())
+    expect(screen.getByText(/Límite alcanzado/)).toBeInTheDocument()
+    // With 10 options and 2 hidden by default, exactly 8 are visible — the 2 unchecked must be disabled.
+    const unchecked = screen.getAllByRole('checkbox').filter((cb) => !(cb as HTMLInputElement).checked)
+    expect(unchecked.length).toBe(2)
+    for (const cb of unchecked) expect((cb as HTMLInputElement).disabled).toBe(true)
+    // Hiding one card (unchecking a checked box) frees a slot for a previously-disabled one.
+    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    const uncheckedAfter = screen.getAllByRole('checkbox').filter((cb) => !(cb as HTMLInputElement).checked)
+    expect(uncheckedAfter.length).toBe(3)
+    expect((uncheckedAfter.find((cb) => !(cb as HTMLInputElement).disabled) as HTMLInputElement).disabled).toBe(false)
   })
 
   it('shows the per-client timeline modal when opening the bitácora', async () => {

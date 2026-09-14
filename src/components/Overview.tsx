@@ -2,6 +2,7 @@ import { CheckCircle2, ChevronRight, Package, Radio, RefreshCw, Users } from 'lu
 import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
 import { getProviders, getStats, getUnassignedPackages } from '../lib/insforge'
+import { capCards } from '../lib/cards'
 import type { Provider, ShipmentStatus, Stats, SessionUser } from '../lib/types'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 import { DateRangePicker } from './DateRangePicker'
@@ -101,11 +102,13 @@ export default function Overview({
 
       {/* KPIs */}
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Total de paquetes" value={stats.total} icon={Package} accent />
-        <Kpi label="Entregados (30 días)" value={stats.delivered_30d} icon={CheckCircle2} />
-        {Object.entries(stats.by_provider).map(([code, n]) => (
-          <Kpi key={code} label={providerLabel(code)} value={n} icon={Radio} />
-        ))}
+        {capCards([
+          <Kpi label="Total de paquetes" value={stats.total} icon={Package} accent />,
+          <Kpi label="Entregados (30 días)" value={stats.delivered_30d} icon={CheckCircle2} />,
+          ...Object.entries(stats.by_provider).map(([code, n]) => (
+            <Kpi key={code} label={providerLabel(code)} value={n} icon={Radio} />
+          )),
+        ])}
       </div>
 
       {/* Unassigned packages CTA */}
