@@ -55,6 +55,8 @@ export interface CustomerAggregateStats {
   packageCountAereo: number
   topMaritimo: { clientId: string; name: string; weightLb: number } | null
   topAereo: { clientId: string; name: string; weightLb: number } | null
+  topBillingMaritimo: { clientId: string; name: string; weightLb: number } | null
+  topBillingAereo: { clientId: string; name: string; weightLb: number } | null
 }
 
 /** One event on a client's timeline (from audit_logs). */

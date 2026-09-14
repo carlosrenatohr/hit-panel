@@ -147,7 +147,7 @@ describe('Customers', () => {
     render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Libras facturadas')).toBeInTheDocument())
     expect(screen.getByText('100 lb')).toBeInTheDocument()
-    expect(screen.getByText('Top cliente marítimo')).toBeInTheDocument()
+    expect(screen.getByText('Top cliente marítimo (todos)')).toBeInTheDocument()
     const link = screen.getByRole('button', { name: /ver paquetes de ana/i })
     expect(link).toBeInTheDocument()
     fireEvent.click(link)

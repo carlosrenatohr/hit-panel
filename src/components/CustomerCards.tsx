@@ -22,8 +22,10 @@ const CARD_DEFS: CardDef[] = [
 
 export const ALL_CARD_OPTIONS = [
   ...CARD_DEFS.map((d) => ({ key: d.key, label: d.label })),
-  { key: 'topMaritimo', label: 'Top cliente marítimo' },
-  { key: 'topAereo', label: 'Top cliente aéreo' },
+  { key: 'topMaritimo', label: 'Top cliente marítimo (todos)' },
+  { key: 'topAereo', label: 'Top cliente aéreo (todos)' },
+  { key: 'topBillingMaritimo', label: 'Top cliente marítimo (facturado)' },
+  { key: 'topBillingAereo', label: 'Top cliente aéreo (facturado)' },
 ]
 
 export const DEFAULT_CARD_HIDDEN = new Set(['paquetesMaritimo', 'paquetesAereo'])
@@ -147,9 +149,13 @@ export function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => v
 }
 
 export default function CustomerCards({ stats, onViewClient, hidden, onApply }: { stats: CustomerAggregateStats; onViewClient: (name: string) => void; hidden: string[]; onApply: (next: string[]) => void }) {
-  const showTopMar = !hidden.includes('topMaritimo')
-  const showTopAer = !hidden.includes('topAereo')
   const metricCards = CARD_DEFS.filter((d) => !hidden.includes(d.key))
+  const topCards: Array<{ key: string; title: string; top: { name: string; weightLb: number } | null }> = [
+    { key: 'topMaritimo', title: 'Top cliente marítimo (todos)', top: stats.topMaritimo },
+    { key: 'topAereo', title: 'Top cliente aéreo (todos)', top: stats.topAereo },
+    { key: 'topBillingMaritimo', title: 'Top cliente marítimo (facturado)', top: stats.topBillingMaritimo },
+    { key: 'topBillingAereo', title: 'Top cliente aéreo (facturado)', top: stats.topBillingAereo },
+  ].filter((c) => !hidden.includes(c.key))
 
   return (
     <div class="space-y-2">
@@ -174,8 +180,9 @@ export default function CustomerCards({ stats, onViewClient, hidden, onApply }: 
             </Card>
           )
         })}
-        {showTopMar && <TopClientCard title="Top cliente marítimo" top={stats.topMaritimo} onViewClient={onViewClient} />}
-        {showTopAer && <TopClientCard title="Top cliente aéreo" top={stats.topAereo} onViewClient={onViewClient} />}
+        {topCards.map((c) => (
+          <TopClientCard key={c.key} title={c.title} top={c.top} onViewClient={onViewClient} />
+        ))}
       </div>
     </div>
   )
