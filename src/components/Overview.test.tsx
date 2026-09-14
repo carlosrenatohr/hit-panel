@@ -32,6 +32,7 @@ const mockProviders = vi.hoisted(() => [
 vi.mock('../lib/insforge', () => ({
   getStats: vi.fn().mockResolvedValue(mockStats),
   getProviders: vi.fn().mockResolvedValue(mockProviders),
+  getUnassignedPackages: vi.fn().mockResolvedValue({ count: 0, sample: [] }),
 }));
 
 const mockUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
@@ -42,7 +43,7 @@ describe('Overview', () => {
   });
 
   it('renders the overview dashboard with stats', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} />);
+    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getByText('Resumen')).toBeTruthy();
@@ -52,12 +53,12 @@ describe('Overview', () => {
   });
 
   it('shows loading spinner initially', () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} />);
+    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} />);
     expect(screen.getByText(/Cargando/)).toBeTruthy();
   });
 
   it('displays provider information', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} />);
+    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getAllByText('Everest').length).toBeGreaterThan(0);

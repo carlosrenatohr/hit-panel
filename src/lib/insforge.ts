@@ -91,6 +91,7 @@ export interface ListFilters {
   page?: number
   pageSize?: number
   organizationId?: string  // tenant filter — staff gets pinned; admin/billing can override
+  clientId?: string        // filter by assigned client; pass 'null' string for unassigned packages
 }
 
 export interface ListResult {
@@ -122,6 +123,8 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   else if (f.status) q = q.eq('effective_status', f.status)
   if (f.services?.length) q = q.in('effective_service_type', f.services)
   else if (f.service) q = q.eq('effective_service_type', f.service)
+  if (f.clientId === 'null') q = q.is('client_id', null)
+  else if (f.clientId) q = q.eq('client_id', f.clientId)
   if (f.from) q = q.gte('received_at', f.from)
   // `to` is a date-only string; received_at is timestamptz. `lte('2026-07-10')` compares against
   // midnight and drops everything received later that day. Use `< next day` to include the whole day.
@@ -265,4 +268,21 @@ export async function setPackageService(guia: string, serviceType: string | null
 export async function exportPackages(f: ListFilters, cap = 1000): Promise<Pkg[]> {
   const { rows } = await listPackages({ ...f, page: 1, pageSize: cap })
   return rows
+}
+
+export interface UnassignedResult {
+  count: number
+  sample: { almacen_id: string; tracking_number: string; referencia_name: string; received_at: string; effective_service_type: string; weight_lb: number }[]
+}
+
+/** Count + sample of packages without a client assigned in the given org + date range. */
+export async function getUnassignedPackages(org: string, from?: string, to?: string, limit = 50): Promise<UnassignedResult> {
+  const { data, error } = await insforge.database.rpc('unassigned_packages', {
+    p_org: org,
+    p_from: from ?? null,
+    p_to: to ?? null,
+    p_limit: limit,
+  })
+  if (error) throw error
+  return (data as UnassignedResult) ?? { count: 0, sample: [] }
 }

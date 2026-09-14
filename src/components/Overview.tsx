@@ -1,7 +1,7 @@
-import { CheckCircle2, ChevronRight, Package, Radio, RefreshCw } from 'lucide-preact'
+import { CheckCircle2, ChevronRight, Package, Radio, RefreshCw, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
-import { getProviders, getStats } from '../lib/insforge'
+import { getProviders, getStats, getUnassignedPackages } from '../lib/insforge'
 import type { Provider, ShipmentStatus, Stats, SessionUser } from '../lib/types'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 import { DateRangePicker } from './DateRangePicker'
@@ -19,13 +19,16 @@ export default function Overview({
   user,
   onOpen,
   onGoShipments,
+  onGoUnassigned,
 }: {
   user: SessionUser
   onOpen: (guia: string) => void
   onGoShipments: () => void
+  onGoUnassigned: () => void
 }) {
   const [stats, setStats] = useState<Stats | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
+  const [unassignedCount, setUnassignedCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [from, setFrom] = useState('')
@@ -36,12 +39,14 @@ export default function Overview({
     setLoading(true)
     setErr(null)
     try {
-      const [s, p] = await Promise.all([
+      const [s, p, u] = await Promise.all([
         getStats(user.agency, from || undefined, to || undefined, status || undefined),
         getProviders(user.agency),
+        getUnassignedPackages(user.agency, from || undefined, to || undefined, 1),
       ])
       setStats(s)
       setProviders(p)
+      setUnassignedCount(u.count)
     } catch {
       setErr('No se pudo cargar el resumen.')
     } finally {
@@ -102,6 +107,22 @@ export default function Overview({
           <Kpi key={code} label={providerLabel(code)} value={n} icon={Radio} />
         ))}
       </div>
+
+      {/* Unassigned packages CTA */}
+      {unassignedCount > 0 && (
+        <Card accent class="flex items-center justify-between p-4">
+          <div class="flex items-center gap-3">
+            <Users class="h-5 w-5 text-primary" aria-hidden="true" />
+            <div>
+              <span class="text-sm font-semibold text-secondary">{unassignedCount} paquete{unassignedCount !== 1 ? 's' : ''} sin cliente formal en el rango</span>
+              <p class="text-xs text-gray-500">Asigná un cliente para habilitar facturación y tracking por cliente.</p>
+            </div>
+          </div>
+          <Button variant="ghost" onClick={onGoUnassigned}>
+            Revisar <ChevronRight class="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </Card>
+      )}
 
       <div class="grid gap-6 lg:grid-cols-3">
         {/* Pipeline */}
