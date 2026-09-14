@@ -161,14 +161,20 @@ describe('Customers', () => {
     await waitFor(() => expect(screen.getByText(/Visibles: 8\/8/)).toBeInTheDocument())
     expect(screen.getByText(/Límite alcanzado/)).toBeInTheDocument()
     // With 10 options and 2 hidden by default, exactly 8 are visible — the 2 unchecked must be disabled.
-    const unchecked = screen.getAllByRole('checkbox').filter((cb) => !(cb as HTMLInputElement).checked)
+    let unchecked = screen.getAllByRole('checkbox').filter((cb) => !(cb as HTMLInputElement).checked)
     expect(unchecked.length).toBe(2)
     for (const cb of unchecked) expect((cb as HTMLInputElement).disabled).toBe(true)
-    // Hiding one card (unchecking a checked box) frees a slot for a previously-disabled one.
+    // Hiding a card (unchecking a checked box) frees a slot and updates the counter dynamically.
     fireEvent.click(screen.getAllByRole('checkbox')[0])
-    const uncheckedAfter = screen.getAllByRole('checkbox').filter((cb) => !(cb as HTMLInputElement).checked)
-    expect(uncheckedAfter.length).toBe(3)
-    expect((uncheckedAfter.find((cb) => !(cb as HTMLInputElement).disabled) as HTMLInputElement).disabled).toBe(false)
+    await waitFor(() => expect(screen.getByText(/Visibles: 7\/8/)).toBeInTheDocument())
+    expect(screen.queryByText(/Límite alcanzado/)).not.toBeInTheDocument()
+    unchecked = screen.getAllByRole('checkbox').filter((cb) => !(cb as HTMLInputElement).checked)
+    expect(unchecked.length).toBe(3)
+    expect((unchecked.find((cb) => !(cb as HTMLInputElement).disabled) as HTMLInputElement).disabled).toBe(false)
+    // Saving persists the new hidden list: the hidden card disappears from the grid.
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(screen.queryByText('Peso total registrado')).not.toBeInTheDocument())
+    expect(screen.queryByText('Cliente #1 marítimo (todos)')).toBeInTheDocument()
   })
 
   it('shows the per-client timeline modal when opening the bitácora', async () => {

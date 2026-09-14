@@ -75,10 +75,11 @@ export function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => v
 
   function toggleDraft(key: string) {
     setDraft((prev) => {
-      const isVisible = !prev.includes(key)
-      // Only block ADDING beyond the max — unchecking (hiding) is always allowed.
-      if (isVisible && ALL_CARD_OPTIONS.length - prev.length >= MAX_VISIBLE_CARDS) return prev
-      return isVisible ? prev.filter((k) => k !== key) : [...prev, key]
+      const isHidden = prev.includes(key)
+      // Checking a box shows the card (removes from hidden). Only block SHOWING
+      // beyond the max — unchecking (hiding) is always allowed.
+      if (isHidden && ALL_CARD_OPTIONS.length - prev.length >= MAX_VISIBLE_CARDS) return prev
+      return isHidden ? prev.filter((k) => k !== key) : [...prev, key]
     })
   }
 
@@ -152,7 +153,7 @@ export function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => v
         </div>
 
         <div class="flex items-center justify-between border-t border-gray-100 p-3">
-          <button type="button" class="text-xs font-medium text-primary hover:underline" onClick={() => onApply([...DEFAULT_CARD_HIDDEN])}>
+          <button type="button" class="text-xs font-medium text-primary hover:underline" onClick={() => setDraft([...DEFAULT_CARD_HIDDEN])}>
             Restablecer
           </button>
           <div class="flex gap-2">
