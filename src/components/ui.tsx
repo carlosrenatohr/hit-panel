@@ -1,4 +1,5 @@
 import { AlertTriangle, Biohazard, Clock, Loader2, X } from 'lucide-preact'
+import type { LucideIcon } from 'lucide-preact'
 import type { ComponentChildren, JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { STATUS_DOT, STATUS_LABEL, STATUS_SOFT } from '../lib/format'
@@ -186,6 +187,63 @@ export function DaysBadge({ days }: { days: number }) {
     >
       <Clock class="h-3 w-3" aria-hidden="true" /> {days}d
     </span>
+  )
+}
+
+export interface SegmentedTab {
+  key: string
+  label: string
+  icon?: LucideIcon
+  /** Per-tab active classes (overrides default primary). Used by Customers status tabs. */
+  activeCls?: string
+}
+
+/**
+ * Unified segmented tab selector. Inline-flex (hugs content, never full-width),
+ * joined pill container. Use `activeCls` per tab for semantic colors (Customers),
+ * or leave it for the default primary orange (transport, filters).
+ */
+export function SegmentedTabs({
+  tabs,
+  value,
+  onChange,
+  size = 'md',
+}: {
+  tabs: SegmentedTab[]
+  value: string
+  onChange: (key: string) => void
+  size?: 'sm' | 'md'
+}) {
+  const sizeCls = size === 'sm'
+    ? 'gap-1 rounded-lg border border-gray-200 bg-white p-0.5'
+    : 'gap-0.5 rounded-lg border border-gray-200 bg-white p-0.5'
+  const btnCls = size === 'sm'
+    ? 'px-2.5 py-1 text-xs'
+    : 'px-3 py-1.5 text-xs'
+  const iconCls = size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'
+  return (
+    <div class={`inline-flex flex-wrap items-center ${sizeCls}`}>
+      {tabs.map((t) => {
+        const Icon = t.icon
+        const active = value === t.key
+        return (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => onChange(t.key)}
+            aria-pressed={active}
+            class={`inline-flex items-center gap-1.5 rounded-md font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${btnCls} ${
+              active
+                ? (t.activeCls ?? 'border border-primary bg-primary/10 text-primary')
+                : 'border border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+            }`}
+          >
+            {Icon && <Icon class={iconCls} aria-hidden="true" />}
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

@@ -17,11 +17,12 @@ import {
   STATUS_ORDER,
   statusLabel,
 } from '../lib/format'
-import { addNote, addTag, deletePackage, getPackageDetail, setManualStatus } from '../lib/insforge'
+import { addNote, addTag, deletePackage, getPackageDetail, setManualStatus, setPackageClient, setPackageService } from '../lib/insforge'
 import { refreshCooldownUntil, refreshPackage } from '../lib/refresh'
 import { configApi } from '../lib/config'
 import type { PackageDetail, ShipmentStatus, SessionUser } from '../lib/types'
 import { Button, ConfirmDialog, DaysBadge, HazmatBadge, IconButton, inputCls, Spinner, StatusPill } from './ui'
+import ClientSearch from './ui/ClientSearch'
 
 const INVOICE_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -36,12 +37,15 @@ export default function ShipmentDetail({
   user,
   onClose,
   onDeleted,
+  onChanged,
 }: {
   guia: string
   user: SessionUser
   onClose: () => void
   /** Called after a successful soft delete so the parent list can refresh. */
   onDeleted?: () => void
+  /** Called after any data mutation (refresh, status change) so the parent can refresh. */
+  onChanged?: () => void
 }) {
   const [d, setD] = useState<PackageDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -151,6 +155,7 @@ export default function ShipmentDetail({
     try {
       await fn()
       await load()
+      onChanged?.()
     } catch (e) {
       setErr((e as Error)?.message ?? 'La acción falló.')
     } finally {
@@ -184,6 +189,7 @@ export default function ShipmentDetail({
         setErr(out.message ?? 'No se pudo actualizar el paquete.')
       } else {
         await load()
+        onChanged?.()
       }
       setCooldownUntil(refreshCooldownUntil(guia))
       setNow(Date.now())
@@ -331,7 +337,7 @@ export default function ShipmentDetail({
               clientName: cleanName(d.pkg.referencia_name) === '—' ? '' : cleanName(d.pkg.referencia_name),
               lines: [
                 {
-                  freightType: d.pkg.service_type === 'maritimo' ? 'MAR' : 'AIR',
+                  freightType: (d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'MAR' : 'AIR',
                   tier: 'REGULAR',
                   quantityLbs: d.pkg.weight_lb ?? 0,
                   guia: d.pkg.almacen_id,
@@ -386,12 +392,12 @@ export default function ShipmentDetail({
                   {isHazmat(d.pkg.referencia_name) && <HazmatBadge />}
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
-                  {d.pkg.service_type === 'maritimo' ? (
+                  {(d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? (
                     <Anchor class="h-4 w-4 text-navy" aria-hidden="true" />
                   ) : (
                     <Plane class="h-4 w-4 text-primary" aria-hidden="true" />
                   )}
-                  {d.pkg.service_type === 'maritimo' ? 'Marítimo' : 'Aéreo'} {officeFlag(d.pkg.origin_office)}
+                  {(d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'Marítimo' : 'Aéreo'} {officeFlag(d.pkg.origin_office)}
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   <Package class="h-4 w-4 text-gray-400" aria-hidden="true" />
@@ -528,6 +534,7 @@ export default function ShipmentDetail({
               <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-gray-100 pt-3 text-sm">
                 <Fact k="Casillero" v={d.pkg.casillero} />
                 <Fact k="Referencia" v={d.pkg.referencia_name} />
+                <Fact k="Cliente" v={d.pkg.billing_clients?.name ?? d.pkg.client_id ?? null} />
                 <Fact k="Remitente" v={d.pkg.remitente} />
                 <Fact k="Valor declarado" v={d.pkg.declared_value} />
                 <Fact k="Dimensiones" v={d.pkg.dimensions} />
@@ -592,6 +599,55 @@ export default function ShipmentDetail({
                       >
                         <CheckCircle2 class="h-4 w-4" aria-hidden="true" /> Aplicar
                       </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="mb-1 text-xs font-medium text-gray-500">Cliente (billing)</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      {d.pkg.client_id && (
+                        <span class="rounded-full bg-navy/10 px-2.5 py-1 text-xs font-medium text-navy">
+                          {d.pkg.billing_clients?.name ?? 'Cliente asignado'}
+                        </span>
+                      )}
+                      <ClientSearch
+                        value=""
+                        onSelect={(c) => run(() => setPackageClient(guia, c.id || null))}
+                        placeholder="Buscar cliente para asignar…"
+                        disabled={busy}
+                        class="flex-1 min-w-[200px]"
+                      />
+                      {d.pkg.client_id && (
+                        <Button
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => run(() => setPackageClient(guia, null))}
+                        >
+                          Quitar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="mb-1 text-xs font-medium text-gray-500">Tipo de servicio</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="text-sm text-gray-600">
+                        Actual: {(d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'Marítimo' : 'Aéreo'}
+                        {d.pkg.service_type_override && (
+                          <span class="ml-1 text-xs text-orange-600">(override manual)</span>
+                        )}
+                      </span>
+                      <select
+                        class={inputCls}
+                        value={d.pkg.service_type_override ?? ''}
+                        onChange={(e) => run(() => setPackageService(guia, (e.target as HTMLSelectElement).value || null))}
+                        disabled={busy}
+                      >
+                        <option value="">Scraped ({d.pkg.service_type === 'maritimo' ? 'Marítimo' : 'Aéreo'})</option>
+                        <option value="aereo">Aéreo</option>
+                        <option value="maritimo">Marítimo</option>
+                      </select>
                     </div>
                   </div>
 

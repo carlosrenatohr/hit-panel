@@ -74,7 +74,7 @@ export default function App() {
         />
       )}
       {view === 'configuracion' && user.role !== 'viewer' && <Configuracion user={user} />}
-      {detail && <ShipmentDetail guia={detail} user={user} onClose={() => navigate({ view })} onDeleted={() => setListReload((v) => v + 1)} />}
+      {detail && <ShipmentDetail guia={detail} user={user} onClose={() => navigate({ view })} onDeleted={() => setListReload((v) => v + 1)} onChanged={() => setListReload((v) => v + 1)} />}
     </Shell>
   )
 }

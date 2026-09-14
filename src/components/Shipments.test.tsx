@@ -13,6 +13,8 @@ const mockPkgs = vi.hoisted(() => [
     effective_status: 'en_almacen',
     raw_status: 'In Warehouse',
     service_type: 'aereo',
+    service_type_override: null,
+    effective_service_type: 'aereo',
     weight_lb: 5.2,
     volume_cf: null,
     pieces: 2,
@@ -31,6 +33,8 @@ const mockPkgs = vi.hoisted(() => [
     manual_status_by: null,
     manual_status_note: null,
     manual_status_at: null,
+    client_id: null,
+    billing_clients: null,
     provider_id: 'prov-1',
   },
   {
@@ -42,6 +46,8 @@ const mockPkgs = vi.hoisted(() => [
     effective_status: 'entregado',
     raw_status: 'Delivered',
     service_type: 'maritimo',
+    service_type_override: null,
+    effective_service_type: 'maritimo',
     weight_lb: 12.0,
     volume_cf: null,
     pieces: 1,
@@ -60,6 +66,8 @@ const mockPkgs = vi.hoisted(() => [
     manual_status_by: null,
     manual_status_note: null,
     manual_status_at: null,
+    client_id: null,
+    billing_clients: null,
     provider_id: 'prov-2',
   },
 ]);
@@ -115,6 +123,17 @@ describe('Shipments', () => {
     rerender(<Shipments user={mockUser} onOpen={() => {}} refreshToken={1} />);
 
     await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('refetches the summary cards when refreshToken changes', async () => {
+    const { rerender } = render(<Shipments user={mockUser} onOpen={() => {}} refreshToken={0} />);
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThanOrEqual(1));
+    const before = vi.mocked(listPackages).mock.calls.length;
+
+    rerender(<Shipments user={mockUser} onOpen={() => {}} refreshToken={1} />);
+
+    // Summary fires N calls (one per status), list fires 1 call.
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before + 1));
   });
 
   it('renders the lifecycle cards with their status counts', async () => {

@@ -305,7 +305,7 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
     return () => {
       cancelled = true
     }
-  }, [filters.search, filters.providerId, filters.service, filters.from, filters.to, selectedOrg])
+  }, [filters.search, filters.providerId, filters.service, filters.from, filters.to, selectedOrg, refreshToken])
 
   function patch(p: Partial<ListFilters>) {
     setFilters((f) => ({ ...f, ...p }))
@@ -529,7 +529,7 @@ export default function Shipments({ user, onOpen, clientSeed, refreshToken }: { 
                   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                     <span>{providerLabel(p.providers?.code)}</span>
                     <span>
-                      {p.service_type ? SERVICE_EMOJI[p.service_type] : '—'} {officeFlag(p.origin_office)}
+                      {p.effective_service_type ? SERVICE_EMOJI[p.effective_service_type] : '—'} {officeFlag(p.origin_office)}
                     </span>
                     <span>
                       {p.pieces ?? '—'} pzs · {p.weight_lb != null ? `${p.weight_lb} lb` : 'peso sin dato'}

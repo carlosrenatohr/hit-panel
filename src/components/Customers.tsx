@@ -4,7 +4,7 @@ import { configApi, type RateCardInfo } from '../lib/config'
 import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput } from '../lib/customer'
 import type { Role } from '../lib/types'
 import { navigate } from '../lib/router'
-import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, Spinner, Tooltip } from './ui'
+import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, SegmentedTabs, type SegmentedTab, Spinner, Tooltip } from './ui'
 import ClientSearch from './ui/ClientSearch'
 import { DateRangePicker } from './DateRangePicker'
 import CustomerCards, { CardPickerModal, ALL_CARD_OPTIONS, DEFAULT_CARD_HIDDEN, CARD_STORAGE_KEY, loadCardHidden } from './CustomerCards'
@@ -434,26 +434,12 @@ export default function Customers({ role }: { role: Role }) {
       ) : (
         <>
           <Card class="space-y-2 p-3">
-            <div class="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
-              {STATUS_TABS.map((t) => {
-                const Icon = t.icon
-                const active = activeTabKey === t.key
-                return (
-                  <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => { setStatuses(t.filter); setPage(1) }}
-                    aria-pressed={active}
-                    class={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
-                      active ? t.activeCls : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                    }`}
-                  >
-                    <Icon class="h-3.5 w-3.5" aria-hidden="true" />
-                    {t.label}
-                  </button>
-                )
-              })}
-            </div>
+            <SegmentedTabs
+              tabs={STATUS_TABS.map((t) => ({ key: t.key, label: t.label, icon: t.icon, activeCls: t.activeCls }))}
+              value={activeTabKey}
+              onChange={(k) => { const tab = STATUS_TABS.find((t) => t.key === k); if (tab) { setStatuses(tab.filter); setPage(1) } }}
+              size="sm"
+            />
             <div class="flex flex-wrap items-center gap-2">
               <ClientSearch
                 value={search}
