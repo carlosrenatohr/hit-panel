@@ -44,13 +44,20 @@ vi.mock('../lib/router', () => ({
   navigate: vi.fn(),
 }))
 
+vi.mock('../lib/insforge', () => ({
+  getSimilarClients: vi.fn().mockResolvedValue([]),
+  mergeClients: vi.fn().mockResolvedValue({ ok: true }),
+}))
+
+const mockUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const }
+
 describe('Customers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('renders clients with package counts and status icons', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     expect(screen.getByText('Luis')).toBeInTheDocument()
     expect(screen.getByText('Sara')).toBeInTheDocument()
@@ -63,7 +70,7 @@ describe('Customers', () => {
   })
 
   it('creates a client from the shared modal after confirming the dialog', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     fireEvent.click(screen.getByText('Nuevo cliente'))
     fireEvent.input(screen.getByLabelText('Nombre'), { target: { value: 'Beta' } })
@@ -76,7 +83,7 @@ describe('Customers', () => {
   })
 
   it('cancel closes the shared modal without calling the API', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     fireEvent.click(screen.getByText('Nuevo cliente'))
     fireEvent.click(screen.getByText('Cancelar'))
@@ -85,7 +92,7 @@ describe('Customers', () => {
   })
 
   it('deactivates an active client after confirming the dialog', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     fireEvent.click(screen.getAllByRole('button', { name: /deshabilitar/i })[0])
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
@@ -94,7 +101,7 @@ describe('Customers', () => {
   })
 
   it('reactivates an inactive client after confirming the dialog', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Sara')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /reactivar/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
@@ -103,7 +110,7 @@ describe('Customers', () => {
   })
 
   it('editing a client preloads its fields', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     fireEvent.click(screen.getAllByRole('button', { name: /editar cliente/i })[0])
     expect(screen.getByLabelText('Nombre')).toHaveValue('Ana')
@@ -111,7 +118,7 @@ describe('Customers', () => {
   })
 
   it('archives a client after showing the impact preview and confirming', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
 
     fireEvent.click(screen.getAllByRole('button', { name: /archivar cliente/i })[0])
@@ -130,14 +137,14 @@ describe('Customers', () => {
   })
 
   it('hides the archive action for staff', async () => {
-    render(<Customers role="staff" />)
+    render(<Customers user={mockUser} role="staff" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /archivar cliente/i })).not.toBeInTheDocument()
   })
 
   it('renders the KPI cards with the top client linking to Envíos', async () => {
     const { navigate } = await import('../lib/router')
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Libras facturadas')).toBeInTheDocument())
     expect(screen.getByText('100 lb')).toBeInTheDocument()
     expect(screen.getByText('Top cliente marítimo')).toBeInTheDocument()
@@ -150,14 +157,14 @@ describe('Customers', () => {
   it('shows the per-client timeline modal when opening the bitácora', async () => {
     const evt = { id: '1', organizationId: 'hit', actorId: 'u1', actorEmail: 'a@t.com', actorType: 'user', action: 'client.update', entityType: 'billing_client', entityId: 'c1', requestId: null, metadata: {}, createdAt: '2026-09-10T00:00:00Z' }
     vi.mocked(customerApi.events).mockResolvedValueOnce({ rows: [evt], count: 1 })
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     fireEvent.click(screen.getAllByRole('button', { name: /ver bitácora/i })[0])
     await waitFor(() => expect(screen.getByText('Datos actualizados')).toBeInTheDocument())
   })
 
   it('switches to the global Bitácora tab listing client events', async () => {
-    render(<Customers role="admin" />)
+    render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Bitácora' }))
     await waitFor(() => expect(screen.getByText('Bitácora de clientes')).toBeInTheDocument())

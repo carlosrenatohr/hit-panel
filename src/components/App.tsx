@@ -66,7 +66,7 @@ export default function App() {
       {view === 'shipments' && <Shipments user={user} clientSeed={route.cliente} unassignedSeed={route.unassigned} refreshToken={listReload} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
       {view === 'reports' && <Reports user={user} />}
       {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
-      {view === 'customers' && user.role !== 'viewer' && <Customers role={user.role} />}
+      {view === 'customers' && user.role !== 'viewer' && <Customers user={user} role={user.role} />}
       {view === 'integraciones' && (
         <ComingSoon
           title="Integraciones"

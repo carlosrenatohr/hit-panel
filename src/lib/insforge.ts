@@ -286,3 +286,32 @@ export async function getUnassignedPackages(org: string, from?: string, to?: str
   if (error) throw error
   return (data as UnassignedResult) ?? { count: 0, sample: [] }
 }
+
+export interface SimilarClientPair {
+  idA: string
+  nameA: string
+  idB: string
+  nameB: string
+  score: number
+  pkgA: number
+  pkgB: number
+  keepId: string
+  keepName: string
+}
+
+/** Find pairs of clients with similar names (trigram + normalization) within the same org. */
+export async function getSimilarClients(org: string): Promise<SimilarClientPair[]> {
+  const { data, error } = await insforge.database.rpc('similar_clients', { p_org: org })
+  if (error) throw error
+  return (data as SimilarClientPair[]) ?? []
+}
+
+/** Merge two clients — reassigns packages, invoices, rate defaults from merge into keep. */
+export async function mergeClients(keepId: string, mergeId: string): Promise<{ ok: boolean; keepName?: string; packagesReassigned?: number; error?: string }> {
+  const { data, error } = await insforge.database.rpc('merge_clients', {
+    p_keep: keepId,
+    p_merge: mergeId,
+  })
+  if (error) throw error
+  return (data as { ok: boolean; keepName?: string; packagesReassigned?: number; error?: string }) ?? { ok: false, error: 'No response' }
+}
