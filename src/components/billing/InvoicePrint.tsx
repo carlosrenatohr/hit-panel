@@ -14,7 +14,7 @@ export interface InvoiceProfile {
   currency: 'USD' | 'NIO'
 }
 
-const FALLBACK_BRAND = { name: 'HIT Cargo', logoUrl: '/logo-mark.png' }
+const FALLBACK_BRAND = { name: 'Orbit', logoUrl: '/nativerse-logo.webp' }
 
 function formatPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '')
