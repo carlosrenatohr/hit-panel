@@ -521,13 +521,34 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
     setError(null)
     try {
       const blob = await downscaleLogo(file)
-      const { data, error: uploadError } = await insforge.storage.from(BRANDING_BUCKET).upload(`logos/${slug}.webp`, blob)
+      // The key must stay `logos/<slug>.webp`: InsForge dedups an existing key to
+      // `logos/<slug> (2).webp` (spaces/parens), which the Worker's object-key
+      // regex rejects. Delete the current object so the upload reuses the clean key.
+      const key = `logos/${slug}.webp`
+      const { error: rmErr } = await insforge.storage.from(BRANDING_BUCKET).remove(key)
+      if (rmErr) throw rmErr
+      const { data, error: uploadError } = await insforge.storage.from(BRANDING_BUCKET).upload(key, blob)
       if (uploadError) throw uploadError
       if (!data?.url) throw new Error('El logo se subió pero no devolvió URL.')
       await configApi.updateBranding(slug, { logoKey: data.key })
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo actualizar el logo.')
+    }
+    setUploading(null)
+  }
+
+  async function removeLogo(slug: string) {
+    if (!window.confirm(`¿Estás seguro de que querés quitar el logo de esta agencia? Quedará el logo por defecto de la plataforma.`)) return
+    setUploading(slug)
+    setError(null)
+    try {
+      await configApi.updateBranding(slug, { logoKey: null })
+      // Leave the old object orphaned in the bucket (harmless); the DB no longer
+      // references it, so branding falls back to the platform logo.
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo quitar el logo.')
     }
     setUploading(null)
   }
@@ -569,27 +590,43 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
                 <div class="text-xs text-gray-500">
                   {a.slug} {a.logoUrl ? '· logo personalizado' : '· sin logo personalizado'}
                 </div>
+                <div class="mt-1 text-[11px] text-gray-400">
+                  Formatos: PNG, JPG o WebP — se optimizan a WebP ≤512px. Solo formatos de imagen son elegibles para renderizar.
+                </div>
               </div>
 
               {editable && (
-                <label
-                  class={`flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark ${
-                    uploading === a.slug ? 'pointer-events-none opacity-60' : ''
-                  }`}
-                >
-                  <Upload class="h-4 w-4" aria-hidden="true" />
-                  {uploading === a.slug ? 'Subiendo…' : 'Subir logo'}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    class="hidden"
-                    disabled={uploading !== null}
-                    onChange={(e) => {
-                      const f = (e.target as HTMLInputElement).files?.[0] ?? null
-                      if (f) void handleLogo(a.slug, f)
-                    }}
-                  />
-                </label>
+                <div class="flex flex-col gap-2">
+                  <label
+                    class={`flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark ${
+                      uploading === a.slug ? 'pointer-events-none opacity-60' : ''
+                    }`}
+                  >
+                    <Upload class="h-4 w-4" aria-hidden="true" />
+                    {uploading === a.slug ? 'Subiendo…' : 'Subir logo'}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      class="hidden"
+                      disabled={uploading !== null}
+                      onChange={(e) => {
+                        const f = (e.target as HTMLInputElement).files?.[0] ?? null
+                        if (f) void handleLogo(a.slug, f)
+                      }}
+                    />
+                  </label>
+                  {a.logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => void removeLogo(a.slug)}
+                      disabled={uploading !== null}
+                      class="flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <Ban class="h-4 w-4" aria-hidden="true" />
+                      Quitar logo
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </Card>

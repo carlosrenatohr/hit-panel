@@ -50,7 +50,7 @@ export default function Shell({
         const next = { ...BRANDS } as Record<string, { logo: string; name: string }>
         for (const a of agencies) {
           next[a.slug] = {
-            logo: a.logoUrl ?? (BRANDS as Record<string, { logo: string; name: string }>)[a.slug]?.logo ?? '/logo-mark.png',
+            logo: a.logoUrl ?? (BRANDS as Record<string, { logo: string; name: string }>)[a.slug]?.logo ?? '/nativerse-logo.webp',
             name: a.name,
           }
         }
