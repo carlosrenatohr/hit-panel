@@ -6,6 +6,8 @@ export interface AgencyInfo {
   slug: string
   name: string
   logoUrl: string | null
+  /** Bumped on every agency change; cache-buster for the logo URL. */
+  updatedAt: string
 }
 
 /** Agency profile (Config > Información) — drives invoice PDF header and money symbols. */
