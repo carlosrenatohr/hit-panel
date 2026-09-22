@@ -43,24 +43,31 @@ export default function Shell({
   const [brands, setBrands] = useState<Record<string, { logo: string; name: string }>>(BRANDS)
   useEffect(() => {
     let alive = true
-    configApi
-      .branding()
-      .then(({ agencies }) => {
-        if (!alive) return
-        const next = { ...BRANDS } as Record<string, { logo: string; name: string }>
-        for (const a of agencies) {
-          next[a.slug] = {
-            logo: a.logoUrl ? `${a.logoUrl}?v=${encodeURIComponent(a.updatedAt)}` : (BRANDS as Record<string, { logo: string; name: string }>)[a.slug]?.logo ?? '/nativerse-logo.webp',
-            name: a.name,
+    // Refetch on every branding change (logo uploaded/removed in Config) so the
+    // shell renders the new logo — or the Orbit default — without a manual refresh.
+    const load = () =>
+      configApi
+        .branding()
+        .then(({ agencies }) => {
+          if (!alive) return
+          const next = { ...BRANDS } as Record<string, { logo: string; name: string }>
+          for (const a of agencies) {
+            next[a.slug] = {
+              // No custom logo (logoUrl null) → platform (Orbit) default, not a stale/static image.
+              logo: a.logoUrl ? `${a.logoUrl}?v=${encodeURIComponent(a.updatedAt)}` : '/nativerse-logo.webp',
+              name: a.name,
+            }
           }
-        }
-        setBrands(next)
-      })
-      .catch(() => {
-        // keep static fallback; branding is cosmetic
-      })
+          setBrands(next)
+        })
+        .catch(() => {
+          // keep static fallback; branding is cosmetic
+        })
+    void load()
+    window.addEventListener('branding-changed', load)
     return () => {
       alive = false
+      window.removeEventListener('branding-changed', load)
     }
   }, [])
   const nav = NAV.filter((n) => !n.roles || n.roles.includes(user.role))
