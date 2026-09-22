@@ -63,7 +63,7 @@ export default function InvoiceDetail({
       .then(({ agencies }) => {
         if (!alive) return
         const a: AgencyInfo | undefined = agencies[0]
-        if (a) setBrand({ name: a.name, logoUrl: a.logoUrl })
+        if (a) setBrand({ name: a.name, logoUrl: a.logoUrl ? `${a.logoUrl}?v=${encodeURIComponent(a.updatedAt)}` : null })
       })
       .catch(() => {})
     configApi

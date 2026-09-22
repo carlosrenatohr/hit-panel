@@ -572,7 +572,7 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
               <div class="flex flex-col items-center gap-1">
                 {a.logoUrl ? (
                   <img
-                    src={a.logoUrl}
+                    src={`${a.logoUrl}?v=${encodeURIComponent(a.updatedAt)}`}
                     alt={`Logo de ${a.name}`}
                     class="h-12 w-12 rounded-md border border-gray-200 object-contain bg-white"
                   />
