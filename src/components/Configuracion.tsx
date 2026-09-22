@@ -531,6 +531,7 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
       if (uploadError) throw uploadError
       if (!data?.url) throw new Error('El logo se subió pero no devolvió URL.')
       await configApi.updateBranding(slug, { logoKey: data.key })
+      window.dispatchEvent(new Event('branding-changed'))
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo actualizar el logo.')
@@ -545,7 +546,8 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
     try {
       await configApi.updateBranding(slug, { logoKey: null })
       // Leave the old object orphaned in the bucket (harmless); the DB no longer
-      // references it, so branding falls back to the platform logo.
+      // references it, so branding falls back to the platform (Orbit) logo.
+      window.dispatchEvent(new Event('branding-changed'))
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo quitar el logo.')
@@ -577,12 +579,14 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
                     class="h-12 w-12 rounded-md border border-gray-200 object-contain bg-white"
                   />
                 ) : (
-                  <div class="flex h-12 w-12 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-gray-400">
-                    <Building2 class="h-6 w-6" aria-hidden="true" />
-                  </div>
+                  <img
+                    src="/nativerse-logo.webp"
+                    alt="Logo por defecto (Orbit)"
+                    class="h-12 w-12 rounded-md border border-gray-200 object-contain bg-white p-1"
+                  />
                 )}
                 <span class="text-[10px] font-medium uppercase tracking-wide text-gray-400">
-                  {a.logoUrl ? 'Logo actual' : 'Sin logo'}
+                  {a.logoUrl ? 'Logo actual' : 'Logo por defecto (Orbit)'}
                 </span>
               </div>
               <div class="flex-1">
