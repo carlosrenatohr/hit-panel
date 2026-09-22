@@ -580,7 +580,7 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
                   />
                 ) : (
                   <img
-                    src="/nativerse-logo.webp"
+                    src="/orbit-logo-version-finalv2.png"
                     alt="Logo por defecto (Orbit)"
                     class="h-12 w-12 rounded-md border border-gray-200 object-contain bg-white p-1"
                   />

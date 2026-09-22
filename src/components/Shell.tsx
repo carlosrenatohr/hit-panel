@@ -53,8 +53,8 @@ export default function Shell({
           const next = { ...BRANDS } as Record<string, { logo: string; name: string }>
           for (const a of agencies) {
             next[a.slug] = {
-              // No custom logo (logoUrl null) → platform (Orbit) default, not a stale/static image.
-              logo: a.logoUrl ? `${a.logoUrl}?v=${encodeURIComponent(a.updatedAt)}` : '/nativerse-logo.webp',
+              // No custom logo (logoUrl null) → platform (Orbit) default, never Nativerse.
+              logo: a.logoUrl ? `${a.logoUrl}?v=${encodeURIComponent(a.updatedAt)}` : '/orbit-logo-version-finalv2.png',
               name: a.name,
             }
           }
@@ -71,7 +71,8 @@ export default function Shell({
     }
   }, [])
   const nav = NAV.filter((n) => !n.roles || n.roles.includes(user.role))
-  const brand = brands[user.agency] ?? BRANDS.hit
+  // Unknown/not-yet-fetched agency → platform (Orbit) default, never another tenant's logo.
+  const brand = brands[user.agency] ?? { logo: '/orbit-logo-version-finalv2.png', name: user.agency }
   return (
     <div class="flex min-h-screen bg-neutral-bg text-gray-800">
       {/* Sidebar */}

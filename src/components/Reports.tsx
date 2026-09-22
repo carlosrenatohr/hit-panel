@@ -378,7 +378,7 @@ export default function Reports({ user }: { user: SessionUser }) {
       <div class="hidden print:block pb-4">
         <div class="mb-4 flex items-start justify-between border-b-2 border-gray-900 pb-4">
           <div class="flex items-center gap-3">
-            <img src={printBrand?.logoUrl || '/logo-mark.png'} alt={printBrand?.name ?? 'Logo'} class="h-12 w-12 object-contain" />
+            <img src={printBrand?.logoUrl || '/orbit-logo-version-finalv2.png'} alt={printBrand?.name ?? 'Logo'} class="h-12 w-12 object-contain" />
             <div>
               <div class="text-xl font-extrabold tracking-tight">{printBrand?.name ?? 'Reporte'}</div>
               <div class="text-xs text-gray-500">Reporte de paquetes</div>
