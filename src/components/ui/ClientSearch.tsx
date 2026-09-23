@@ -48,13 +48,13 @@ export default function ClientSearch({
   // Keep internal query in sync when parent changes value.
   useEffect(() => { setQuery(value) }, [value])
 
-  // Debounced search — only after 3 chars, to avoid noisy queries while the
-  // staff member types (tenant-wide client list is short but the round-trips add up).
+  // Debounced search — starts from the first character (tenant preference: the
+  // staff types a short name and wants matches immediately).
   useEffect(() => {
     const q = query.trim()
     const first = firstRun.current
     firstRun.current = false
-    if (q.length < 3) { setResults([]); return }
+    if (q.length < 1) { setResults([]); return }
     const t = setTimeout(async () => {
       setLoading(true)
       try {
@@ -133,7 +133,7 @@ export default function ClientSearch({
         )}
       </div>
 
-      {open && (results.length > 0 || (allowCreate && query.trim().length >= 3 && !exactMatch)) && (
+      {open && (results.length > 0 || (allowCreate && query.trim().length >= 1 && !exactMatch)) && (
         <ul class="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg" role="listbox">
           {results.map((c, i) => (
             <li
@@ -148,7 +148,7 @@ export default function ClientSearch({
               {c.casillero && <span class="text-xs text-gray-400">#{c.casillero}</span>}
             </li>
           ))}
-          {allowCreate && query.trim().length >= 3 && !exactMatch && (
+          {allowCreate && query.trim().length >= 1 && !exactMatch && (
             <li
               role="option"
               aria-selected={highlight === results.length}
