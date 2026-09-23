@@ -1,5 +1,5 @@
 import type { InvoiceView } from '../../lib/billing'
-import { fmtMoney, FREIGHT_LABEL, fmtDate } from '../../lib/format'
+import { fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal } from '../../lib/format'
 
 export interface InvoiceBrand {
   name: string
@@ -12,6 +12,8 @@ export interface InvoiceProfile {
   address: string | null
   phone: string | null
   currency: 'USD' | 'NIO'
+  /** Córdobas per US dollar — prints the secondary (small) total line when set. */
+  exchangeRateNioPerUsd?: number | null
 }
 
 const FALLBACK_BRAND = { name: 'Orbit', logoUrl: '/orbit-logo-version-finalv2.png' }
@@ -42,6 +44,9 @@ export default function InvoicePrint({
   const logo = b.logoUrl || FALLBACK_BRAND.logoUrl
   const currency = profile?.currency ?? 'USD'
   const subtotal = inv.lines.reduce((s, l) => s + (l.total || 0), 0)
+  // Secondary (small) total in the other currency at the agency rate — the main
+  // currency stays prominent; e.g. $100.00 USD → ≈ C$3,700.00 (tasa 37).
+  const altTotal = altCurrencyTotal(inv.total, currency, profile?.exchangeRateNioPerUsd)
   return (
     <div class="invoice-print hidden bg-white p-10 text-[13px] leading-relaxed text-gray-900 print:block">
       {/* Header */}
@@ -128,6 +133,9 @@ export default function InvoicePrint({
           <span>Total</span>
           <span>{fmtMoney(inv.total, currency)}</span>
         </div>
+        {altTotal && (
+          <div class="border-t border-gray-100 pt-1 text-right text-[11px] font-medium text-gray-500">{altTotal}</div>
+        )}
       </div>
 
       {inv.observations && <div class="mt-6 border-t border-gray-100 pt-3 text-xs text-gray-500">Obs: {inv.observations}</div>}

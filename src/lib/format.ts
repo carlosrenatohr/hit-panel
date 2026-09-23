@@ -202,6 +202,18 @@ export function fmtMoney(n: number | null | undefined, currency: 'USD' | 'NIO' |
   return `${sym}${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/**
+ * Express a total in the OTHER currency at the agency's exchange rate, for the
+ * secondary (small) line on invoices: NIO→USD divides, USD→NIO multiplies.
+ * Returns null when the rate is not configured (single-currency invoice).
+ */
+export function altCurrencyTotal(total: number, currency: 'USD' | 'NIO' | undefined, exchangeRateNioPerUsd: number | null | undefined): string | null {
+  if (!exchangeRateNioPerUsd || exchangeRateNioPerUsd <= 0) return null
+  if (currency === 'NIO') return `≈ ${fmtMoney(total / exchangeRateNioPerUsd, 'USD')} (tasa ${exchangeRateNioPerUsd})`
+  if (currency === 'USD') return `≈ ${fmtMoney(total * exchangeRateNioPerUsd, 'NIO')} (tasa ${exchangeRateNioPerUsd})`
+  return null
+}
+
 export const INVOICE_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
   ISSUED: 'Emitida',
