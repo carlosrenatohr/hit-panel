@@ -524,9 +524,9 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
       // The key must stay `logos/<slug>.webp`: InsForge dedups an existing key to
       // `logos/<slug> (2).webp` (spaces/parens), which the Worker's object-key
       // regex rejects. Delete the current object so the upload reuses the clean key.
+      // A missing object (404) is fine — the key may be stale — only real errors abort.
       const key = `logos/${slug}.webp`
-      const { error: rmErr } = await insforge.storage.from(BRANDING_BUCKET).remove(key)
-      if (rmErr) throw rmErr
+      await removeLogoObject(key)
       const { data, error: uploadError } = await insforge.storage.from(BRANDING_BUCKET).upload(key, blob)
       if (uploadError) throw uploadError
       if (!data?.url) throw new Error('El logo se subió pero no devolvió URL.')
@@ -544,15 +544,22 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
     setUploading(slug)
     setError(null)
     try {
+      // Delete the object (best-effort: it may already be gone) and clear the DB key.
+      await removeLogoObject(`logos/${slug}.webp`)
       await configApi.updateBranding(slug, { logoKey: null })
-      // Leave the old object orphaned in the bucket (harmless); the DB no longer
-      // references it, so branding falls back to the platform (Orbit) logo.
       window.dispatchEvent(new Event('branding-changed'))
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo quitar el logo.')
     }
     setUploading(null)
+  }
+
+  /** Storage remove treats a missing object as success: a stale/cleaned key must never block upload or removal. */
+  async function removeLogoObject(key: string) {
+    const { error } = await insforge.storage.from(BRANDING_BUCKET).remove(key)
+    const notFound = error?.statusCode === 404 || error?.error === 'STORAGE_NOT_FOUND' || /Object not found/i.test(String(error?.message ?? ''))
+    if (error && !notFound) throw error
   }
 
   if (loading) return <Spinner label="Cargando branding…" />
