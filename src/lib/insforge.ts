@@ -1,5 +1,5 @@
 import { createClient } from '@insforge/sdk'
-import type { Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, Stats, Tag } from './types'
+import type { Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, ShipmentStatus, Stats, Tag } from './types'
 
 const baseUrl = import.meta.env.PUBLIC_INSFORGE_URL as string
 const anonKey = import.meta.env.PUBLIC_INSFORGE_ANON_KEY as string
@@ -205,6 +205,8 @@ export async function createPackage(input: {
   photoRef?: string | null
   receivedAt?: string | null
   providerCode?: string | null
+  clientId?: string | null
+  status?: ShipmentStatus | null
 }): Promise<{ id: string; almacenId: string; organizationId: string; warning?: string | null }> {
   const { error, data } = await insforge.database.rpc('create_package', {
     p_almacen_id: input.almacenId,
@@ -224,6 +226,8 @@ export async function createPackage(input: {
     p_photo_ref: input.photoRef ?? null,
     p_received_at: input.receivedAt ?? null,
     p_provider_code: input.providerCode ?? null,
+    p_client_id: input.clientId ?? null,
+    p_status: input.status ?? null,
   })
   if (error) throw error
   // The RPC reports cross-tenant ledger collisions as a JSON error (not a raise, so

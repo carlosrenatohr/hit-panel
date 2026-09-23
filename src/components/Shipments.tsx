@@ -11,12 +11,15 @@ import {
   officeFlag,
   providerLabel,
   SERVICE_EMOJI,
+  STATUS_LABEL,
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
 import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { AgencyProvider, ListFilters } from '../lib/insforge'
 import type { Pkg, ShipmentStatus, SessionUser } from '../lib/types'
+import ClientSearch from './ui/ClientSearch'
+import { customerApi } from '../lib/customer'
 import { DateRangePicker } from './DateRangePicker'
 import LifecycleOverview, { TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
@@ -116,6 +119,11 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
     pieces: '',
     receivedAt: '',
     providerCode: '',
+    // Client is mandatory for manual packages: pick an existing tenant client or
+    // type a new name (created server-side at submit). { id: '' } = new client.
+    client: null as { id: string; name: string } | null,
+    // The state the package is born with (manual override; scraped flow has none).
+    status: 'en_almacen' as ShipmentStatus,
   })
 
   // Bulk invoicing selection (persists across pagination/filter changes).
@@ -353,18 +361,36 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
       setCreateError('La guía es obligatoria.')
       return
     }
+    if (!createForm.serviceType) {
+      setCreateError('El tipo de servicio es obligatorio.')
+      return
+    }
+    if (!createForm.client) {
+      setCreateError('El cliente es obligatorio — elegí uno existente o escribí un nombre nuevo.')
+      return
+    }
     setCreateError(null)
     setCreateLoading(true)
     try {
+      // Client comes first (priority): if the admin typed a new name (id ''), the
+      // Worker creates the billing client, then the package links it. A package
+      // never ships clientless.
+      let clientId = createForm.client.id
+      if (!clientId) {
+        const created = await customerApi.create({ name: createForm.client.name })
+        clientId = created.id
+      }
       const res = await createPackage({
         almacenId: createForm.almacenId.trim(),
         trackingNumber: createForm.trackingNumber || null,
-        serviceType: createForm.serviceType || null,
+        serviceType: createForm.serviceType,
         referenciaName: createForm.referenciaName || null,
         weightLb: createForm.weightLb ? Number(createForm.weightLb) : null,
         pieces: createForm.pieces ? Number(createForm.pieces) : null,
         receivedAt: createForm.receivedAt || null,
         providerCode: createForm.providerCode || null,
+        clientId,
+        status: createForm.status,
       })
       reload()
       if (res.warning) {
@@ -373,7 +399,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
         setCreateWarning(res.warning)
       } else {
         setShowCreate(false)
-        setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '', weightLb: '', pieces: '', receivedAt: '', providerCode: '' })
+        setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '', weightLb: '', pieces: '', receivedAt: '', providerCode: '', client: null, status: 'en_almacen' })
       }
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
@@ -419,6 +445,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
                   almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '',
                   weightLb: '', pieces: '', receivedAt: '',
                   providerCode: (providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '',
+                  client: null,
+                  status: 'en_almacen',
                 })
                 setShowCreate(true)
               }}
@@ -731,6 +759,23 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
                 />
               </Field>
 
+              <Field label="Cliente (obligatorio)">
+                <ClientSearch
+                  value={createForm.client?.name ?? ''}
+                  allowCreate
+                  placeholder="Buscar cliente o escribir uno nuevo…"
+                  onSelect={(c) => setCreateForm({ ...createForm, client: { id: c.id, name: c.name } })}
+                  onClear={() => setCreateForm({ ...createForm, client: null })}
+                />
+                {createForm.client && (
+                  <p class="mt-1 text-xs text-gray-500">
+                    {createForm.client.id
+                      ? 'Cliente existente del tenant seleccionado.'
+                      : 'Se creará un cliente nuevo con este nombre.'}
+                  </p>
+                )}
+              </Field>
+
               {providers.length === 0 ? (
                 <div class="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
                   Esta agencia todavía no tiene un proveedor asignado. Pedí al administrador que asigne el proveedor por
@@ -757,7 +802,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
                 </Field>
               )}
 
-              <Field label="Servicio">
+              <Field label="Tipo de servicio (obligatorio)">
                 <select
                   class={inputCls}
                   value={createForm.serviceType}
@@ -767,6 +812,23 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
                   <option value="aereo">Aéreo</option>
                   <option value="maritimo">Marítimo</option>
                 </select>
+              </Field>
+
+              <Field label="Estado inicial (manual)">
+                <select
+                  class={inputCls}
+                  value={createForm.status}
+                  onChange={(e) => setCreateForm({ ...createForm, status: (e.target as HTMLSelectElement).value as ShipmentStatus })}
+                >
+                  {STATUS_ORDER.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+                <p class="mt-1 text-xs text-gray-500">
+                  El estado con el que nace el paquete. Podés cambiarlo después desde el detalle del paquete.
+                </p>
               </Field>
 
               <Field label="Nombre de referencia">
@@ -814,7 +876,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
 
             <div class="mt-5 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null); setCreateWarning(null) }}>Cancelar</Button>
-              <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId || providers.length === 0}>
+              <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId || !createForm.client || !createForm.serviceType || providers.length === 0}>
                 {createLoading ? 'Creando…' : 'Crear'}
               </Button>
             </div>
