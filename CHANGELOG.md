@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-09-23
+
+### Changed
+- The WhatsApp invoice link now points to the new on-the-fly PDF endpoint (`/billing/r/:token/pdf`) so the recipient downloads the invoice as a PDF directly. The HTML preview link (share button / print) is unchanged.
+
 ## [0.4.1] — 2026-09-23
 
 ### Fixed
