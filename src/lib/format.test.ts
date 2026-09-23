@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest'
-import { fmtDate, toLocalDate, altCurrencyTotal } from './format'
+import { fmtDate, toLocalDate, altCurrencyTotal, waPhone } from './format'
 
 const OLD_TZ = process.env.TZ
 
@@ -48,6 +48,28 @@ describe('altCurrencyTotal', () => {
     expect(altCurrencyTotal(100, 'USD', null)).toBeNull()
     expect(altCurrencyTotal(100, 'USD', undefined)).toBeNull()
     expect(altCurrencyTotal(100, 'USD', 0)).toBeNull()
+  })
+})
+
+describe('waPhone', () => {
+  it('keeps an international +505 number, cleaning separators', () => {
+    expect(waPhone('+505 8123 4567')).toBe('50581234567')
+    expect(waPhone('505-8123-4567')).toBe('50581234567')
+  })
+
+  it('prefixes +505 to a raw 8-digit NI mobile', () => {
+    expect(waPhone('81234567')).toBe('50581234567')
+  })
+
+  it('assumes +1 for a 10-digit number (foreign)', () => {
+    expect(waPhone('(305) 555-0100')).toBe('13055550100')
+  })
+
+  it('returns null for empty or unusable input', () => {
+    expect(waPhone(null)).toBeNull()
+    expect(waPhone(undefined)).toBeNull()
+    expect(waPhone('')).toBeNull()
+    expect(waPhone('---')).toBeNull()
   })
 })
 

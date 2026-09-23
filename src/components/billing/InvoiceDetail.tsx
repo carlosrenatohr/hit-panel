@@ -1,4 +1,4 @@
-import { Ban, Check, Copy, Link2, Lock, Package, Printer, Share2, Trash2, X } from 'lucide-preact'
+import { Ban, Check, Copy, Link2, Lock, MessageCircle, Package, Printer, Share2, Trash2, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import {
   billingApi,
@@ -8,7 +8,8 @@ import {
   type PaymentBank,
   type PaymentMethod,
 } from '../../lib/billing'
-import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
+import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal, waPhone, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
+import { customerApi } from '../../lib/customer'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
 import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
@@ -127,6 +128,34 @@ export default function InvoiceDetail({
     }
   }
 
+  /**
+   * Share the invoice through WhatsApp without storing anything: reuses the
+   * public receipt token and opens a wa.me deep link. Targets the client's
+   * phone, falling back to the agency owner's registered number; both are
+   * normalized to wa.me digits (country code, no separators).
+   */
+  async function shareToWhatsApp() {
+    if (!inv) return
+    try {
+      const { url } = await billingApi.shareInvoice(id)
+      let clientPhone: string | null = null
+      if (inv.clientId) {
+        try {
+          clientPhone = (await customerApi.get(inv.clientId)).phone ?? null
+        } catch {
+          clientPhone = null
+        }
+      }
+      const to = waPhone(clientPhone ?? profile?.phone)
+      const agency = profile?.name ?? brand?.name ?? 'Orbit'
+      const msg = `Hola ${inv.clientName ?? ''}, ${agency} te comparte la factura N.° ${inv.invoiceNumber} por ${fmtMoney(inv.total, profile?.currency)}. Gracias por confiar en nosotros.\n${url}`.trim()
+      const href = to ? `https://wa.me/${to}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`
+      window.open(href, '_blank')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo abrir WhatsApp.')
+    }
+  }
+
   function addPayment() {
     const amt = Number(amount)
     if (!(amt > 0)) return setErr('Monto inválido.')
@@ -163,6 +192,16 @@ export default function InvoiceDetail({
             )}
           </div>
           <div class="flex items-center gap-1">
+            {inv && canWrite && (
+              <button
+                aria-label="Enviar por WhatsApp"
+                title="Enviar factura por WhatsApp"
+                onClick={shareToWhatsApp}
+                class="rounded-lg p-2 text-gray-400 hover:bg-green-50 hover:text-green-700"
+              >
+                <MessageCircle class="h-4 w-4" />
+              </button>
+            )}
             {inv && canWrite && (
               <button
                 aria-label="Compartir link público"

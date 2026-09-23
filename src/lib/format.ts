@@ -214,6 +214,23 @@ export function altCurrencyTotal(total: number, currency: 'USD' | 'NIO' | undefi
   return null
 }
 
+/**
+ * Normalize a stored phone into wa.me digits (no +, no separators).
+ * - 11-digit international (505…) → kept as-is.
+ * - 8-digit local NI mobile → prefixed 505 (córdoba cell phones without country code).
+ * - 10-digit → assumed US +1 (foreign shipments).
+ * Returns null when nothing usable comes out.
+ */
+export function waPhone(phone: string | null | undefined): string | null {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  if (!digits) return null
+  if (/^505\d{8}$/.test(digits)) return digits
+  if (/^\d{8}$/.test(digits)) return `505${digits}`
+  if (/^\d{10}$/.test(digits)) return `1${digits}`
+  return digits.length >= 8 && digits.length <= 15 ? digits : null
+}
+
 export const INVOICE_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
   ISSUED: 'Emitida',
