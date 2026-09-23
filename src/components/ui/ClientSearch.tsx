@@ -43,6 +43,7 @@ export default function ClientSearch({
   const [highlight, setHighlight] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
+  const firstRun = useRef(true)
 
   // Keep internal query in sync when parent changes value.
   useEffect(() => { setQuery(value) }, [value])
@@ -51,13 +52,17 @@ export default function ClientSearch({
   // staff member types (tenant-wide client list is short but the round-trips add up).
   useEffect(() => {
     const q = query.trim()
+    const first = firstRun.current
+    firstRun.current = false
     if (q.length < 3) { setResults([]); return }
     const t = setTimeout(async () => {
       setLoading(true)
       try {
         const { rows } = await customerApi.list({ search: q, statuses: includeInactive ? undefined : ['active'], pageSize: 8 })
         setResults(rows)
-        setOpen(true)
+        // Don't pop the dropdown open for a prefilled value (e.g. the assigned
+        // client in the package detail) — only for a query the user typed.
+        if (!first) setOpen(true)
         setHighlight(0)
       } catch { setResults([]) }
       finally { setLoading(false) }
