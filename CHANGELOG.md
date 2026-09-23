@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-09-23
+
+### Fixed
+- Dates keep the exact calendar day everywhere: bare `YYYY-MM-DD` (HTML date inputs, invoice `issue_date`) is parsed as local midnight instead of UTC midnight, which fell a day behind in UTC− zones. `toLocalDate()` reused by `fmtDate` / `daysAgo` / invoice days badges.
+
+### Added
+- Client autocomplete searches from the first character; the "create client" option opens at 1 char too (Original Express flow).
+- Invoice total is prominent in the working currency with a small secondary line for the other currency at the agency's exchange rate (USD ↔ córdobas), on the printed invoice, the detail view and the public receipt.
+- "Enviar por WhatsApp" in the invoice detail: opens a `wa.me` deep link with a friendly message and the public receipt URL — targets the client's phone, falling back to the agency owner's number, normalized to digits (+505 for NI mobiles). Nothing new is generated or hosted.
+
 ## [0.2.1] — 2026-07-10
 
 ### Changed
