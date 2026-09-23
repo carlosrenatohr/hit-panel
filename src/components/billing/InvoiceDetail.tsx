@@ -202,7 +202,7 @@ export default function InvoiceDetail({
                 onClick={shareToWhatsApp}
                 class="rounded-lg p-2 text-gray-400 hover:bg-green-50 hover:text-green-700"
               >
-                <MessageCircle class="h-4 w-4" />
+                <Share2 class="h-4 w-4" />
               </button>
             )}
             {inv && canWrite && (
@@ -222,7 +222,7 @@ export default function InvoiceDetail({
                 }}
                 class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
               >
-                <Share2 class="h-4 w-4" />
+                <MessageCircle class="h-4 w-4" />
               </button>
             )}
             {inv && (
