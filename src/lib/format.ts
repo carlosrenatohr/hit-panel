@@ -130,6 +130,17 @@ export function fmtDate(s?: string | null): string {
   return d.toLocaleDateString('es-NI', { year: 'numeric', month: 'short', day: '2-digit' })
 }
 
+/**
+ * HTML date inputs yield 'YYYY-MM-DD' — the user's local calendar day. Send it as
+ * local midnight so the stored timestamptz renders back the SAME day (a bare date
+ * is parsed as UTC midnight, which falls a day behind in UTC− zones like Nicaragua).
+ */
+export function dateInputToTimestamptz(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const d = new Date(`${value}T00:00:00`)
+  return Number.isNaN(+d) ? value : d.toISOString()
+}
+
 export function daysAgo(s?: string | null): number | null {
   if (!s) return null
   const d = new Date(s)
