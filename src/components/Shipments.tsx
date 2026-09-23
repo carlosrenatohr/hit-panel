@@ -4,6 +4,7 @@ import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
 import {
   cleanName,
+  dateInputToTimestamptz,
   daysAgo,
   downloadCSV,
   fmtDate,
@@ -387,7 +388,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
         referenciaName: createForm.referenciaName || null,
         weightLb: createForm.weightLb ? Number(createForm.weightLb) : null,
         pieces: createForm.pieces ? Number(createForm.pieces) : null,
-        receivedAt: createForm.receivedAt || null,
+        receivedAt: createForm.receivedAt ? dateInputToTimestamptz(createForm.receivedAt) : null,
         providerCode: createForm.providerCode || null,
         clientId,
         status: createForm.status,

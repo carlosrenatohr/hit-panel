@@ -325,12 +325,15 @@ describe('Shipments', () => {
 
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25001234' } });
     fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+    // A date entered in the modal must keep its calendar day (local midnight),
+    // not fall a day behind by parsing as UTC midnight.
+    fireEvent.change(screen.getByLabelText('Fecha de recepción (opcional)'), { target: { value: '2026-09-23' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() => expect(vi.mocked(customerApi.create)).toHaveBeenCalledWith({ name: 'Ana P' }));
     await waitFor(() =>
       expect(vi.mocked(createPackage)).toHaveBeenCalledWith(
-        expect.objectContaining({ almacenId: '25001234', clientId: 'client-created-id', status: 'en_almacen', serviceType: 'aereo' }),
+        expect.objectContaining({ almacenId: '25001234', clientId: 'client-created-id', status: 'en_almacen', serviceType: 'aereo', receivedAt: expect.stringMatching(/^2026-09-23T/) }),
       ),
     );
   });
