@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-09-23
+
+### Fixed
+- The WhatsApp invoice link now carries a fresh \`?ts=\` cache-buster, so every share downloads a new PDF (no stale browser/WhatsApp copy) — the worker also sends \`Cache-Control: no-store\`.
+
 ## [0.4.3] — 2026-09-23
 
 ### Changed
