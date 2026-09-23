@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-09-23
+
+### Changed
+- The invoice secondary line shows only the equivalent in the other currency (`≈ C$3,700.00`), without the exchange rate — on the printed invoice and the detail view.
+
 ## [0.4.2] — 2026-09-23
 
 ### Changed

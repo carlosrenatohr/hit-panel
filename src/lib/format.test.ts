@@ -39,14 +39,14 @@ describe('toLocalDate', () => {
 })
 
 describe('altCurrencyTotal', () => {
-  it('shows the córdoba equivalent when the working currency is USD', () => {
+  it('shows the córdoba equivalent when the working currency is USD (no rate shown)', () => {
     const out = altCurrencyTotal(100, 'USD', 37)
-    expect(out).toBe('≈ C$3,700.00 (tasa 37)')
+    expect(out).toBe('≈ C$3,700.00')
   })
 
-  it('shows the USD equivalent when the working currency is NIO', () => {
+  it('shows the USD equivalent when the working currency is NIO (no rate shown)', () => {
     const out = altCurrencyTotal(3700, 'NIO', 37)
-    expect(out).toBe('≈ $100.00 (tasa 37)')
+    expect(out).toBe('≈ $100.00')
   })
 
   it('returns null without a rate (single-currency invoice)', () => {
