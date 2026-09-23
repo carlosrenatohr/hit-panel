@@ -1,9 +1,10 @@
 import { Clock } from 'lucide-preact'
+import { toLocalDate } from '../../lib/format'
 import type { InvoiceStatus } from '../../lib/billing'
 
 function diffDays(from: string, to: string | number): number | null {
-  const a = new Date(from)
-  const b = typeof to === 'number' ? new Date(to) : new Date(to)
+  const a = toLocalDate(from)
+  const b = typeof to === 'number' ? new Date(to) : toLocalDate(to)
   if (isNaN(+a) || isNaN(+b)) return null
   return Math.floor((+b - +a) / 86400000)
 }

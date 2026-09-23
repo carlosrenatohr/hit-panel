@@ -114,6 +114,17 @@ export function providerLabel(code?: string | null): string {
   return code ? (PROVIDER_LABEL[code] ?? code) : '—'
 }
 
+/**
+ * Parse a stored date into a Date, treating a bare YYYY-MM-DD as the LOCAL
+ * calendar day (midnight in the user's timezone) instead of UTC midnight.
+ * Date-only values come from HTML date inputs and Postgres `date` columns
+ * (e.g. invoice issue_date); parsing them as UTC shifts the day back in UTC−
+ * zones like Nicaragua. Full ISO timestamps pass through unchanged.
+ */
+export function toLocalDate(value: string): Date {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value)
+}
+
 export function fmtDateTime(s?: string | null): string {
   if (!s) return '—'
   const d = new Date(s)
@@ -125,7 +136,7 @@ export function fmtDateTime(s?: string | null): string {
 
 export function fmtDate(s?: string | null): string {
   if (!s) return '—'
-  const d = new Date(s)
+  const d = toLocalDate(s)
   if (isNaN(+d)) return '—'
   return d.toLocaleDateString('es-NI', { year: 'numeric', month: 'short', day: '2-digit' })
 }
@@ -143,7 +154,7 @@ export function dateInputToTimestamptz(value: string): string {
 
 export function daysAgo(s?: string | null): number | null {
   if (!s) return null
-  const d = new Date(s)
+  const d = toLocalDate(s)
   if (isNaN(+d)) return null
   return Math.floor((Date.now() - +d) / 86400000)
 }
