@@ -148,7 +148,10 @@ export default function InvoiceDetail({
       }
       const to = waPhone(clientPhone ?? profile?.phone)
       const agency = profile?.name ?? brand?.name ?? 'Orbit'
-      const msg = `Hola ${inv.clientName ?? ''}, ${agency} te comparte la factura N.° ${inv.invoiceNumber} por ${fmtMoney(inv.total, profile?.currency)}. Gracias por confiar en nosotros.\n${url}`.trim()
+      // The public share URL is the HTML preview; /pdf is the on-the-fly PDF
+      // download (nothing stored) — that's what the client gets on WhatsApp.
+      const pdfUrl = `${url}/pdf`
+      const msg = `Hola ${inv.clientName ?? ''}, ${agency} te comparte la factura N.° ${inv.invoiceNumber} por ${fmtMoney(inv.total, profile?.currency)}. Gracias por confiar en nosotros.\n${pdfUrl}`.trim()
       const href = to ? `https://wa.me/${to}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`
       window.open(href, '_blank')
     } catch (e) {
