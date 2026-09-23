@@ -8,7 +8,7 @@ import {
   type PaymentBank,
   type PaymentMethod,
 } from '../../lib/billing'
-import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
+import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
 import { Button, Card, Field, inputCls, Spinner } from '../ui'
 import { InvoiceDaysBadge } from './badges'
@@ -215,7 +215,7 @@ export default function InvoiceDetail({
                 </div>
                 {inv.status === 'PAID' && inv.paidAt && <div class="text-[11px] text-gray-400">Pagada el {fmtDate(inv.paidAt)}</div>}
                 <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div><span class="text-gray-400">Total</span><div class="text-lg font-bold text-secondary">{fmtMoney(inv.total, profile?.currency)}</div></div>
+                  <div><span class="text-gray-400">Total</span><div class="text-lg font-bold text-secondary">{fmtMoney(inv.total, profile?.currency)}</div>{inv && profile && altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd) && <div class="text-[11px] text-gray-400">{altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd)}</div>}</div>
                   <div><span class="text-gray-400">Ganancia</span><div class="font-semibold text-green-700">{fmtMoney(inv.profit, profile?.currency)}{inv.margin != null && <span class="ml-1 text-xs text-gray-400">({Math.round(inv.margin * 100)}%)</span>}</div></div>
                   <div><span class="text-gray-400">Pagado</span><div class="font-medium">{fmtMoney(inv.paidUsd, profile?.currency)}</div></div>
                   <div><span class="text-gray-400">Saldo</span><div class="font-medium">{fmtMoney(inv.outstanding, profile?.currency)}</div></div>
@@ -454,7 +454,7 @@ export default function InvoiceDetail({
         <InvoicePrint
           inv={inv}
           brand={brand ?? undefined}
-          profile={profile ? { ruc: profile.ruc, address: profile.address, phone: profile.phone, currency: profile.currency } : undefined}
+          profile={profile ? { ruc: profile.ruc, address: profile.address, phone: profile.phone, currency: profile.currency, exchangeRateNioPerUsd: profile.exchangeRateNioPerUsd } : undefined}
         />
       )}
     </div>
