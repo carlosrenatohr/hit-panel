@@ -60,20 +60,28 @@ export async function getStats(organizationId?: string, from?: string, to?: stri
 
 // Providers are tenant-scoped via the provider_agencies junction (M:N): a user only
 // sees the providers linked to their own agency. providers.organization_id is deprecated.
-export async function getProviders(agency?: string): Promise<Provider[]> {
+export interface AgencyProvider extends Provider {
+  /** Junction flag: this is the agency's default provider for create_package. */
+  isDefault: boolean
+}
+
+export async function getProviders(agency?: string): Promise<AgencyProvider[]> {
   if (!agency) {
     const { data, error } = await insforge.database.from('providers').select('id,code,name').order('code')
     if (error) throw error
-    return (data as Provider[]) ?? []
+    return ((data as Provider[] | null) ?? []).map((p) => ({ ...p, isDefault: false }))
   }
   const { data, error } = await insforge.database
     .from('provider_agencies')
-    .select('providers(id,code,name)')
+    .select('is_default,providers(id,code,name)')
     .eq('agency_slug', agency)
   if (error) throw error
   // PostgREST returns a to-one embed as an object per junction row.
-  const rows = (data ?? []) as unknown as { providers: Provider | null }[]
-  return rows.map((r) => r.providers).filter((p): p is Provider => !!p).sort((a, b) => a.code.localeCompare(b.code))
+  const rows = (data ?? []) as unknown as { providers: Provider | null; is_default: boolean | null }[]
+  return rows
+    .map((r) => (r.providers ? { ...r.providers, isDefault: r.is_default ?? false } : null))
+    .filter((p): p is AgencyProvider => !!p)
+    .sort((a, b) => a.code.localeCompare(b.code))
 }
 
 export interface ListFilters {
@@ -196,7 +204,8 @@ export async function createPackage(input: {
   declaredValue?: number | null
   photoRef?: string | null
   receivedAt?: string | null
-}): Promise<{ id: string; almacenId: string; organizationId: string }> {
+  providerCode?: string | null
+}): Promise<{ id: string; almacenId: string; organizationId: string; warning?: string | null }> {
   const { error, data } = await insforge.database.rpc('create_package', {
     p_almacen_id: input.almacenId,
     p_tracking_number: input.trackingNumber ?? null,
@@ -214,11 +223,15 @@ export async function createPackage(input: {
     p_declared_value: input.declaredValue ?? null,
     p_photo_ref: input.photoRef ?? null,
     p_received_at: input.receivedAt ?? null,
+    p_provider_code: input.providerCode ?? null,
   })
   if (error) throw error
-  const d = data as { id: string; almacen_id: string; organization_id: string } | null
+  // The RPC reports cross-tenant ledger collisions as a JSON error (not a raise, so
+  // its audit row survives) — surface the actionable message to the staff member.
+  const d = data as { id: string; almacen_id: string; organization_id: string; warning?: string | null; error?: string | null; message?: string | null } | null
   if (!d) throw new Error('No se pudo crear el paquete.')
-  return { id: d.id, almacenId: d.almacen_id, organizationId: d.organization_id }
+  if (d.error) throw new Error(d.message ?? 'No se pudo crear el paquete.')
+  return { id: d.id, almacenId: d.almacen_id, organizationId: d.organization_id, warning: d.warning ?? null }
 }
 
 export async function setManualStatus(guia: string, status: string, note?: string): Promise<void> {
