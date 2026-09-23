@@ -611,7 +611,7 @@ export default function ShipmentDetail({
                         </span>
                       )}
                       <ClientSearch
-                        value=""
+                        value={d.pkg.client_id ? (d.pkg.billing_clients?.name ?? '') : ''}
                         onSelect={(c) => run(() => setPackageClient(guia, c.id || null))}
                         placeholder="Buscar cliente para asignar…"
                         disabled={busy}
@@ -633,7 +633,7 @@ export default function ShipmentDetail({
                     <div class="mb-1 text-xs font-medium text-gray-500">Tipo de servicio</div>
                     <div class="flex flex-wrap items-center gap-2">
                       <span class="text-sm text-gray-600">
-                        Actual: {(d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'Marítimo' : 'Aéreo'}
+                        Actual: {d.pkg.effective_service_type === 'maritimo' ? 'Marítimo' : d.pkg.effective_service_type === 'aereo' ? 'Aéreo' : 'Sin definir'}
                         {d.pkg.service_type_override && (
                           <span class="ml-1 text-xs text-orange-600">(override manual)</span>
                         )}
@@ -644,7 +644,7 @@ export default function ShipmentDetail({
                         onChange={(e) => run(() => setPackageService(guia, (e.target as HTMLSelectElement).value || null))}
                         disabled={busy}
                       >
-                        <option value="">Scraped ({d.pkg.service_type === 'maritimo' ? 'Marítimo' : 'Aéreo'})</option>
+                        <option value="">Base ({d.pkg.effective_service_type === 'maritimo' ? 'Marítimo' : d.pkg.effective_service_type === 'aereo' ? 'Aéreo' : 'sin definir'})</option>
                         <option value="aereo">Aéreo</option>
                         <option value="maritimo">Marítimo</option>
                       </select>

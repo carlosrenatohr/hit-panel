@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import ShipmentDetail from './ShipmentDetail';
-import { deletePackage, setPackageClient } from '../lib/insforge';
+import { deletePackage, getPackageDetail, setPackageClient } from '../lib/insforge';
+import type { PackageDetail } from '../lib/types';
+
+// The untyped mockDetail fixture misses a few Pkg fields; build overrides from it
+// with a typed cast so vi.mocked() strict typing stays happy in these tests.
+function detailWith(patch: Record<string, unknown>): PackageDetail {
+  return { ...mockDetail, pkg: { ...mockDetail.pkg, ...patch } } as unknown as PackageDetail;
+}
 
 const mockDetail = vi.hoisted(() => ({
   pkg: {
@@ -74,9 +81,9 @@ vi.mock('../lib/config', () => ({
 }));
 
 vi.mock('./ui/ClientSearch', () => ({
-  default: ({ onSelect }: { onSelect: (c: { id: string; name: string }) => void }) => (
+  default: ({ value, onSelect }: { value?: string; onSelect: (c: { id: string; name: string }) => void }) => (
     <button type="button" onClick={() => onSelect({ id: 'client-1', name: 'Test Client' })}>
-      Mock ClientSearch
+      Mock ClientSearch: {value || '(vacío)'}
     </button>
   ),
 }));
@@ -175,7 +182,7 @@ describe('ShipmentDetail', () => {
     render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} onChanged={onChanged} />);
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
 
-    fireEvent.click(screen.getByText('Mock ClientSearch'));
+    fireEvent.click(screen.getByText(/Mock ClientSearch/));
 
     await waitFor(() => {
       expect(setPackageClient).toHaveBeenCalledWith('910500', 'client-1');
@@ -191,7 +198,32 @@ describe('ShipmentDetail', () => {
     expect(screen.getByText(/Actual: Aéreo/)).toBeTruthy();
 
     // Override select is present
-    const select = screen.getByDisplayValue('Scraped (Aéreo)');
+    const select = screen.getByDisplayValue('Base (Aéreo)');
     expect(select).toBeTruthy();
+  });
+
+  it('shows "Sin definir" for a manual package with no service type yet', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({ service_type: null, service_type_override: null, effective_service_type: null }));
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.getByText(/Actual: Sin definir/)).toBeTruthy();
+    expect(screen.getByDisplayValue('Base (sin definir)')).toBeTruthy();
+  });
+
+  it('prefills the assigned client in the search box', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({ client_id: 'c1', billing_clients: { name: 'Ana Perez' } }));
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.getByText('Mock ClientSearch: Ana Perez')).toBeTruthy();
+  });
+
+  it('keeps the client search empty when no client is assigned', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({}));
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.getByText(/Mock ClientSearch: \(vacío\)/)).toBeTruthy();
   });
 });

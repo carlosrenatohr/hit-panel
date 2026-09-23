@@ -47,13 +47,15 @@ export default function ClientSearch({
   // Keep internal query in sync when parent changes value.
   useEffect(() => { setQuery(value) }, [value])
 
-  // Debounced search.
+  // Debounced search — only after 3 chars, to avoid noisy queries while the
+  // staff member types (tenant-wide client list is short but the round-trips add up).
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return }
+    const q = query.trim()
+    if (q.length < 3) { setResults([]); return }
     const t = setTimeout(async () => {
       setLoading(true)
       try {
-        const { rows } = await customerApi.list({ search: query.trim(), statuses: includeInactive ? undefined : ['active'], pageSize: 8 })
+        const { rows } = await customerApi.list({ search: q, statuses: includeInactive ? undefined : ['active'], pageSize: 8 })
         setResults(rows)
         setOpen(true)
         setHighlight(0)
@@ -126,7 +128,7 @@ export default function ClientSearch({
         )}
       </div>
 
-      {open && (results.length > 0 || (allowCreate && query.trim() && !exactMatch)) && (
+      {open && (results.length > 0 || (allowCreate && query.trim().length >= 3 && !exactMatch)) && (
         <ul class="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg" role="listbox">
           {results.map((c, i) => (
             <li
@@ -141,7 +143,7 @@ export default function ClientSearch({
               {c.casillero && <span class="text-xs text-gray-400">#{c.casillero}</span>}
             </li>
           ))}
-          {allowCreate && query.trim() && !exactMatch && (
+          {allowCreate && query.trim().length >= 3 && !exactMatch && (
             <li
               role="option"
               aria-selected={highlight === results.length}

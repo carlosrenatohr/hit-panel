@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/preact';
 import Shipments from './Shipments';
 import { listPackages, getProviders, createPackage, type ListFilters } from '../lib/insforge';
+import { customerApi } from '../lib/customer';
+
+// The create modal now requires a client (typed → created at submit) and a
+// service type. Shared fixture for the shipped tests that reach the submit.
+async function pickNewClientAndService() {
+  fireEvent.input(screen.getByPlaceholderText(/Buscar cliente o escribir uno nuevo/), { target: { value: 'Ana P' } });
+  fireEvent.mouseDown(await screen.findByText(/Crear cliente:/));
+  fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+}
 
 const mockPkgs = vi.hoisted(() => [
   {
@@ -81,6 +90,13 @@ vi.mock('../lib/insforge', () => ({
   getProviders: vi.fn().mockResolvedValue([]),
   exportPackages: vi.fn().mockResolvedValue(mockPkgs),
   createPackage: vi.fn().mockResolvedValue({ id: 'p-1', almacen_id: '123', organization_id: 'hit' }),
+}));
+
+vi.mock('../lib/customer', () => ({
+  customerApi: {
+    list: vi.fn().mockResolvedValue({ rows: [], count: 0 }),
+    create: vi.fn().mockResolvedValue({ id: 'client-created-id', name: 'Nuevo Cliente' }),
+  },
 }));
 
 const mockUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
@@ -203,6 +219,7 @@ describe('Shipments', () => {
     expect(within(modal).queryByDisplayValue('Global Connection')).toBeNull();
 
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25009999' } });
+    await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() => {
@@ -224,6 +241,7 @@ describe('Shipments', () => {
     fireEvent.change(select, { target: { value: 'global_connection' } });
 
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25008888' } });
+    await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() => {
@@ -243,6 +261,7 @@ describe('Shipments', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25007777' } });
+    await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() => expect(screen.getByText(/already exists in tenant hit/)).toBeTruthy());
@@ -258,9 +277,83 @@ describe('Shipments', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25006666' } });
+    await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() => expect(screen.getByText(/creation blocked/)).toBeTruthy());
     expect(screen.getByText('Crear paquete manual')).toBeTruthy();
+  });
+
+  it('blocks creation until a client and a service type are set', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+
+    // No guide, no client, no service → disabled.
+    expect((screen.getByRole('button', { name: 'Crear' }) as HTMLButtonElement).disabled).toBe(true);
+
+    // Guide filled, still no client and no service → disabled.
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25001299' } });
+    expect((screen.getByRole('button', { name: 'Crear' }) as HTMLButtonElement).disabled).toBe(true);
+
+    // Service chosen, still no client → disabled.
+    fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+    expect((screen.getByRole('button', { name: 'Crear' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('preselects en_almacen as the initial status', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+
+    // The status select shows the default label, not 'Seleccionar…'.
+    expect(screen.getByDisplayValue('En bodega Miami')).toBeTruthy();
+  });
+
+  it('creates a new client first, then the package with status and service', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+
+    // Type a brand-new client name (≥3 chars) and pick "Crear cliente".
+    fireEvent.input(screen.getByPlaceholderText(/Buscar cliente o escribir uno nuevo/), { target: { value: 'Ana P' } });
+    const createOption = await screen.findByText(/Crear cliente:/);
+    fireEvent.mouseDown(createOption);
+
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25001234' } });
+    fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+
+    await waitFor(() => expect(vi.mocked(customerApi.create)).toHaveBeenCalledWith({ name: 'Ana P' }));
+    await waitFor(() =>
+      expect(vi.mocked(createPackage)).toHaveBeenCalledWith(
+        expect.objectContaining({ almacenId: '25001234', clientId: 'client-created-id', status: 'en_almacen', serviceType: 'aereo' }),
+      ),
+    );
+  });
+
+  it('links an existing tenant client instead of creating one', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    vi.mocked(customerApi.list).mockResolvedValue({
+      rows: [{ id: 'c1', name: 'Ana Perez', nameNormalized: 'ana perez', casillero: null, toReview: false, email: null, phone: null, address: null, defaultRateId: null, defaultRateCardId: null }],
+      count: 1,
+    });
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Buscar cliente o escribir uno nuevo/), { target: { value: 'ana' } });
+    fireEvent.mouseDown(await screen.findByText('Ana Perez'));
+
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25004444' } });
+    fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'maritimo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+
+    await waitFor(() =>
+      expect(vi.mocked(createPackage)).toHaveBeenCalledWith(expect.objectContaining({ clientId: 'c1', serviceType: 'maritimo' })),
+    );
+    expect(vi.mocked(customerApi.create)).not.toHaveBeenCalled();
   });
 });
