@@ -15,8 +15,8 @@ import {
   toCSV,
 } from '../lib/format'
 import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
-import type { ListFilters } from '../lib/insforge'
-import type { Pkg, Provider, ShipmentStatus, SessionUser } from '../lib/types'
+import type { AgencyProvider, ListFilters } from '../lib/insforge'
+import type { Pkg, ShipmentStatus, SessionUser } from '../lib/types'
 import { DateRangePicker } from './DateRangePicker'
 import LifecycleOverview, { TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
@@ -79,7 +79,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
   // Package writes (create_package RPC) gate on is_writer() = admin|staff.
   const canWrite = user.role === 'admin' || user.role === 'staff'
   const selectedOrg = user.agency // tenant is pinned: a user only sees their own agency
-  const [providers, setProviders] = useState<Provider[]>([])
+  const [providers, setProviders] = useState<AgencyProvider[]>([])
   const [searchInput, setSearchInput] = useState('')
   // Default window is the current month (matches the DateRangePicker 'Este mes' preset).
   const [filters, setFilters] = useState<ListFilters>(() => {
@@ -105,6 +105,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
   const [showCreate, setShowCreate] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [createWarning, setCreateWarning] = useState<string | null>(null)
   const [invoiceId, setInvoiceId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState({
     almacenId: '',
@@ -114,6 +115,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
     weightLb: '',
     pieces: '',
     receivedAt: '',
+    providerCode: '',
   })
 
   // Bulk invoicing selection (persists across pagination/filter changes).
@@ -354,7 +356,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
     setCreateError(null)
     setCreateLoading(true)
     try {
-      await createPackage({
+      const res = await createPackage({
         almacenId: createForm.almacenId.trim(),
         trackingNumber: createForm.trackingNumber || null,
         serviceType: createForm.serviceType || null,
@@ -362,10 +364,17 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
         weightLb: createForm.weightLb ? Number(createForm.weightLb) : null,
         pieces: createForm.pieces ? Number(createForm.pieces) : null,
         receivedAt: createForm.receivedAt || null,
+        providerCode: createForm.providerCode || null,
       })
-      setShowCreate(false)
-      setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '', weightLb: '', pieces: '', receivedAt: '' })
       reload()
+      if (res.warning) {
+        // Created, but the tracking already exists in another tenant — keep the modal
+        // open so the staff member reads the warning before closing.
+        setCreateWarning(res.warning)
+      } else {
+        setShowCreate(false)
+        setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '', weightLb: '', pieces: '', receivedAt: '', providerCode: '' })
+      }
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
     } finally {
@@ -399,7 +408,21 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
             {exporting ? 'Exportando…' : 'Exportar CSV'}
           </Button>
           {canWrite && user.role !== 'viewer' && (
-            <Button variant="primary" onClick={() => setShowCreate(true)}>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setCreateError(null)
+                setCreateWarning(null)
+                // Preselect the agency's default provider (junction is_default) — the
+                // modal only renders a <select> when the agency has more than one.
+                setCreateForm({
+                  almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '',
+                  weightLb: '', pieces: '', receivedAt: '',
+                  providerCode: (providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '',
+                })
+                setShowCreate(true)
+              }}
+            >
               <Plus class="h-4 w-4" aria-hidden="true" />
               Crear paquete
             </Button>
@@ -685,6 +708,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
             {createError && (
               <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{createError}</div>
             )}
+            {createWarning && (
+              <div class="mb-3 rounded-md bg-amber-50 p-2 text-sm text-amber-800">{createWarning}</div>
+            )}
 
             <div class="space-y-3">
               <Field label="Guía (almacén)">
@@ -704,6 +730,32 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
                   onInput={(e) => setCreateForm({ ...createForm, trackingNumber: (e.target as HTMLInputElement).value })}
                 />
               </Field>
+
+              {providers.length === 0 ? (
+                <div class="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
+                  Esta agencia todavía no tiene un proveedor asignado. Pedí al administrador que asigne el proveedor por
+                  defecto de la agencia (runbook de onboarding §2.5) para poder crear paquetes.
+                </div>
+              ) : providers.length === 1 ? (
+                <div class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-sm">
+                  <span class="text-gray-500">Proveedor</span>
+                  <span class="font-medium text-secondary">{providerLabel(providers[0].code)}</span>
+                </div>
+              ) : (
+                <Field label="Proveedor">
+                  <select
+                    class={inputCls}
+                    value={createForm.providerCode}
+                    onChange={(e) => setCreateForm({ ...createForm, providerCode: (e.target as HTMLSelectElement).value })}
+                  >
+                    {providers.map((p) => (
+                      <option key={p.code} value={p.code}>
+                        {providerLabel(p.code)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
 
               <Field label="Servicio">
                 <select
@@ -761,8 +813,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
             </div>
 
             <div class="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null) }}>Cancelar</Button>
-              <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId}>
+              <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null); setCreateWarning(null) }}>Cancelar</Button>
+              <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId || providers.length === 0}>
                 {createLoading ? 'Creando…' : 'Crear'}
               </Button>
             </div>
