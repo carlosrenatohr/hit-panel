@@ -313,7 +313,7 @@ export default function InvoiceForm({
       <Card class="my-8 w-full max-w-2xl">
         <SectionTitle class="justify-between">
           <span>{isEdit ? 'Editar factura' : 'Nueva factura'}</span>
-          <button onClick={onClose} aria-label="Cerrar" class="text-gray-400 hover:text-gray-700">
+          <button onClick={onClose} aria-label="Cerrar formulario de factura" title="Cerrar formulario" class="text-gray-400 hover:text-gray-700">
             <X class="h-4 w-4" />
           </button>
         </SectionTitle>
@@ -424,7 +424,7 @@ export default function InvoiceForm({
                       <div class="font-semibold text-secondary">{a.unitPrice == null ? 'N/A' : fmtMoney(a.total, currency)}</div>
                       <div class="text-[11px] text-gray-400">{a.unitPrice == null ? 'tarifa no aplica' : `${fmtMoney(a.unitPrice, currency)}/lb`}</div>
                     </div>
-                    <button class="col-span-1 pb-2 text-gray-300 hover:text-red-500" aria-label="Quitar línea" onClick={() => {
+                    <button class="col-span-1 pb-2 text-gray-300 hover:text-red-500" aria-label={`Quitar línea ${i + 1}`} title={`Quitar línea ${i + 1}`} onClick={() => {
                           setLines((ls) => ls.filter((_, idx) => idx !== i))
                           if (l.packageId) setSelectedIds((ids) => ids.filter((id) => id !== l.packageId))
                         }}>
@@ -471,7 +471,7 @@ export default function InvoiceForm({
                       Monto
                       <input type="number" min="0" step="0.01" class={`${inputCls} mt-1 w-full`} value={o.amount} placeholder={concept?.suggestedPrice != null ? String(concept.suggestedPrice) : '0.00'} onInput={(e) => setOthers((os) => os.map((x, idx) => (idx === i ? { ...x, amount: (e.target as HTMLInputElement).value } : x)))} />
                     </label>
-                    <button class="col-span-2 pb-2 text-gray-300 hover:text-red-500" aria-label="Quitar cargo" onClick={() => setOthers((os) => os.filter((_, idx) => idx !== i))}>
+                    <button class="col-span-2 pb-2 text-gray-300 hover:text-red-500" aria-label={`Quitar cargo ${i + 1}`} title={`Quitar cargo ${i + 1}`} onClick={() => setOthers((os) => os.filter((_, idx) => idx !== i))}>
                       <Trash2 class="h-4 w-4" />
                     </button>
                   </div>

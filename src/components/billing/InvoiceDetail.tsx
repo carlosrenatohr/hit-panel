@@ -206,7 +206,7 @@ export default function InvoiceDetail({
           <div class="flex items-center gap-1">
             {inv && canWrite && (
               <button
-                aria-label="Enviar por WhatsApp"
+                aria-label={`Enviar factura #${inv.invoiceNumber} por WhatsApp`}
                 title="Enviar factura por WhatsApp"
                 onClick={shareToWhatsApp}
                 class="rounded-lg p-2 text-gray-400 hover:bg-green-50 hover:text-green-700"
@@ -216,7 +216,7 @@ export default function InvoiceDetail({
             )}
             {inv && canWrite && (
               <button
-                aria-label="Copiar link público"
+                aria-label={`Copiar link público de la factura #${inv.invoiceNumber}`}
                 title="Copiar link público de la factura"
                 onClick={async () => {
                   try {
@@ -234,11 +234,16 @@ export default function InvoiceDetail({
               </button>
             )}
             {inv && (
-              <button aria-label="Imprimir" title="Imprimir PDF" onClick={() => window.print()} class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+              <button
+                aria-label={`Imprimir factura #${inv.invoiceNumber}`}
+                title="Imprimir PDF"
+                onClick={() => window.print()}
+                class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
                 <Printer class="h-4 w-4" />
               </button>
             )}
-            <button aria-label="Cerrar" onClick={onClose} class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+            <button aria-label="Cerrar detalle de factura" onClick={onClose} class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
               <X class="h-4 w-4" />
             </button>
           </div>
@@ -437,8 +442,8 @@ export default function InvoiceDetail({
                         {p.tracking && <span class="text-[11px] text-gray-500">{p.tracking}</span>}
                         <span class="text-[10px] text-gray-400">({p.source})</span>
                       </span>
-                      {canWrite && !inv.closedAt && (
-                        <button aria-label="Desenlazar" onClick={() => run(() => billingApi.unlinkPackage(id, p.packageId))} class="text-gray-300 hover:text-red-500">
+                      {canWrite && !inv.closedAt && p.guia && (
+                        <button aria-label={`Desenlazar el paquete ${p.guia} de la factura #${inv.invoiceNumber}`} title={`Desenlazar ${p.guia}`} onClick={() => run(() => billingApi.unlinkPackage(id, p.packageId))} class="text-gray-300 hover:text-red-500">
                           <Trash2 class="h-3.5 w-3.5" />
                         </button>
                       )}
