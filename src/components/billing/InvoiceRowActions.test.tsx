@@ -20,46 +20,46 @@ function renderRow(r: InvoiceListRow, canWrite = true, busy = false) {
 describe('InvoiceRowActions', () => {
   it('open draft offers view, edit, close and void', () => {
     renderRow(row({ status: 'DRAFT', closedAt: null }))
-    expect(screen.getByLabelText('Ver factura')).toBeTruthy()
-    expect(screen.getByLabelText('Editar factura')).toBeTruthy()
-    expect(screen.getByLabelText('Cerrar factura')).toBeTruthy()
-    expect(screen.getByLabelText('Anular factura')).toBeTruthy()
+    expect(screen.getByLabelText('Ver factura #1')).toBeTruthy()
+    expect(screen.getByLabelText('Editar factura #1')).toBeTruthy()
+    expect(screen.getByLabelText('Cerrar factura #1')).toBeTruthy()
+    expect(screen.getByLabelText('Anular factura #1')).toBeTruthy()
   })
 
   it('issued invoice offers view and void, never edit/close', () => {
     renderRow(row({ status: 'ISSUED', closedAt: '2026-09-06' }))
-    expect(screen.getByLabelText('Ver factura')).toBeTruthy()
-    expect(screen.queryByLabelText('Editar factura')).toBeNull()
-    expect(screen.queryByLabelText('Cerrar factura')).toBeNull()
-    expect(screen.getByLabelText('Anular factura')).toBeTruthy()
+    expect(screen.getByLabelText('Ver factura #1')).toBeTruthy()
+    expect(screen.queryByLabelText('Editar factura #1')).toBeNull()
+    expect(screen.queryByLabelText('Cerrar factura #1')).toBeNull()
+    expect(screen.getByLabelText('Anular factura #1')).toBeTruthy()
   })
 
   it('paid invoice can be viewed and voided but never closed', () => {
     renderRow(row({ status: 'PAID', paidAt: '2026-09-07' }))
-    expect(screen.queryByLabelText('Cerrar factura')).toBeNull()
-    expect(screen.queryByLabelText('Editar factura')).toBeNull()
-    expect(screen.getByLabelText('Anular factura')).toBeTruthy()
+    expect(screen.queryByLabelText('Cerrar factura #1')).toBeNull()
+    expect(screen.queryByLabelText('Editar factura #1')).toBeNull()
+    expect(screen.getByLabelText('Anular factura #1')).toBeTruthy()
   })
 
   it('void invoice only offers view', () => {
     renderRow(row({ status: 'VOID' }))
-    expect(screen.getByLabelText('Ver factura')).toBeTruthy()
-    expect(screen.queryByLabelText('Editar factura')).toBeNull()
-    expect(screen.queryByLabelText('Cerrar factura')).toBeNull()
-    expect(screen.queryByLabelText('Anular factura')).toBeNull()
+    expect(screen.getByLabelText('Ver factura #1')).toBeTruthy()
+    expect(screen.queryByLabelText('Editar factura #1')).toBeNull()
+    expect(screen.queryByLabelText('Cerrar factura #1')).toBeNull()
+    expect(screen.queryByLabelText('Anular factura #1')).toBeNull()
   })
 
   it('read-only users only get the view action', () => {
     renderRow(row({ status: 'DRAFT', closedAt: null }), false)
-    expect(screen.getByLabelText('Ver factura')).toBeTruthy()
-    expect(screen.queryByLabelText('Editar factura')).toBeNull()
-    expect(screen.queryByLabelText('Cerrar factura')).toBeNull()
-    expect(screen.queryByLabelText('Anular factura')).toBeNull()
+    expect(screen.getByLabelText('Ver factura #1')).toBeTruthy()
+    expect(screen.queryByLabelText('Editar factura #1')).toBeNull()
+    expect(screen.queryByLabelText('Cerrar factura #1')).toBeNull()
+    expect(screen.queryByLabelText('Anular factura #1')).toBeNull()
   })
 
   it('fires its own handler and stops propagation of row clicks', () => {
     const handlers = renderRow(row({ status: 'ISSUED' }))
-    fireEvent.click(screen.getByLabelText('Ver factura'))
+    fireEvent.click(screen.getByLabelText('Ver factura #1'))
     expect(handlers.onView).toHaveBeenCalledTimes(1)
   })
 })

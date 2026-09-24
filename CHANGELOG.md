@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9] — 2026-09-24
+
+### Changed
+- All action icons in the billing module got dynamic, informative aria-labels (same pattern as the customers module): WhatsApp/copy/print/close/desenlazar include the invoice number or package guia; invoice row actions (ver/editar/cerrar/anular) include the invoice number; form remove-line/remove-charge buttons include the row index.
+
 ## [0.4.8] — 2026-09-24
 
 ### Changed

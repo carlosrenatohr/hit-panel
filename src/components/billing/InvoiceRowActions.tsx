@@ -27,23 +27,24 @@ export default function InvoiceRowActions({
   onVoid: () => void
 }) {
   const open = row.status === 'DRAFT' && !row.closedAt
+  const num = row.invoiceNumber
   return (
     <div class="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
-      <button aria-label="Ver factura" title="Ver detalle" onClick={onView} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+      <button aria-label={`Ver factura #${num}`} title={`Ver factura #${num}`} onClick={onView} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
         <Eye class="h-4 w-4" />
       </button>
       {canWrite && open && (
-        <button aria-label="Editar factura" title="Editar borrador" onClick={onEdit} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-primary">
+        <button aria-label={`Editar factura #${num}`} title={`Editar factura #${num}`} onClick={onEdit} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-primary">
           <Pencil class="h-4 w-4" />
         </button>
       )}
       {canWrite && open && (
-        <button aria-label="Cerrar factura" title="Cerrar (pasa a emitida)" disabled={busy} onClick={onClose} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-green-700">
+        <button aria-label={`Cerrar factura #${num}`} title={`Cerrar factura #${num} (pasa a emitida)`} disabled={busy} onClick={onClose} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-green-700">
           <Lock class="h-4 w-4" />
         </button>
       )}
       {canWrite && row.status !== 'VOID' && (
-        <button aria-label="Anular factura" title="Anular" disabled={busy} onClick={onVoid} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600">
+        <button aria-label={`Anular factura #${num}`} title={`Anular factura #${num}`} disabled={busy} onClick={onVoid} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600">
           <Ban class="h-4 w-4" />
         </button>
       )}
