@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-09-23
+
+### Changed
+- The invoice secondary line shows only the symbol+amount (\`C\$3,700.00\`) — no \`≈\`, no exchange rate.
+
 ## [0.4.4] — 2026-09-23
 
 ### Fixed
