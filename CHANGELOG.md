@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8] — 2026-09-24
+
+### Changed
+- The Auditoría tab is hidden in Configuración while a richer, more useful view is designed (AuditTab stays wired for later).
+
 ## [0.4.7] — 2026-09-24
 
 ### Changed
