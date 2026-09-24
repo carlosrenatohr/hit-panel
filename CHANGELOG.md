@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] — 2026-09-24
+
+### Changed
+- Package buttons now pop: \`Ver en GC\` and \`Track\` use the palette primary orange (same solid style as the app's Button), and \`Rastrear en Parcel\` uses Parcel's own gradient (\`to left, #2980b9, #2EB187\`).
+
 ## [0.4.5] — 2026-09-23
 
 ### Changed

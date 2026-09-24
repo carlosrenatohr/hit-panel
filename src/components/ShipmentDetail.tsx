@@ -456,7 +456,7 @@ export default function ShipmentDetail({
                       href={providerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="inline-flex items-center gap-1.5 rounded-lg border border-navy/30 bg-white px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-navy/5"
+                      class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark hover:shadow"
                       title={`Abrir detalle en ${providerLabel(providerCode)}`}
                     >
                       <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
@@ -468,7 +468,7 @@ export default function ShipmentDetail({
                       href={trackUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="inline-flex items-center gap-1.5 rounded-lg border border-navy/30 bg-white px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-navy/5"
+                      class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark hover:shadow"
                       title="Abrir el seguimiento público del proveedor con este tracking"
                     >
                       <Radar class="h-3.5 w-3.5" aria-hidden="true" />
@@ -480,7 +480,7 @@ export default function ShipmentDetail({
                       href={parcelUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="inline-flex items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-blue/90"
+                      class="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-l from-[#2980b9] to-[#2EB187] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
                       title="Rastrear en el agregador de paqueterías Parcel"
                     >
                       <Package class="h-3.5 w-3.5" aria-hidden="true" />
