@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] — 2026-09-24
+
+### Changed
+- The tracking number shows without the redundant \`Tracking \` prefix in the invoice detail and the print template (matches the WhatsApp PDF).
+
 ## [0.4.6] — 2026-09-24
 
 ### Changed

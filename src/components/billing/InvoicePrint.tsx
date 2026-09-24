@@ -106,7 +106,7 @@ export default function InvoicePrint({
                   {l.lineType === 'freight' ? (
                     <>
                       <div class="font-semibold">{guia ?? ''}</div>
-                      {tracking && <div class="text-[10px] text-gray-500">Tracking {tracking}</div>}
+                      {tracking && <div class="text-[10px] text-gray-500">{tracking}</div>}
                     </>
                   ) : (
                     <div>{l.description ?? 'Otro cargo'}</div>
