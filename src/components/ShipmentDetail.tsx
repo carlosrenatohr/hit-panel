@@ -1,4 +1,4 @@
-import { Anchor, Check, CheckCircle2, Copy, FileText, Package, Plane, RefreshCw, StickyNote, Tag, Trash2, X } from 'lucide-preact'
+import { Anchor, Check, CheckCircle2, Copy, ExternalLink, FileText, Package, Plane, Radar, RefreshCw, StickyNote, Tag, Trash2, X } from 'lucide-preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import InvoiceForm from './billing/InvoiceForm'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -236,10 +236,22 @@ export default function ShipmentDetail({
 
   const step = d ? PIPELINE_STEP[d.pkg.effective_status as ShipmentStatus] : 0
   const providerBase = d?.pkg.providers?.base_url?.replace(/\/$/, '')
+  const providerCode = d?.pkg.providers?.code
+  // #1 Provider detail: same engine host + the agent warehouse detail page (by guia).
   const providerUrl = providerBase ? `${providerBase}/appl2.0/agent/whs_detail.asp?id=${guia}` : null
+  // #2 Public tracking: same Cargotrack host + m/track.asp — it accepts the tracking
+  // number as a GET query (?track=…&action2=process verified to return the result
+  // page) so no client-side form simulation is needed. Only shown with a number.
+  const trackUrl = providerBase && d?.pkg.tracking_number
+    ? `${providerBase}/m/track.asp?track=${encodeURIComponent(d.pkg.tracking_number)}`
+    : null
+  // #3 Third-party parcel aggregator (always available; last, contrasting color).
   const parcelUrl = d?.pkg.tracking_number
     ? `https://parcelsapp.com/en/tracking/${encodeURIComponent(d.pkg.tracking_number)}`
     : null
+  // Short provider label for the buttons ("Global Connection" → "GC") — the label
+  // the client asked the first button to show.
+  const shortProviderLabel = providerCode === 'global_connection' ? 'GC' : providerLabel(providerCode)
 
   // Rate override display: name is resolved from the config module (staff is pinned
   // to their own agency server-side); viewer never sees billing data at all.
@@ -427,7 +439,7 @@ export default function ShipmentDetail({
                     daysAgo(d.pkg.received_at) !== null && <DaysBadge days={daysAgo(d.pkg.received_at) as number} />}
                 </div>
               )}
-              {(d.pkg.photo_ref || providerUrl || parcelUrl) && (
+              {(d.pkg.photo_ref || providerUrl || trackUrl || parcelUrl) && (
                 <div class="mt-3 flex flex-wrap items-center gap-4 border-t border-gray-100 pt-3 text-sm">
                   {d.pkg.photo_ref && (
                     <button
@@ -440,13 +452,39 @@ export default function ShipmentDetail({
                     </button>
                   )}
                   {providerUrl && (
-                    <a href={providerUrl} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 text-gray-600 hover:text-primary">
-                      🔗 Ver en {providerLabel(d.pkg.providers?.code)}
+                    <a
+                      href={providerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center gap-1.5 rounded-lg border border-navy/30 bg-white px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-navy/5"
+                      title={`Abrir detalle en ${providerLabel(providerCode)}`}
+                    >
+                      <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
+                      Ver en {shortProviderLabel}
+                    </a>
+                  )}
+                  {trackUrl && (
+                    <a
+                      href={trackUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center gap-1.5 rounded-lg border border-navy/30 bg-white px-3 py-1.5 text-xs font-semibold text-navy transition-colors hover:bg-navy/5"
+                      title="Abrir el seguimiento público del proveedor con este tracking"
+                    >
+                      <Radar class="h-3.5 w-3.5" aria-hidden="true" />
+                      Track
                     </a>
                   )}
                   {parcelUrl && (
-                    <a href={parcelUrl} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 text-gray-600 hover:text-primary">
-                      📦 Rastrear en Parcel
+                    <a
+                      href={parcelUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center gap-1.5 rounded-lg bg-accent-blue px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-blue/90"
+                      title="Rastrear en el agregador de paqueterías Parcel"
+                    >
+                      <Package class="h-3.5 w-3.5" aria-hidden="true" />
+                      Rastrear en Parcel
                     </a>
                   )}
                 </div>

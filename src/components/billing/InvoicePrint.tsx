@@ -61,7 +61,7 @@ export default function InvoicePrint({
           </div>
         </div>
         <div class="text-right">
-          <div class="text-[10px] uppercase tracking-widest text-gray-400">Factura N.º</div>
+          <div class="text-[10px] uppercase tracking-widest text-gray-400">Factura No.</div>
           <div class="text-2xl font-extrabold">{inv.invoiceNumber}</div>
           <div class="text-xs text-gray-500">{fmtDate(inv.issueDate)}</div>
         </div>
@@ -70,7 +70,7 @@ export default function InvoicePrint({
       {/* Client */}
       <div class="mb-6">
         <div class="text-[10px] uppercase tracking-widest text-gray-400">Cliente</div>
-        <div class="font-semibold">{inv.clientName ?? '—'}</div>
+        <div class="font-semibold">{inv.clientName ?? '-'}</div>
         {inv.address && <div class="text-xs text-gray-500">{inv.address}</div>}
       </div>
 
@@ -112,8 +112,8 @@ export default function InvoicePrint({
                     <div>{l.description ?? 'Otro cargo'}</div>
                   )}
                 </td>
-                <td class="py-2">{l.freightType ? FREIGHT_LABEL[l.freightType] : '—'}</td>
-                <td class="py-2 text-right">{l.quantityLbs ?? '—'}</td>
+                <td class="py-2">{l.freightType ? FREIGHT_LABEL[l.freightType] : '-'}</td>
+                <td class="py-2 text-right">{l.quantityLbs ?? '-'}</td>
                 <td class="py-2 text-right">{fmtMoney(l.unitPrice, currency)}</td>
                 <td class="py-2 text-right font-medium">{fmtMoney(l.total, currency)}</td>
               </tr>
@@ -139,7 +139,7 @@ export default function InvoicePrint({
       </div>
 
       {inv.observations && <div class="mt-6 border-t border-gray-100 pt-3 text-xs text-gray-500">Obs: {inv.observations}</div>}
-      <div class="mt-10 text-center text-[11px] text-gray-400">Gracias por su preferencia · {b.name}</div>
+      <div class="mt-10 text-center text-[11px] text-gray-400">Gracias por su preferencia - {b.name}</div>
     </div>
   )
 }
