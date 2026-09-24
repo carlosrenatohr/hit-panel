@@ -205,13 +205,14 @@ export function fmtMoney(n: number | null | undefined, currency: 'USD' | 'NIO' |
 /**
  * Express a total in the OTHER currency at the agency's exchange rate, for the
  * secondary (small) line on invoices: NIO→USD divides, USD→NIO multiplies.
- * The rate itself is intentionally NOT shown — only the equivalent amount.
+ * Only the amount with its symbol is shown (C$) — the relative sign for the
+ * total in córdobas — always 2 decimals, no ≈, no rate.
  * Returns null when the rate is not configured (single-currency invoice).
  */
 export function altCurrencyTotal(total: number, currency: 'USD' | 'NIO' | undefined, exchangeRateNioPerUsd: number | null | undefined): string | null {
   if (!exchangeRateNioPerUsd || exchangeRateNioPerUsd <= 0) return null
-  if (currency === 'NIO') return `≈ ${fmtMoney(total / exchangeRateNioPerUsd, 'USD')}`
-  if (currency === 'USD') return `≈ ${fmtMoney(total * exchangeRateNioPerUsd, 'NIO')}`
+  if (currency === 'NIO') return fmtMoney(total / exchangeRateNioPerUsd, 'USD')
+  if (currency === 'USD') return fmtMoney(total * exchangeRateNioPerUsd, 'NIO')
   return null
 }
 
