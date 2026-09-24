@@ -317,7 +317,7 @@ export default function InvoiceDetail({
                             ) : (
                               <div>{l.description ?? 'Otro cargo'}</div>
                             )}
-                            {tracking && <div class="text-[11px] text-gray-500">Tracking {tracking}</div>}
+                            {tracking && <div class="text-[11px] text-gray-500">{tracking}</div>}
                             <div class="text-[11px] text-gray-400">
                               {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
                               {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
@@ -434,7 +434,7 @@ export default function InvoiceDetail({
                       <span class="flex items-center gap-2">
                         <Package class="h-3.5 w-3.5 text-gray-400" />
                         <span>{p.guia ?? p.matchedOc ?? p.packageId.slice(0, 8)}</span>
-                        {p.tracking && <span class="text-[11px] text-gray-500">Tracking {p.tracking}</span>}
+                        {p.tracking && <span class="text-[11px] text-gray-500">{p.tracking}</span>}
                         <span class="text-[10px] text-gray-400">({p.source})</span>
                       </span>
                       {canWrite && !inv.closedAt && (
