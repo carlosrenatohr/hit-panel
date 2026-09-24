@@ -420,7 +420,9 @@ export default function Configuracion({ user }: { user: SessionUser }) {
     { key: 'info', label: 'Información', icon: Building2 },
     { key: 'rates', label: 'Tarifas', icon: Table2 },
     { key: 'payments', label: 'Pagos', icon: ScrollText },
-    { key: 'audit', label: 'Auditoría', icon: ScrollText },
+    // Auditoría tab hidden while we design a richer, more useful view for
+    // packages/clients (the AuditTab component and route stay wired).
+    // { key: 'audit', label: 'Auditoría', icon: ScrollText },
   ]
 
   return (
