@@ -6,9 +6,11 @@ import { BottomSheet, Button } from '../ui'
 import { STATUS_ICON } from './LifecycleOverview'
 
 /**
- * Bottom sheet with every canonical status in one place. It only *proposes* a value:
- * the selection lives in a draft until "Aplicar filtro" writes it through `onApply`,
- * so applying never disturbs the other active filters (transport, provider, period).
+ * Full-screen status list: the ONE mobile entry point that proposes a value in a
+ * draft until "Aplicar filtro" writes it through `onApply`. Covers the whole
+ * viewport (BottomSheet fullscreen) listing every canonical status with its
+ * count, so applying never disturbs the other active filters (transport,
+ * provider, period). Only reachable from the mobile primary status selector.
  */
 export default function FilterSheet({
   open,
@@ -40,7 +42,7 @@ export default function FilterSheet({
   ]
 
   return (
-    <BottomSheet open={open} onClose={onClose} title="Filtrar órdenes">
+    <BottomSheet open={open} onClose={onClose} title="Filtrar órdenes" fullscreen>
       <div role="radiogroup" aria-label="Filtrar por estado" class="space-y-1">
         {rows.map((r) => {
           const selected = draft === r.status
