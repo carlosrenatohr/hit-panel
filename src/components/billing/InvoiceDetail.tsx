@@ -11,7 +11,7 @@ import {
 import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal, waPhone, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { customerApi } from '../../lib/customer'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
-import { Button, Card, Field, inputCls, Spinner } from '../ui'
+import { Button, Card, Field, inputCls, Spinner, Tooltip } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
 
@@ -205,43 +205,46 @@ export default function InvoiceDetail({
           </div>
           <div class="flex items-center gap-1">
             {inv && canWrite && (
-              <button
-                aria-label={`Enviar factura #${inv.invoiceNumber} por WhatsApp`}
-                title="Enviar factura por WhatsApp"
-                onClick={shareToWhatsApp}
-                class="rounded-lg p-2 text-gray-400 hover:bg-green-50 hover:text-green-700"
-              >
-                <WhatsAppIcon size={16} />
-              </button>
+              <Tooltip text="Enviar factura por WhatsApp">
+                <button
+                  aria-label={`Enviar factura #${inv.invoiceNumber} por WhatsApp`}
+                  onClick={shareToWhatsApp}
+                  class="rounded-lg p-2 text-gray-400 hover:bg-green-50 hover:text-green-700"
+                >
+                  <WhatsAppIcon size={16} />
+                </button>
+              </Tooltip>
             )}
             {inv && canWrite && (
-              <button
-                aria-label={`Copiar link público de la factura #${inv.invoiceNumber}`}
-                title="Copiar link público de la factura"
-                onClick={async () => {
-                  try {
-                    const { url } = await billingApi.shareInvoice(id)
-                    navigator.clipboard?.writeText(url)
-                    setCopied(true)
-                    setTimeout(() => setCopied(false), 1500)
-                  } catch (e) {
-                    setErr(e instanceof Error ? e.message : 'No se pudo generar el link.')
-                  }
-                }}
-                class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              >
-                {copied ? <Check class="h-4 w-4 text-green-600" /> : <Link2 class="h-4 w-4" />}
-              </button>
+              <Tooltip text="Copiar link público de la factura">
+                <button
+                  aria-label={`Copiar link público de la factura #${inv.invoiceNumber}`}
+                  onClick={async () => {
+                    try {
+                      const { url } = await billingApi.shareInvoice(id)
+                      navigator.clipboard?.writeText(url)
+                      setCopied(true)
+                      setTimeout(() => setCopied(false), 1500)
+                    } catch (e) {
+                      setErr(e instanceof Error ? e.message : 'No se pudo generar el link.')
+                    }
+                  }}
+                  class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                >
+                  {copied ? <Check class="h-4 w-4 text-green-600" /> : <Link2 class="h-4 w-4" />}
+                </button>
+              </Tooltip>
             )}
             {inv && (
-              <button
-                aria-label={`Imprimir factura #${inv.invoiceNumber}`}
-                title="Imprimir PDF"
-                onClick={() => window.print()}
-                class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              >
-                <Printer class="h-4 w-4" />
-              </button>
+              <Tooltip text="Imprimir PDF">
+                <button
+                  aria-label={`Imprimir factura #${inv.invoiceNumber}`}
+                  onClick={() => window.print()}
+                  class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                >
+                  <Printer class="h-4 w-4" />
+                </button>
+              </Tooltip>
             )}
             <button aria-label="Cerrar detalle de factura" onClick={onClose} class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
               <X class="h-4 w-4" />
@@ -443,9 +446,11 @@ export default function InvoiceDetail({
                         <span class="text-[10px] text-gray-400">({p.source})</span>
                       </span>
                       {canWrite && !inv.closedAt && p.guia && (
-                        <button aria-label={`Desenlazar el paquete ${p.guia} de la factura #${inv.invoiceNumber}`} title={`Desenlazar ${p.guia}`} onClick={() => run(() => billingApi.unlinkPackage(id, p.packageId))} class="text-gray-300 hover:text-red-500">
-                          <Trash2 class="h-3.5 w-3.5" />
-                        </button>
+                        <Tooltip text={`Desenlazar ${p.guia}`}>
+                          <button aria-label={`Desenlazar el paquete ${p.guia} de la factura #${inv.invoiceNumber}`} onClick={() => run(() => billingApi.unlinkPackage(id, p.packageId))} class="text-gray-300 hover:text-red-500">
+                            <Trash2 class="h-3.5 w-3.5" />
+                          </button>
+                        </Tooltip>
                       )}
                     </div>
                   ))}
