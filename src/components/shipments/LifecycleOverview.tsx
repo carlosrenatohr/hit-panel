@@ -13,7 +13,7 @@ import {
   Truck,
   Warehouse,
 } from 'lucide-preact'
-import { STATUS_LABEL, STATUS_SOFT } from '../../lib/format'
+import { STATUS_LABEL, STATUS_ORDER, STATUS_SHORT, STATUS_SOFT } from '../../lib/format'
 import type { ShipmentStatus } from '../../lib/types'
 import { SegmentedTabs, type SegmentedTab } from '../ui'
 
@@ -24,7 +24,7 @@ const MAIN_STATUSES: ShipmentStatus[] = ['en_almacen', 'parcial', 'en_transito',
 // Secondary control states — compact cards stacked under Entregado in the final slot.
 const SPECIAL_STATUSES: ShipmentStatus[] = ['excepcion', 'desconocido']
 
-const STATUS_ICON: Record<ShipmentStatus, typeof Warehouse> = {
+export const STATUS_ICON: Record<ShipmentStatus, typeof Warehouse> = {
   en_almacen: Warehouse,
   parcial: Split,
   en_transito: Truck,
@@ -42,6 +42,81 @@ export function TransportTabs({ value, onChange }: { value: ServiceFilter; onCha
     { key: 'maritimo', label: 'Marítimo', icon: Ship },
   ]
   return <SegmentedTabs tabs={tabs} value={value} onChange={(k) => onChange(k as ServiceFilter)} />
+}
+
+function ChipBtn({
+  label,
+  count,
+  active,
+  loading,
+  onClick,
+}: {
+  label: string
+  count?: number
+  active: boolean
+  loading: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      class={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+        active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+      }`}
+    >
+      <span>
+        {label}{' '}
+        <span class={`tabular-nums ${active ? 'text-white/80' : 'text-gray-400'}`}>
+          {loading ? <span class="inline-block h-3 w-5 animate-pulse rounded bg-gray-100" /> : count ?? 0}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** Compact chip row — the mobile presentation of the very same one-status-at-a-time toggle the
+ *  desktop lifecycle cards use. Hidden on lg+ where LifecycleOverview takes over. */
+export function StatusChips({
+  counts,
+  total,
+  loading,
+  activeStatus,
+  onStatusChange,
+}: {
+  counts: Partial<Record<ShipmentStatus, number>>
+  /** Count without any status predicate — the "Todos" chip. */
+  total?: number
+  loading: boolean
+  activeStatus?: ShipmentStatus
+  onStatusChange: (s: ShipmentStatus | undefined) => void
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Filtrar por estado"
+      class="scroll-thin -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden"
+    >
+      <ChipBtn
+        label="Todos"
+        count={total}
+        active={!activeStatus}
+        loading={loading}
+        onClick={() => onStatusChange(undefined)}
+      />
+      {STATUS_ORDER.map((s) => (
+        <ChipBtn
+          key={s}
+          label={STATUS_SHORT[s]}
+          count={counts[s]}
+          active={activeStatus === s}
+          loading={loading}
+          onClick={() => onStatusChange(activeStatus === s ? undefined : s)}
+        />
+      ))}
+    </div>
+  )
 }
 
 function Arrow() {

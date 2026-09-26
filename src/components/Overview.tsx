@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronRight, Package, Radio, RefreshCw, Users } from 'lucide-preact'
+import { AlertTriangle, CheckCircle2, ChevronRight, Package, Radio, RefreshCw, Star, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
 import { getProviders, getStats, getUnassignedPackages } from '../lib/insforge'
@@ -21,11 +21,14 @@ export default function Overview({
   onOpen,
   onGoShipments,
   onGoUnassigned,
+  onGoStatus,
 }: {
   user: SessionUser
   onOpen: (guia: string) => void
   onGoShipments: () => void
   onGoUnassigned: () => void
+  /** Drilldown: opens Paquetería with that canonical status already applied. */
+  onGoStatus: (s: ShipmentStatus) => void
 }) {
   const [stats, setStats] = useState<Stats | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
@@ -65,6 +68,13 @@ export default function Overview({
 
   const maxCount = Math.max(1, ...STATUS_ORDER.map((s) => stats.by_status[s] ?? 0))
   const hasFilters = from || to || status
+  // % only while unfiltered: dashboard_stats narrows `total` to p_status, so the ratio
+  // would read 100% for a single bar (same reasoning as Reports' Trend guard).
+  const showStatusPct = !status && stats.total > 0
+  const providerTotal = Object.values(stats.by_provider).reduce((a, n) => a + n, 0)
+  const exceptions = stats.by_status.excepcion ?? 0
+  const readyForPickup = stats.by_status.en_destino ?? 0
+  const hasActions = exceptions > 0 || readyForPickup > 0
 
   return (
     <div class="mx-auto max-w-6xl space-y-6">
@@ -100,13 +110,60 @@ export default function Overview({
         </div>
       </Card>
 
+      {/* Actionable first: what the operator has to act on right now */}
+      {hasActions && (
+        <section aria-label="Requiere acción" class="space-y-2">
+          <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Requiere acción</h2>
+          <div class="grid gap-4 sm:grid-cols-2">
+            {exceptions > 0 && (
+              <Card accent class="flex items-center justify-between gap-3 p-4">
+                <div class="flex items-center gap-3">
+                  <AlertTriangle class="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                  <div>
+                    <span class="text-sm font-semibold text-secondary">
+                      {exceptions} {exceptions !== 1 ? 'excepciones' : 'excepción'} para revisar
+                    </span>
+                    <p class="text-xs text-gray-500">Paquetes que se salieron del flujo operativo.</p>
+                  </div>
+                </div>
+                <Button variant="ghost" onClick={() => onGoStatus('excepcion')}>
+                  Ver <ChevronRight class="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </Card>
+            )}
+            {readyForPickup > 0 && (
+              <Card accent class="flex items-center justify-between gap-3 p-4">
+                <div class="flex items-center gap-3">
+                  <Star class="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                  <div>
+                    <span class="text-sm font-semibold text-secondary">
+                      {readyForPickup} listo{readyForPickup !== 1 ? 's' : ''} para retiro
+                    </span>
+                    <p class="text-xs text-gray-500">En destino (Nicaragua), esperando al cliente.</p>
+                  </div>
+                </div>
+                <Button variant="ghost" onClick={() => onGoStatus('en_destino')}>
+                  Ver <ChevronRight class="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </Card>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* KPIs */}
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {capCards([
           <Kpi label="Total de paquetes" value={stats.total} icon={Package} accent />,
           <Kpi label="Entregados (30 días)" value={stats.delivered_30d} icon={CheckCircle2} />,
           ...Object.entries(stats.by_provider).map(([code, n]) => (
-            <Kpi key={code} label={providerLabel(code)} value={n} icon={Radio} />
+            <Kpi
+              key={code}
+              label={providerLabel(code)}
+              value={n}
+              icon={Radio}
+              hint={providerTotal > 0 ? `${Math.round((n / providerTotal) * 100)}% del total` : undefined}
+            />
           )),
         ])}
       </div>
@@ -128,14 +185,20 @@ export default function Overview({
       )}
 
       <div class="grid gap-6 lg:grid-cols-3">
-        {/* Pipeline */}
+        {/* Estados */}
         <Card class="lg:col-span-2">
-          <SectionTitle>Pipeline por estado</SectionTitle>
+          <SectionTitle>Estados de los paquetes</SectionTitle>
           <div class="space-y-3 p-5">
             {STATUS_ORDER.map((s) => {
               const n = stats.by_status[s] ?? 0
               return (
-                <div key={s} class="flex items-center gap-3">
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => onGoStatus(s)}
+                  aria-label={`Ver ${STATUS_LABEL[s]} en Paquetería`}
+                  class="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
                   <div class="w-40 shrink-0">
                     <StatusDot s={s as ShipmentStatus} />
                   </div>
@@ -143,9 +206,17 @@ export default function Overview({
                     <div class="h-full rounded-full bg-primary/70" style={`width:${(n / maxCount) * 100}%`} />
                   </div>
                   <div class="w-8 text-right text-sm font-semibold tabular-nums text-gray-700">{n}</div>
-                </div>
+                  {showStatusPct && (
+                    <div class="w-11 shrink-0 text-right text-xs font-medium tabular-nums text-gray-400">
+                      {Math.round((n / stats.total) * 100)}%
+                    </div>
+                  )}
+                </button>
               )
             })}
+            {showStatusPct && (
+              <p class="border-t border-gray-100 pt-3 text-[11px] text-gray-400">% del total de paquetes en el rango.</p>
+            )}
           </div>
         </Card>
 
@@ -191,11 +262,14 @@ function Kpi({
   value,
   icon: Icon,
   accent,
+  hint,
 }: {
   label: string
   value: number
   icon: typeof Package
   accent?: boolean
+  /** Secondary line (share % of its own denominator) — never a bare absolute. */
+  hint?: string
 }) {
   return (
     <Card accent={accent} class="p-4">
@@ -206,6 +280,7 @@ function Kpi({
       <div class={`mt-1 text-3xl font-bold tabular-nums tracking-tight ${accent ? 'text-primary' : 'text-secondary'}`}>
         {value}
       </div>
+      {hint && <div class="mt-1 text-xs font-medium text-gray-400">{hint}</div>}
     </Card>
   )
 }

@@ -182,6 +182,23 @@ describe('Shipments', () => {
     });
   });
 
+  it('applies the ?estado= status seed from the Dashboard drilldown on mount', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="entregado" />);
+
+    await waitFor(() => {
+      const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+      expect(calls.some((f) => f.status === 'entregado')).toBe(true);
+    });
+  });
+
+  it('ignores a status seed that is not a canonical status', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="delivered" />);
+
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(0));
+    const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+    expect(calls.some((f) => f.status === 'delivered')).toBe(false);
+  });
+
   it('filters by transport type when a tab is clicked', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
@@ -190,6 +207,44 @@ describe('Shipments', () => {
     await waitFor(() => {
       const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
       expect(calls.some((f) => f.service === 'aereo')).toBe(true);
+    });
+  });
+
+  it('applies a status from the mobile filter sheet without dropping the other filters', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Filtrar' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Excepción/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtro' }));
+
+    await waitFor(() => {
+      const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+      expect(calls.some((f) => f.status === 'excepcion')).toBe(true);
+    });
+  });
+
+  it('keeps the transport filter when a status is applied from the sheet', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Aéreo/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Filtrar' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Excepción/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtro' }));
+
+    await waitFor(() => {
+      const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+      expect(calls.some((f) => f.status === 'excepcion' && f.service === 'aereo')).toBe(true);
+    });
+  });
+
+  it('filters by the pickup-ready shortcut in the mobile header', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Listos para retiro: En destino (Nicaragua)' }));
+
+    await waitFor(() => {
+      const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+      expect(calls.some((f) => f.status === 'en_destino')).toBe(true);
     });
   });
 
