@@ -223,6 +223,9 @@ export const billingApi = {
     workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/payments`, { method: 'POST', body: input }),
   voidInvoice: (id: string, reason?: string) =>
     workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/void`, { method: 'POST', body: { reason } }),
+  /** -- Archive (soft delete): the invoice leaves list/reports and its active package links are released. -- */
+  archiveInvoice: (id: string, reason?: string) =>
+    workerApi<{ id: string; archived: boolean }>(`${API_BASE}/api/billing/invoices/${id}/archive`, { method: 'POST', body: { reason } }),
   linkPackage: (id: string, ref: { packageId?: string; guia?: string }) =>
     workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}/packages`, { method: 'POST', body: ref }),
   unlinkPackage: (id: string, packageId: string) =>
