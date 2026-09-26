@@ -4,7 +4,7 @@ import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightTyp
 import { configApi, type ChargeConcept, type RateCardInfo } from '../../lib/config'
 import type { Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
-import { Button, Card, Field, inputCls, SectionTitle, Spinner } from '../ui'
+import { Button, Card, Field, inputCls, SectionTitle, Spinner, Tooltip } from '../ui'
 import ClientSearch from '../ui/ClientSearch'
 
 interface DraftLine {
@@ -313,9 +313,11 @@ export default function InvoiceForm({
       <Card class="my-8 w-full max-w-2xl">
         <SectionTitle class="justify-between">
           <span>{isEdit ? 'Editar factura' : 'Nueva factura'}</span>
-          <button onClick={onClose} aria-label="Cerrar formulario de factura" title="Cerrar formulario" class="text-gray-400 hover:text-gray-700">
-            <X class="h-4 w-4" />
-          </button>
+          <Tooltip text="Cerrar formulario">
+            <button onClick={onClose} aria-label="Cerrar formulario de factura" class="text-gray-400 hover:text-gray-700">
+              <X class="h-4 w-4" />
+            </button>
+          </Tooltip>
         </SectionTitle>
         {loadingInvoice ? (
           <div class="p-6"><Spinner label="Cargando factura…" /></div>

@@ -25,6 +25,9 @@ describe('InvoiceRowActions', () => {
     expect(screen.getByLabelText('Cerrar factura #1')).toBeTruthy()
     expect(screen.getByLabelText('Anular factura #1')).toBeTruthy()
     expect(screen.getByLabelText('Archivar factura #1')).toBeTruthy()
+    // Action icons carry the Customers module tooltip, not a bare title.
+    expect(screen.getByRole('tooltip', { name: 'Ver factura #1' })).toBeTruthy()
+    expect(screen.getByRole('tooltip', { name: 'Archivar factura #1 (la oculta de la lista y reportes)' })).toBeTruthy()
   })
 
   it('issued invoice offers view, void and archive, never edit/close', () => {

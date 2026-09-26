@@ -1,5 +1,6 @@
 import { Archive, Ban, Eye, Lock, Pencil } from 'lucide-preact'
 import type { InvoiceListRow } from '../../lib/billing'
+import { Tooltip } from '../ui'
 
 /**
  * Row actions for the invoices table, driven by the invoice status.
@@ -34,28 +35,38 @@ export default function InvoiceRowActions({
   const num = row.invoiceNumber
   return (
     <div class="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
-      <button aria-label={`Ver factura #${num}`} title={`Ver factura #${num}`} onClick={onView} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-        <Eye class="h-4 w-4" />
-      </button>
-      {canWrite && open && (
-        <button aria-label={`Editar factura #${num}`} title={`Editar factura #${num}`} onClick={onEdit} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-primary">
-          <Pencil class="h-4 w-4" />
+      <Tooltip text={`Ver factura #${num}`}>
+        <button aria-label={`Ver factura #${num}`} onClick={onView} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+          <Eye class="h-4 w-4" />
         </button>
+      </Tooltip>
+      {canWrite && open && (
+        <Tooltip text={`Editar factura #${num}`}>
+          <button aria-label={`Editar factura #${num}`} onClick={onEdit} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-primary">
+            <Pencil class="h-4 w-4" />
+          </button>
+        </Tooltip>
       )}
       {canWrite && open && (
-        <button aria-label={`Cerrar factura #${num}`} title={`Cerrar factura #${num} (pasa a emitida)`} disabled={busy} onClick={onClose} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-green-700">
-          <Lock class="h-4 w-4" />
-        </button>
+        <Tooltip text={`Cerrar factura #${num} (pasa a emitida)`}>
+          <button aria-label={`Cerrar factura #${num}`} disabled={busy} onClick={onClose} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-green-700">
+            <Lock class="h-4 w-4" />
+          </button>
+        </Tooltip>
       )}
       {canWrite && row.status !== 'VOID' && (
-        <button aria-label={`Anular factura #${num}`} title={`Anular factura #${num}`} disabled={busy} onClick={onVoid} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600">
-          <Ban class="h-4 w-4" />
-        </button>
+        <Tooltip text={`Anular factura #${num}`}>
+          <button aria-label={`Anular factura #${num}`} disabled={busy} onClick={onVoid} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600">
+            <Ban class="h-4 w-4" />
+          </button>
+        </Tooltip>
       )}
       {canWrite && (
-        <button aria-label={`Archivar factura #${num}`} title={`Archivar factura #${num} (la oculta de la lista y reportes)`} disabled={busy} onClick={onArchive} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-amber-600">
-          <Archive class="h-4 w-4" />
-        </button>
+        <Tooltip text={`Archivar factura #${num} (la oculta de la lista y reportes)`}>
+          <button aria-label={`Archivar factura #${num}`} disabled={busy} onClick={onArchive} class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-amber-600">
+            <Archive class="h-4 w-4" />
+          </button>
+        </Tooltip>
       )}
     </div>
   )
