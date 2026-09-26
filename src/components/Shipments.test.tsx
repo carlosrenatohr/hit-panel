@@ -182,6 +182,23 @@ describe('Shipments', () => {
     });
   });
 
+  it('applies the ?estado= status seed from the Dashboard drilldown on mount', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="entregado" />);
+
+    await waitFor(() => {
+      const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+      expect(calls.some((f) => f.status === 'entregado')).toBe(true);
+    });
+  });
+
+  it('ignores a status seed that is not a canonical status', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="delivered" />);
+
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(0));
+    const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
+    expect(calls.some((f) => f.status === 'delivered')).toBe(false);
+  });
+
   it('filters by transport type when a tab is clicked', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 

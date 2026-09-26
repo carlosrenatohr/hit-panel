@@ -74,7 +74,7 @@ function pageWindow(current: number, total: number): (number | '…')[] {
   return out
 }
 
-export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; unassignedSeed?: boolean; refreshToken?: number }) {
+export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, statusSeed, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; unassignedSeed?: boolean; statusSeed?: string | null; refreshToken?: number }) {
   const colPrefs = useColumnPrefs()
   const visibleCols = colPrefs.columns
     .filter((c) => c.visible)
@@ -86,6 +86,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
   const [providers, setProviders] = useState<AgencyProvider[]>([])
   const [searchInput, setSearchInput] = useState('')
   // Default window is the current month (matches the DateRangePicker 'Este mes' preset).
+  // `statusSeed` (Dashboard drilldown ?estado=) is read once here, at mount, so the filter
+  // is never sticky: navigating away clears the query param and remounts without it.
   const [filters, setFilters] = useState<ListFilters>(() => {
     const now = new Date()
     return {
@@ -94,6 +96,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, re
       from: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
       to: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
       clientId: unassignedSeed ? 'null' : undefined,
+      status: statusSeed && (STATUS_ORDER as string[]).includes(statusSeed) ? statusSeed : undefined,
     }
   })
   const [page, setPage] = useState(1)
