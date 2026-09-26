@@ -1,6 +1,7 @@
-import { AlertTriangle, CheckCircle2, ChevronRight, Package, Radio, RefreshCw, Star, Users } from 'lucide-preact'
+import { AlertTriangle, CheckCircle2, ChevronRight, Flag, Package, Radio, RefreshCw, Star, Users } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
+import { customerApi } from '../lib/customer'
 import { getProviders, getStats, getUnassignedPackages } from '../lib/insforge'
 import { capCards } from '../lib/cards'
 import type { Provider, ShipmentStatus, Stats, SessionUser } from '../lib/types'
@@ -18,21 +19,25 @@ function hoursAgo(s?: string | null): number | null {
 // and effective status (the RPC applies them server-side).
 export default function Overview({
   user,
-  onOpen,
   onGoShipments,
   onGoUnassigned,
   onGoStatus,
+  onGoReview,
 }: {
   user: SessionUser
-  onOpen: (guia: string) => void
   onGoShipments: () => void
   onGoUnassigned: () => void
   /** Drilldown: opens Paquetería with that canonical status already applied. */
   onGoStatus: (s: ShipmentStatus) => void
+  /** Drilldown: opens Clientes with the Revisión tab already applied (staff only). */
+  onGoReview: () => void
 }) {
   const [stats, setStats] = useState<Stats | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
   const [unassignedCount, setUnassignedCount] = useState(0)
+  // Clients flagged for data review (toReview) — non-fatal read: the dashboard keeps
+  // working if the customer service is down, the card simply does not appear.
+  const [reviewCount, setReviewCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [from, setFrom] = useState('')
@@ -43,14 +48,16 @@ export default function Overview({
     setLoading(true)
     setErr(null)
     try {
-      const [s, p, u] = await Promise.all([
+      const [s, p, u, rc] = await Promise.all([
         getStats(user.agency, from || undefined, to || undefined, status || undefined),
         getProviders(user.agency),
         getUnassignedPackages(user.agency, from || undefined, to || undefined, 1),
+        customerApi.list({ statuses: ['review'], pageSize: 1 }).then((r) => r.count).catch(() => 0),
       ])
       setStats(s)
       setProviders(p)
       setUnassignedCount(u.count)
+      setReviewCount(rc)
     } catch {
       setErr('No se pudo cargar el resumen.')
     } finally {
@@ -74,7 +81,7 @@ export default function Overview({
   const providerTotal = Object.values(stats.by_provider).reduce((a, n) => a + n, 0)
   const exceptions = stats.by_status.excepcion ?? 0
   const readyForPickup = stats.by_status.en_destino ?? 0
-  const hasActions = exceptions > 0 || readyForPickup > 0
+  const hasActions = exceptions > 0 || readyForPickup > 0 || reviewCount > 0
 
   return (
     <div class="mx-auto max-w-6xl space-y-6">
@@ -143,6 +150,22 @@ export default function Overview({
                   </div>
                 </div>
                 <Button variant="ghost" onClick={() => onGoStatus('en_destino')}>
+                  Ver <ChevronRight class="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </Card>
+            )}
+            {reviewCount > 0 && user.role !== 'viewer' && (
+              <Card accent class="flex items-center justify-between gap-3 p-4">
+                <div class="flex items-center gap-3">
+                  <Flag class="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+                  <div>
+                    <span class="text-sm font-semibold text-secondary">
+                      {reviewCount} cliente{reviewCount !== 1 ? 's' : ''} por revisar
+                    </span>
+                    <p class="text-xs text-gray-500">Clientes marcados para verificación de datos.</p>
+                  </div>
+                </div>
+                <Button variant="ghost" onClick={onGoReview}>
                   Ver <ChevronRight class="h-4 w-4" aria-hidden="true" />
                 </Button>
               </Card>

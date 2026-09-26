@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/preact';
 import Overview from './Overview';
 import { getStats } from '../lib/insforge';
+import { customerApi } from '../lib/customer';
+import type { SessionUser } from '../lib/types';
 
 const mockStats = vi.hoisted(() => ({
   total: 150,
@@ -36,9 +38,20 @@ vi.mock('../lib/insforge', () => ({
   getUnassignedPackages: vi.fn().mockResolvedValue({ count: 0, sample: [] }),
 }));
 
+vi.mock('../lib/customer', () => ({
+  customerApi: {
+    list: vi.fn().mockResolvedValue({ rows: [], count: 0 }),
+  },
+}));
+
 const mockUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
 
 const onGoStatus = vi.fn();
+const onGoReview = vi.fn();
+
+function renderOverview(user: SessionUser = mockUser) {
+  render(<Overview user={user} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} onGoReview={onGoReview} />);
+}
 
 describe('Overview', () => {
   beforeEach(() => {
@@ -46,7 +59,7 @@ describe('Overview', () => {
   });
 
   it('renders the overview dashboard with stats', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
 
     await waitFor(() => {
       expect(screen.getByText('Resumen')).toBeTruthy();
@@ -56,12 +69,12 @@ describe('Overview', () => {
   });
 
   it('shows loading spinner initially', () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
     expect(screen.getByText(/Cargando/)).toBeTruthy();
   });
 
   it('displays provider information', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
 
     await waitFor(() => {
       expect(screen.getAllByText('Everest').length).toBeGreaterThan(0);
@@ -69,7 +82,7 @@ describe('Overview', () => {
   });
 
   it('shows a share percentage on every status bar', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
 
     // 45/150, 30/150 and 40/150 rounded like Reports' Trend does
     await waitFor(() => expect(screen.getByText('30%')).toBeTruthy());
@@ -79,21 +92,21 @@ describe('Overview', () => {
   });
 
   it('shows each provider share over the provider total', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
 
     await waitFor(() => expect(screen.getByText('67% del total')).toBeTruthy());
     expect(screen.getByText('33% del total')).toBeTruthy();
   });
 
   it('drills down into Paquetería when a status bar is clicked', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Ver En destino (Nicaragua) en Paquetería' }));
     expect(onGoStatus).toHaveBeenCalledWith('en_destino');
   });
 
   it('surfaces exceptions and pickup-ready packages as actions', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
 
     await waitFor(() => expect(screen.getByText('10 excepciones para revisar')).toBeTruthy());
     expect(screen.getByText('20 listos para retiro')).toBeTruthy();
@@ -105,8 +118,36 @@ describe('Overview', () => {
     expect(onGoStatus).toHaveBeenCalledWith('en_destino');
   });
 
+  it('shows clients-to-review as an action for staff and drills into Clientes', async () => {
+    vi.mocked(customerApi.list).mockResolvedValue({ rows: [], count: 3 });
+    renderOverview();
+
+    await waitFor(() => expect(screen.getByText('3 clientes por revisar')).toBeTruthy());
+    expect(customerApi.list).toHaveBeenCalledWith({ statuses: ['review'], pageSize: 1 });
+
+    const actions = within(screen.getByLabelText('Requiere acción')).getAllByRole('button');
+    fireEvent.click(actions[actions.length - 1]);
+    expect(onGoReview).toHaveBeenCalled();
+  });
+
+  it('hides the review card from viewers even when there are flagged clients', async () => {
+    vi.mocked(customerApi.list).mockResolvedValue({ rows: [], count: 3 });
+    renderOverview({ ...mockUser, role: 'viewer' });
+
+    await waitFor(() => expect(screen.getByText('10 excepciones para revisar')).toBeTruthy());
+    expect(screen.queryByText('3 clientes por revisar')).toBeNull();
+  });
+
+  it('keeps working when the customer service fails (review card is non-fatal)', async () => {
+    vi.mocked(customerApi.list).mockRejectedValue(new Error('down'));
+    renderOverview();
+
+    await waitFor(() => expect(screen.getByText('Resumen')).toBeTruthy());
+    expect(screen.queryByText(/clientes por revisar/)).toBeNull();
+  });
+
   it('hides status percentages while a status filter is active', async () => {
-    render(<Overview user={mockUser} onOpen={() => {}} onGoShipments={() => {}} onGoUnassigned={() => {}} onGoStatus={onGoStatus} />);
+    renderOverview();
     await waitFor(() => expect(screen.getByText('30%')).toBeTruthy());
 
     // dashboard_stats narrows total to p_status, so the ratio would be meaningless

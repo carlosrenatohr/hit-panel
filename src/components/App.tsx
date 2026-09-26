@@ -62,11 +62,11 @@ export default function App() {
 
   return (
     <Shell user={user} view={view} onView={(v) => navigate({ view: v })} onLogout={logout}>
-      {view === 'overview' && <Overview user={user} onOpen={(guia) => navigate({ view, guia })} onGoShipments={() => navigate({ view: 'shipments' })} onGoUnassigned={() => navigate({ view: 'shipments', unassigned: true })} onGoStatus={(s) => navigate({ view: 'shipments', estado: s })} />}
+      {view === 'overview' && <Overview user={user} onGoShipments={() => navigate({ view: 'shipments' })} onGoUnassigned={() => navigate({ view: 'shipments', unassigned: true })} onGoStatus={(s) => navigate({ view: 'shipments', estado: s })} onGoReview={() => navigate({ view: 'customers', estado: 'review' })} />}
       {view === 'shipments' && <Shipments user={user} clientSeed={route.cliente} unassignedSeed={route.unassigned} statusSeed={route.estado} refreshToken={listReload} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
       {view === 'reports' && <Reports user={user} />}
       {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
-      {view === 'customers' && user.role !== 'viewer' && <Customers user={user} role={user.role} />}
+      {view === 'customers' && user.role !== 'viewer' && <Customers user={user} role={user.role} statusSeed={route.estado} />}
       {view === 'integraciones' && (
         <ComingSoon
           title="Integraciones"
