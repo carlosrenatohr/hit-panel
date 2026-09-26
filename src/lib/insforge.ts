@@ -1,4 +1,5 @@
 import { createClient } from '@insforge/sdk'
+import { customerApi } from './customer'
 import { foldAccents } from './format'
 import type { Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, ShipmentStatus, Stats, Tag } from './types'
 
@@ -123,10 +124,24 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   if (f.organizationId) q = q.eq('organization_id', f.organizationId)
   if (f.search && f.search.trim()) {
     // Accent-insensitive PLAIN term (no LIKE bracket classes — they don't match in
-    // this cluster) + the billing client name via its unaccent column, so typing a
-    // client's name finds their packages.
+    // this cluster). The billing CLIENT name matches through a resolved
+    // client_id=in.(...) arm: PostgREST rejects embed filters inside or() (400),
+    // so the name is resolved to ids first via the worker search.
     const s = foldAccents(f.search.trim().replace(/[(),*]/g, ''))
-    q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*,referencia_name.ilike.*${s}*,billing_clients.name_unaccent.ilike.*${s}*`)
+    const arms = [
+      `almacen_id.ilike.*${s}*`,
+      `tracking_number.ilike.*${s}*`,
+      `casillero.ilike.*${s}*`,
+      `referencia_name.ilike.*${s}*`,
+    ]
+    try {
+      const { rows } = await customerApi.list({ search: f.search.trim(), pageSize: 50 })
+      const ids = rows.map((c) => c.id).filter((x): x is string => !!x)
+      if (ids.length) arms.push(`client_id=in.(${ids.join(',')})`)
+    } catch {
+      // Keep the package-field search if the clients lookup fails.
+    }
+    q = q.or(arms.join(','))
   }
   // -- Multi-select arrays filter with PostgREST IN; the single-value fields stay for the shipments list. --
   if (f.providerIds?.length) q = q.in('provider_id', f.providerIds)
