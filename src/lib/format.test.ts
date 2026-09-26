@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foldAccents, fmtDate, toIlikePattern, toLocalDate, altCurrencyTotal, waPhone } from './format'
+import { foldAccents, fmtDate, toLocalDate, altCurrencyTotal, waPhone } from './format'
 
 describe('fmtDate', () => {
   it('keeps the calendar day for date-only values', () => {
@@ -84,16 +84,5 @@ describe('foldAccents', () => {
     expect(foldAccents('Último Evento')).toBe('ultimo evento')
     expect(foldAccents('niño')).toBe('nino')
     expect(foldAccents('MÉNDEZ')).toBe(foldAccents('Mendez'))
-  })
-})
-
-describe('toIlikePattern', () => {
-  it('expands vowels and ñ into LIKE char classes', () => {
-    expect(toIlikePattern('Mendez')).toBe('m[eé][nñ]d[eé]z')
-    expect(toIlikePattern('25001234')).toBe('25001234')
-  })
-
-  it('builds the same pattern from an uppercase term (ILIKE folds the pattern)', () => {
-    expect(toIlikePattern('MENDEZ')).toBe(toIlikePattern('Mendez'))
   })
 })

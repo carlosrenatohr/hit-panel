@@ -1,5 +1,5 @@
 import { createClient } from '@insforge/sdk'
-import { toIlikePattern } from './format'
+import { foldAccents } from './format'
 import type { Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, ShipmentStatus, Stats, Tag } from './types'
 
 const baseUrl = import.meta.env.PUBLIC_INSFORGE_URL as string
@@ -122,9 +122,11 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 
   if (f.organizationId) q = q.eq('organization_id', f.organizationId)
   if (f.search && f.search.trim()) {
-    // Accent-insensitive: each vowel/ñ expands to a LIKE char class (Mendez → M[eé][nñ]d[eé]z).
-    const s = toIlikePattern(f.search.trim().replace(/[(),*]/g, ''))
-    q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*,referencia_name.ilike.*${s}*`)
+    // Accent-insensitive PLAIN term (no LIKE bracket classes — they don't match in
+    // this cluster) + the billing client name via its unaccent column, so typing a
+    // client's name finds their packages.
+    const s = foldAccents(f.search.trim().replace(/[(),*]/g, ''))
+    q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*,referencia_name.ilike.*${s}*,billing_clients.name_unaccent.ilike.*${s}*`)
   }
   // -- Multi-select arrays filter with PostgREST IN; the single-value fields stay for the shipments list. --
   if (f.providerIds?.length) q = q.in('provider_id', f.providerIds)

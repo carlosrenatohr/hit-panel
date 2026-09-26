@@ -120,19 +120,9 @@ export function cleanName(referenciaName?: string | null): string {
 }
 
 // Accent folding shared by the client-side filters and the ILIKE expansion below.
-const ACCENT_CLASS: Record<string, string> = { a: '[aá]', c: '[cç]', e: '[eé]', i: '[ií]', n: '[nñ]', o: '[oó]', u: '[uúü]' }
-
 /** Lowercase + strip diacritics — accent-insensitive matching for in-memory filters. */
 export function foldAccents(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-}
-
-/** Expand each letter of `term` into a LIKE char class so `Mendez` also matches `Méndez`.
- *  The pattern rides on ILIKE (which case-folds both sides) — no schema change needed. */
-export function toIlikePattern(term: string): string {
-  let out = ''
-  for (const ch of term) out += ACCENT_CLASS[ch.toLowerCase()] ?? ch.toLowerCase()
-  return out
 }
 
 export function statusLabel(s?: string | null): string {
