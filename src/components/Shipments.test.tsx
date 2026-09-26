@@ -250,6 +250,23 @@ describe('Shipments', () => {
     });
   });
 
+  it('opens the full filter selector when the active chip is tapped', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="en_destino" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Destino/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Filtrar órdenes' });
+    expect(within(dialog).getByRole('radio', { name: /En destino/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('opens the filter selector when the pressed pickup card is tapped again', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="en_destino" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Listos para retiro: En destino (Nicaragua)' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Filtrar órdenes' })).toBeTruthy();
+  });
+
   it('blocks creation with a hint when the agency has no provider', async () => {
     vi.mocked(getProviders).mockResolvedValue([]);
     render(<Shipments user={mockUser} onOpen={() => {}} />);

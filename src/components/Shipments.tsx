@@ -513,7 +513,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       {(summaryLoading || (summary.en_destino ?? 0) > 0) && (
         <button
           type="button"
-          onClick={() => patch({ status: filters.status === 'en_destino' ? undefined : 'en_destino' })}
+          onClick={() =>
+            filters.status === 'en_destino' ? setShowFilter(true) : patch({ status: 'en_destino' })
+          }
           aria-pressed={filters.status === 'en_destino'}
           aria-label={`Listos para retiro: ${STATUS_LABEL.en_destino}`}
           class="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
@@ -538,13 +540,15 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         </button>
       )}
 
-      {/* Compact status filter — same toggle as the desktop lifecycle cards */}
+      {/* Compact status filter — same toggle as the desktop lifecycle cards;
+          tapping the active chip opens the full selector instead of clearing it */}
       <StatusChips
         counts={summary}
         total={summaryTotal}
         loading={summaryLoading}
         activeStatus={filters.status as ShipmentStatus | undefined}
         onStatusChange={(s) => patch({ status: s })}
+        onEdit={() => setShowFilter(true)}
       />
 
       {/* Top controls — transport type + date range on the same level */}

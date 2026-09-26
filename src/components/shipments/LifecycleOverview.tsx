@@ -77,13 +77,15 @@ function ChipBtn({
 }
 
 /** Compact chip row — the mobile presentation of the very same one-status-at-a-time toggle the
- *  desktop lifecycle cards use. Hidden on lg+ where LifecycleOverview takes over. */
+ *  desktop lifecycle cards use. Hidden on lg+ where LifecycleOverview takes over.
+ *  Tapping the ACTIVE chip opens the full filter selector (`onEdit`) instead of clearing it. */
 export function StatusChips({
   counts,
   total,
   loading,
   activeStatus,
   onStatusChange,
+  onEdit,
 }: {
   counts: Partial<Record<ShipmentStatus, number>>
   /** Count without any status predicate — the "Todos" chip. */
@@ -91,6 +93,8 @@ export function StatusChips({
   loading: boolean
   activeStatus?: ShipmentStatus
   onStatusChange: (s: ShipmentStatus | undefined) => void
+  /** Opens the full state selector; falls back to clearing the filter when omitted. */
+  onEdit?: () => void
 }) {
   return (
     <div
@@ -112,7 +116,13 @@ export function StatusChips({
           count={counts[s]}
           active={activeStatus === s}
           loading={loading}
-          onClick={() => onStatusChange(activeStatus === s ? undefined : s)}
+          onClick={() =>
+            activeStatus === s
+              ? onEdit
+                ? onEdit()
+                : onStatusChange(undefined)
+              : onStatusChange(s)
+          }
         />
       ))}
     </div>

@@ -40,11 +40,21 @@ describe('StatusChips', () => {
     expect(onStatusChange).toHaveBeenCalledWith('en_destino');
   });
 
-  it('clears the filter when the active chip is clicked again', () => {
+  it('opens the filter selector when the active chip is clicked', () => {
+    const onStatusChange = vi.fn();
+    const onEdit = vi.fn();
+    render(chips({ activeStatus: 'excepcion', onStatusChange, onEdit }));
+
+    expect(screen.getByRole('button', { name: 'Excepción 0' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Excepción 0' }));
+    expect(onEdit).toHaveBeenCalled();
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it('falls back to clearing the filter when no selector handler is given', () => {
     const onStatusChange = vi.fn();
     render(chips({ activeStatus: 'excepcion', onStatusChange }));
 
-    expect(screen.getByRole('button', { name: 'Excepción 0' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Excepción 0' }));
     expect(onStatusChange).toHaveBeenCalledWith(undefined);
   });
