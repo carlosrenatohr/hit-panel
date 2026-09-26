@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.11] — 2026-09-26
+
+### Added
+- Mobile Paquetería: ONE primary status selector (icon + canonical status + count + chevron) replaces the quick-filter chips row and the header "Filtrar" button. Tapping it opens a FULL-SCREEN sheet ("Filtrar órdenes") that lists every canonical status with live counts; the selected status and its count render back on the main screen. "Listos para retiro" is now a compact star quick action that toggles the pickup filter in one tap.
+- Billing: an "Archivar" action on every invoice row (any status, including VOID clean-up) soft-deletes the invoice through the worker (`POST /invoices/:id/archive`) after a confirmation dialog and reloads the list.
+- Resumen: a "N clientes por revisar" card (Flag icon) in "Requiere acción" drills into Clientes with the Revisión tab applied (`?estado=review`).
+- Manual package creation now requires weight and defaults pieces/date — no weight-less packages; search and filters match ignoring accents.
+
+### Changed
+- Compact mobile header (two rows on phones, no global overflow hacks) and denser shipment cards; zero horizontal overflow at 360/390/414/430px with desktop 1280 regression intact.
+- `BottomSheet` supports a full-screen variant (used by the status selector); removed the dead `onOpen` prop from Overview/App; Overview reads the clients-to-review count non-fatally.
+
 ## [0.4.10] — 2026-09-26
 
 ### Added
