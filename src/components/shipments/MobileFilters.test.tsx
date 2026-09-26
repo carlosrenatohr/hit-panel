@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/preact';
-import { StatusChips } from './LifecycleOverview';
+import { PickupQuickAction, StatusSelector } from './LifecycleOverview';
 import FilterSheet from './FilterSheet';
 import type { ShipmentStatus } from '../../lib/types';
 
@@ -14,55 +14,54 @@ const counts: Partial<Record<ShipmentStatus, number>> = {
   desconocido: 0,
 };
 
-const chips = (props: Partial<Parameters<typeof StatusChips>[0]> = {}) => (
-  <StatusChips counts={counts} total={11} loading={false} onStatusChange={() => {}} {...props} />
-);
+describe('StatusSelector', () => {
+  it('shows every state under one selector: "Todos los estados" with the unpredicated total', () => {
+    render(<StatusSelector counts={counts} total={11} loading={false} activeStatus={undefined} onOpen={() => {}} />);
 
-describe('StatusChips', () => {
-  it('renders Todos plus every canonical status with its count', () => {
-    render(chips());
-
-    expect(screen.getByRole('button', { name: 'Todos 11' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Bodega 3' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Parcial 1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Tránsito 1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Destino 2' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Entregado 4' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Excepción 0' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Desconocido 0' })).toBeTruthy();
+    const btn = screen.getByRole('button', { name: 'Selector de estado' });
+    expect(btn.textContent).toContain('Todos los estados');
+    expect(btn.textContent).toContain('11');
   });
 
-  it('toggles the canonical status on click', () => {
-    const onStatusChange = vi.fn();
-    render(chips({ onStatusChange }));
+  it('renders the selected canonical status with its own count back on the main screen', () => {
+    render(<StatusSelector counts={counts} total={11} loading={false} activeStatus="en_destino" onOpen={() => {}} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Destino 2' }));
-    expect(onStatusChange).toHaveBeenCalledWith('en_destino');
+    const btn = screen.getByRole('button', { name: 'Selector de estado' });
+    expect(btn.textContent).toContain('En destino (Nicaragua)');
+    expect(btn.textContent).toContain('2');
   });
 
-  it('opens the filter selector when the active chip is clicked', () => {
-    const onStatusChange = vi.fn();
-    const onEdit = vi.fn();
-    render(chips({ activeStatus: 'excepcion', onStatusChange, onEdit }));
+  it('opens the full bottom-sheet selector on tap', () => {
+    const onOpen = vi.fn();
+    render(<StatusSelector counts={counts} total={11} loading={false} activeStatus="excepcion" onOpen={onOpen} />);
 
-    expect(screen.getByRole('button', { name: 'Excepción 0' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Excepción 0' }));
-    expect(onEdit).toHaveBeenCalled();
-    expect(onStatusChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Selector de estado' }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to clearing the filter when no selector handler is given', () => {
-    const onStatusChange = vi.fn();
-    render(chips({ activeStatus: 'excepcion', onStatusChange }));
+  it('falls back to zero for a selected status without data', () => {
+    render(<StatusSelector counts={{}} total={11} loading={false} activeStatus="parcial" onOpen={() => {}} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Excepción 0' }));
-    expect(onStatusChange).toHaveBeenCalledWith(undefined);
+    expect(screen.getByRole('button', { name: 'Selector de estado' }).textContent).toContain('0');
+  });
+});
+
+describe('PickupQuickAction', () => {
+  it('shows the pickup count and fires on tap', () => {
+    const onClick = vi.fn();
+    render(<PickupQuickAction count={2} loading={false} active={false} onClick={onClick} />);
+
+    const btn = screen.getByRole('button', { name: 'Listos para retiro' });
+    expect(btn.textContent).toContain('2');
+    expect(btn).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(btn);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('shows Todos as active when no status filter is applied', () => {
-    render(chips());
+  it('marks itself pressed while the pickup filter is active', () => {
+    render(<PickupQuickAction count={2} loading={false} active onClick={() => {}} />);
 
-    expect(screen.getByRole('button', { name: 'Todos 11' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Listos para retiro' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

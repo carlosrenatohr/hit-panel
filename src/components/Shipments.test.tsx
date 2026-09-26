@@ -215,7 +215,7 @@ describe('Shipments', () => {
   it('applies a status from the mobile filter sheet without dropping the other filters', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Filtrar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Selector de estado' }));
     fireEvent.click(await screen.findByRole('radio', { name: /Excepción/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtro' }));
 
@@ -229,7 +229,7 @@ describe('Shipments', () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Aéreo/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Filtrar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Selector de estado' }));
     fireEvent.click(await screen.findByRole('radio', { name: /Excepción/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtro' }));
 
@@ -242,7 +242,7 @@ describe('Shipments', () => {
   it('filters by the pickup-ready shortcut in the mobile header', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Listos para retiro: En destino (Nicaragua)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Listos para retiro' }));
 
     await waitFor(() => {
       const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
@@ -250,21 +250,28 @@ describe('Shipments', () => {
     });
   });
 
-  it('opens the full filter selector when the active chip is tapped', async () => {
+  it('shows the selected status on the primary selector and opens the sheet from it', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="en_destino" />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /^Destino/ }));
+    const selector = await screen.findByRole('button', { name: 'Selector de estado' });
+    await waitFor(() => expect(selector.textContent).toContain('En destino (Nicaragua)'));
+
+    fireEvent.click(selector);
 
     const dialog = await screen.findByRole('dialog', { name: 'Filtrar órdenes' });
     expect(within(dialog).getByRole('radio', { name: /En destino/ })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('opens the filter selector when the pressed pickup card is tapped again', async () => {
+  it('clears the pickup filter when the pressed star is tapped again', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="en_destino" />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Listos para retiro: En destino (Nicaragua)' }));
+    const star = await screen.findByRole('button', { name: 'Listos para retiro' });
+    await waitFor(() => expect(star).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(star);
 
-    expect(await screen.findByRole('dialog', { name: 'Filtrar órdenes' })).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Selector de estado' }).textContent).toContain('Todos los estados'),
+    );
   });
 
   it('blocks creation with a hint when the agency has no provider', async () => {

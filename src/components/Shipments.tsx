@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, MapPin, Package, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheck, Square } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Pencil, Plus, RefreshCw, Search, SquareCheck, Square } from 'lucide-preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -12,7 +12,6 @@ import {
   providerLabel,
   STATUS_LABEL,
   STATUS_ORDER,
-  STATUS_SOFT,
   toCSV,
 } from '../lib/format'
 import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
@@ -21,7 +20,7 @@ import type { Pkg, ShipmentStatus, SessionUser } from '../lib/types'
 import ClientSearch from './ui/ClientSearch'
 import { customerApi } from '../lib/customer'
 import { DateRangePicker } from './DateRangePicker'
-import LifecycleOverview, { StatusChips, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
+import LifecycleOverview, { PickupQuickAction, StatusSelector, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import FilterSheet from './shipments/FilterSheet'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
 import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusPill } from './ui'
@@ -451,7 +450,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
   return (
     <div class="mx-auto max-w-7xl space-y-4">
-      {/* Header — on phones it wraps into two compact rows: (1) title + Buscar/Filtrar,
+      {/* Header — on phones it wraps into two compact rows: (1) title + Buscar,
           (2, ml-auto) the action icons with their labels hidden below md. */}
       <div class="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
         <div class="flex items-center gap-2">
@@ -469,10 +468,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             >
               <Search class="h-4 w-4" />
             </IconButton>
-            <Button variant="ghost" onClick={() => setShowFilter(true)}>
-              <SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
-              Filtrar
-            </Button>
           </div>
         </div>
         <div class="ml-auto flex items-center gap-0.5 sm:gap-1 md:gap-2">
@@ -509,47 +504,26 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         </div>
       </div>
 
-      {/* Immediate action: packages already in Nicaragua waiting for the customer */}
-      {(summaryLoading || (summary.en_destino ?? 0) > 0) && (
-        <button
-          type="button"
-          onClick={() =>
-            filters.status === 'en_destino' ? setShowFilter(true) : patch({ status: 'en_destino' })
-          }
-          aria-pressed={filters.status === 'en_destino'}
-          aria-label={`Listos para retiro: ${STATUS_LABEL.en_destino}`}
-          class="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
-        >
-          <span class="flex items-center gap-3">
-            <span class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${STATUS_SOFT.en_destino}`}>
-              <MapPin class="h-5 w-5" aria-hidden="true" />
-            </span>
-            <span class="text-2xl font-bold leading-none tabular-nums text-secondary">
-              {summaryLoading ? (
-                <span class="inline-block h-6 w-8 animate-pulse rounded bg-gray-100" />
-              ) : (
-                summary.en_destino ?? 0
-              )}
-            </span>
-            <span class="min-w-0">
-              <span class="block text-sm font-semibold text-secondary">Listos para retiro</span>
-              <span class="block text-xs text-gray-500">{STATUS_LABEL.en_destino}</span>
-            </span>
-          </span>
-          <ChevronRight class="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-        </button>
-      )}
-
-      {/* Compact status filter — same toggle as the desktop lifecycle cards;
-          tapping the active chip opens the full selector instead of clearing it */}
-      <StatusChips
-        counts={summary}
-        total={summaryTotal}
-        loading={summaryLoading}
-        activeStatus={filters.status as ShipmentStatus | undefined}
-        onStatusChange={(s) => patch({ status: s })}
-        onEdit={() => setShowFilter(true)}
-      />
+      {/* Mobile: the ONE primary status selector (opens the full bottom sheet) plus the compact
+          star quick action for "Listos para retiro" — replaces the old chip row and the
+          full-width pickup card, keeping a single status filtering architecture. */}
+      <div class="flex items-stretch gap-2 lg:hidden">
+        <StatusSelector
+          counts={summary}
+          total={summaryTotal}
+          loading={summaryLoading}
+          activeStatus={filters.status as ShipmentStatus | undefined}
+          onOpen={() => setShowFilter(true)}
+        />
+        {(summaryLoading || (summary.en_destino ?? 0) > 0) && (
+          <PickupQuickAction
+            count={summary.en_destino ?? 0}
+            loading={summaryLoading}
+            active={filters.status === 'en_destino'}
+            onClick={() => patch({ status: filters.status === 'en_destino' ? undefined : 'en_destino' })}
+          />
+        )}
+      </div>
 
       {/* Top controls — transport type + date range on the same level */}
       <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
@@ -612,7 +586,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         </div>
       </Card>
 
-      {/* Desktop keeps the full lifecycle cards; mobile uses the chip row above instead */}
+      {/* Desktop keeps the full lifecycle cards; mobile uses the primary selector above instead */}
       <div class="hidden lg:block">
         <LifecycleOverview
           counts={summary}

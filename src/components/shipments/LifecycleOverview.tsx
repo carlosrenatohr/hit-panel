@@ -2,6 +2,7 @@ import { Fragment } from 'preact'
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   HelpCircle,
   Layers,
@@ -13,7 +14,7 @@ import {
   Truck,
   Warehouse,
 } from 'lucide-preact'
-import { STATUS_LABEL, STATUS_ORDER, STATUS_SHORT, STATUS_SOFT } from '../../lib/format'
+import { STATUS_LABEL, STATUS_SOFT } from '../../lib/format'
 import type { ShipmentStatus } from '../../lib/types'
 import { SegmentedTabs, type SegmentedTab } from '../ui'
 
@@ -44,17 +45,60 @@ export function TransportTabs({ value, onChange }: { value: ServiceFilter; onCha
   return <SegmentedTabs tabs={tabs} value={value} onChange={(k) => onChange(k as ServiceFilter)} />
 }
 
-function ChipBtn({
-  label,
-  count,
-  active,
+/** The ONE primary status selector (mobile): icon + selected canonical status + count + chevron.
+ *  Tapping opens the full bottom-sheet selector (FilterSheet) — it replaces the old chip row and
+ *  the header "Filtrar" button so mobile keeps a single status filtering entry point. The selected
+ *  status and its count are rendered back on the main screen. Hidden on lg+ where the lifecycle
+ *  cards take over. */
+export function StatusSelector({
+  counts,
+  total,
   loading,
+  activeStatus,
+  onOpen,
+}: {
+  counts: Partial<Record<ShipmentStatus, number>>
+  /** Count without any status predicate — shown while nothing is selected. */
+  total?: number
+  loading: boolean
+  activeStatus?: ShipmentStatus
+  onOpen: () => void
+}) {
+  const Icon = activeStatus ? STATUS_ICON[activeStatus] : Layers
+  const iconCls = activeStatus ? STATUS_SOFT[activeStatus] : 'bg-gray-100 text-gray-500'
+  const label = activeStatus ? STATUS_LABEL[activeStatus] : 'Todos los estados'
+  const count = activeStatus ? counts[activeStatus] ?? 0 : total ?? 0
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="Selector de estado"
+      class="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-primary/40 bg-white px-3 py-2.5 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      <span class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconCls}`} aria-hidden="true">
+        <Icon class="h-4 w-4" />
+      </span>
+      <span class="min-w-0 flex-1 truncate text-sm font-semibold text-secondary">{label}</span>
+      <span class="shrink-0 text-sm font-bold tabular-nums text-secondary">
+        {loading ? <span class="inline-block h-4 w-8 animate-pulse rounded bg-gray-100" /> : count}
+      </span>
+      <ChevronDown class="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+    </button>
+  )
+}
+
+/** Compact "Listos para retiro" quick action (star): a one-tap jump to the pickup state.
+ *  Not a card and not a second filter model — it toggles the very same canonical status the
+ *  sheet and the desktop lifecycle cards use. */
+export function PickupQuickAction({
+  count,
+  loading,
+  active,
   onClick,
 }: {
-  label: string
-  count?: number
-  active: boolean
+  count: number
   loading: boolean
+  active: boolean
   onClick: () => void
 }) {
   return (
@@ -62,70 +106,19 @@ function ChipBtn({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      class={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-        active ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+      aria-label="Listos para retiro"
+      title="Ir a los paquetes listos para retiro"
+      class={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+        active
+          ? 'border-primary bg-primary text-white'
+          : 'border-primary/40 bg-primary/5 text-secondary hover:bg-primary/10'
       }`}
     >
-      <span>
-        {label}{' '}
-        <span class={`tabular-nums ${active ? 'text-white/80' : 'text-gray-400'}`}>
-          {loading ? <span class="inline-block h-3 w-5 animate-pulse rounded bg-gray-100" /> : count ?? 0}
-        </span>
+      <Star class={`h-4 w-4 ${active ? 'text-white' : 'text-primary'}`} aria-hidden="true" />
+      <span class="text-sm font-bold tabular-nums">
+        {loading ? <span class="inline-block h-4 w-6 animate-pulse rounded bg-gray-200" /> : count}
       </span>
     </button>
-  )
-}
-
-/** Compact chip row — the mobile presentation of the very same one-status-at-a-time toggle the
- *  desktop lifecycle cards use. Hidden on lg+ where LifecycleOverview takes over.
- *  Tapping the ACTIVE chip opens the full filter selector (`onEdit`) instead of clearing it. */
-export function StatusChips({
-  counts,
-  total,
-  loading,
-  activeStatus,
-  onStatusChange,
-  onEdit,
-}: {
-  counts: Partial<Record<ShipmentStatus, number>>
-  /** Count without any status predicate — the "Todos" chip. */
-  total?: number
-  loading: boolean
-  activeStatus?: ShipmentStatus
-  onStatusChange: (s: ShipmentStatus | undefined) => void
-  /** Opens the full state selector; falls back to clearing the filter when omitted. */
-  onEdit?: () => void
-}) {
-  return (
-    <div
-      role="group"
-      aria-label="Filtrar por estado"
-      class="scroll-thin -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden"
-    >
-      <ChipBtn
-        label="Todos"
-        count={total}
-        active={!activeStatus}
-        loading={loading}
-        onClick={() => onStatusChange(undefined)}
-      />
-      {STATUS_ORDER.map((s) => (
-        <ChipBtn
-          key={s}
-          label={STATUS_SHORT[s]}
-          count={counts[s]}
-          active={activeStatus === s}
-          loading={loading}
-          onClick={() =>
-            activeStatus === s
-              ? onEdit
-                ? onEdit()
-                : onStatusChange(undefined)
-              : onStatusChange(s)
-          }
-        />
-      ))}
-    </div>
   )
 }
 
