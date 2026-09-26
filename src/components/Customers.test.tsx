@@ -82,6 +82,28 @@ describe('Customers', () => {
     expect(customerApi.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Beta', taxId: 'J999', companyName: null, defaultRateCardId: null }))
   })
 
+  it('seeds the Revisión filter from a drilldown (dashboard ?estado=review)', async () => {
+    render(<Customers user={mockUser} role="admin" statusSeed="review" />)
+
+    await waitFor(() => {
+      expect(
+        vi.mocked(customerApi.list).mock.calls.some(([f]) => JSON.stringify(f.statuses) === JSON.stringify(['review'])),
+      ).toBe(true)
+    })
+    expect(screen.getByRole('button', { name: /Revisión/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('ignores persisted filters in favour of the drilldown seed only at mount', async () => {
+    render(<Customers user={mockUser} role="admin" statusSeed="active" />)
+
+    await waitFor(() => {
+      expect(
+        vi.mocked(customerApi.list).mock.calls.some(([f]) => JSON.stringify(f.statuses) === JSON.stringify(['active'])),
+      ).toBe(true)
+    })
+    expect(screen.getByRole('button', { name: /Activos/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('cancel closes the shared modal without calling the API', async () => {
     render(<Customers user={mockUser} role="admin" />)
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())

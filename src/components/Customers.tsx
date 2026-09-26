@@ -61,7 +61,7 @@ const STATUS_TABS: StatusTab[] = [
   { key: 'review', label: 'Revisión', icon: Flag, filter: ['review'], activeCls: 'border-amber-400 bg-amber-50 text-amber-700' },
 ]
 
-export default function Customers({ user, role }: { user: SessionUser; role: Role }) {
+export default function Customers({ user, role, statusSeed }: { user: SessionUser; role: Role; statusSeed?: string | null }) {
   const canWrite = role === 'admin' || role === 'billing'
   const colPrefs = useCustomerColumnPrefs()
   const savedFilters = loadFilters()
@@ -82,7 +82,9 @@ export default function Customers({ user, role }: { user: SessionUser; role: Rol
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState(savedFilters.search)
-  const [statuses, setStatuses] = useState<string[]>(savedFilters.statuses)
+  // `statusSeed` (Dashboard drilldown ?estado=) takes precedence over the persisted filter
+  // at mount; afterwards the persisted filters take over again (same pattern as Shipments).
+  const [statuses, setStatuses] = useState<string[]>(statusSeed ? [statusSeed] : savedFilters.statuses)
   const [from, setFrom] = useState(savedFilters.from)
   const [to, setTo] = useState(savedFilters.to)
   const [stats, setStats] = useState<CustomerAggregateStats | null>(null)
