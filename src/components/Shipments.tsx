@@ -29,6 +29,9 @@ import { billingApi, type BulkPreviewOutput } from '../lib/billing'
 
 const PAGE_SIZE = 25
 
+// Local calendar date (yyyy-mm-dd) — keeps the default reception date on its day.
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 // Translate common worker error messages to user-friendly Spanish.
 function translateBulkError(msg: string): string {
   if (/already invoiced/i.test(msg)) return 'Uno o más paquetes ya tienen una factura activa. Si la factura fue anulada, espera unos segundos e intenta de nuevo.'
@@ -124,7 +127,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     almacenId: '',
     trackingNumber: '',
     serviceType: '' as 'aereo' | 'maritimo' | '',
-    referenciaName: '',
     weightLb: '',
     pieces: '',
     receivedAt: '',
@@ -385,6 +387,11 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       setCreateError('El cliente es obligatorio — elegí uno existente o escribí un nombre nuevo.')
       return
     }
+    const weightLb = Number(createForm.weightLb)
+    if (!createForm.weightLb.trim() || !Number.isFinite(weightLb) || weightLb <= 0) {
+      setCreateError('El peso (lb) es obligatorio y debe ser mayor a 0.')
+      return
+    }
     setCreateError(null)
     setCreateLoading(true)
     try {
@@ -400,8 +407,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         almacenId: createForm.almacenId.trim(),
         trackingNumber: createForm.trackingNumber || null,
         serviceType: createForm.serviceType,
-        referenciaName: createForm.referenciaName || null,
-        weightLb: createForm.weightLb ? Number(createForm.weightLb) : null,
+        // The recipient name derives from the picked/created client — no manual field.
+        referenciaName: createForm.client.name,
+        weightLb,
         pieces: createForm.pieces ? Number(createForm.pieces) : null,
         receivedAt: createForm.receivedAt ? dateInputToTimestamptz(createForm.receivedAt) : null,
         providerCode: createForm.providerCode || null,
@@ -415,7 +423,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         setCreateWarning(res.warning)
       } else {
         setShowCreate(false)
-        setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '', weightLb: '', pieces: '', receivedAt: '', providerCode: '', client: null, status: 'en_almacen' })
+        setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', weightLb: '', pieces: '1', receivedAt: ymd(new Date()), providerCode: '', client: null, status: 'en_almacen' })
       }
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
@@ -432,8 +440,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     // Preselect the agency's default provider (junction is_default) — the
     // modal only renders a <select> when the agency has more than one.
     setCreateForm({
-      almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '',
-      weightLb: '', pieces: '', receivedAt: '',
+      almacenId: '', trackingNumber: '', serviceType: '',
+      weightLb: '', pieces: '1', receivedAt: ymd(new Date()),
       providerCode: (providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '',
       client: null,
       status: 'en_almacen',
@@ -945,15 +953,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                 <p class="mt-1 text-xs text-gray-500">
                   El estado con el que nace el paquete. Podés cambiarlo después desde el detalle del paquete.
                 </p>
-              </Field>
-
-              <Field label="Nombre de referencia">
-                <input
-                  class={inputCls}
-                  placeholder="Nombre del destinatario"
-                  value={createForm.referenciaName}
-                  onInput={(e) => setCreateForm({ ...createForm, referenciaName: (e.target as HTMLInputElement).value })}
-                />
               </Field>
 
               <div class="grid grid-cols-2 gap-3">

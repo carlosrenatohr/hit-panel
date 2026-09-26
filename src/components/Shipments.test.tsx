@@ -4,12 +4,14 @@ import Shipments from './Shipments';
 import { listPackages, getProviders, createPackage, type ListFilters } from '../lib/insforge';
 import { customerApi } from '../lib/customer';
 
-// The create modal now requires a client (typed → created at submit) and a
-// service type. Shared fixture for the shipped tests that reach the submit.
+// The create modal now requires a client (typed → created at submit), a
+// service type and a weight greater than zero. Shared fixture for the
+// shipped tests that reach the submit.
 async function pickNewClientAndService() {
   fireEvent.input(screen.getByPlaceholderText(/Buscar cliente o escribir uno nuevo/), { target: { value: 'Ana P' } });
   fireEvent.mouseDown(await screen.findByText(/Crear cliente:/));
   fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+  fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '5.5' } });
 }
 
 const mockPkgs = vi.hoisted(() => [
@@ -365,6 +367,12 @@ describe('Shipments', () => {
 
     // The status select shows the default label, not 'Seleccionar…'.
     expect(screen.getByDisplayValue('En bodega Miami')).toBeTruthy();
+
+    // Sensible defaults: 1 piece and today's reception date (local calendar day).
+    expect((screen.getByLabelText('Piezas') as HTMLInputElement).value).toBe('1');
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    expect((screen.getByLabelText('Fecha de recepción (opcional)') as HTMLInputElement).value).toBe(today);
   });
 
   it('creates a new client first, then the package with status and service', async () => {
@@ -380,6 +388,7 @@ describe('Shipments', () => {
 
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25001234' } });
     fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+    fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '4.2' } });
     // A date entered in the modal must keep its calendar day (local midnight),
     // not fall a day behind by parsing as UTC midnight.
     fireEvent.change(screen.getByLabelText('Fecha de recepción (opcional)'), { target: { value: '2026-09-23' } });
@@ -407,11 +416,27 @@ describe('Shipments', () => {
 
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25004444' } });
     fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'maritimo' } });
+    fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '3.1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() =>
       expect(vi.mocked(createPackage)).toHaveBeenCalledWith(expect.objectContaining({ clientId: 'c1', serviceType: 'maritimo' })),
     );
     expect(vi.mocked(customerApi.create)).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing or zero weight before creating', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25001500' } });
+    await pickNewClientAndService();
+
+    fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+
+    expect(await screen.findByText(/El peso \(lb\) es obligatorio y debe ser mayor a 0/)).toBeTruthy();
+    expect(vi.mocked(createPackage)).not.toHaveBeenCalled();
   });
 });
