@@ -169,6 +169,21 @@ export default function Facturacion({ role }: { role: Role }) {
     }
   }
 
+  async function runRowArchive(r: InvoiceListRow) {
+    if (!confirm(`¿Archivar la factura #${r.invoiceNumber}? Dejará de aparecer en la lista y reportes, y sus paquetes enlazados se liberán para volver a facturar. No se puede deshacer.`)) return
+    setActionId(r.id)
+    try {
+      await billingApi.archiveInvoice(r.id, 'Archivada desde la lista')
+      // -- The archived invoice no longer resolves: close its detail view. --
+      if (detailId === r.id) setDetailId(null)
+      reload()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo archivar la factura.')
+    } finally {
+      setActionId(null)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   return (
@@ -305,6 +320,7 @@ export default function Facturacion({ role }: { role: Role }) {
                         onEdit={() => setEditingId(r.id)}
                         onClose={() => void runRowClose(r)}
                         onVoid={() => void runRowVoid(r)}
+                        onArchive={() => void runRowArchive(r)}
                       />
                     </td>
                   </tr>
