@@ -1,4 +1,5 @@
 import { createClient } from '@insforge/sdk'
+import { toIlikePattern } from './format'
 import type { Evt, Note, PackageDetail, Pkg, Provider, ProviderNote, SessionUser, ShipmentStatus, Stats, Tag } from './types'
 
 const baseUrl = import.meta.env.PUBLIC_INSFORGE_URL as string
@@ -121,7 +122,8 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 
   if (f.organizationId) q = q.eq('organization_id', f.organizationId)
   if (f.search && f.search.trim()) {
-    const s = f.search.trim().replace(/[(),*]/g, '')
+    // Accent-insensitive: each vowel/ñ expands to a LIKE char class (Mendez → M[eé][nñ]d[eé]z).
+    const s = toIlikePattern(f.search.trim().replace(/[(),*]/g, ''))
     q = q.or(`almacen_id.ilike.*${s}*,tracking_number.ilike.*${s}*,casillero.ilike.*${s}*,referencia_name.ilike.*${s}*`)
   }
   // -- Multi-select arrays filter with PostgREST IN; the single-value fields stay for the shipments list. --

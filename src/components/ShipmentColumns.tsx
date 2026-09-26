@@ -5,6 +5,7 @@ import {
   cleanName,
   daysAgo,
   fmtDate,
+  foldAccents,
   isHazmat,
   officeFlag,
   providerLabel,
@@ -175,10 +176,10 @@ export function ColumnPicker({ prefs }: { prefs: ReturnType<typeof useColumnPref
     })
   }
 
-  const q = search.trim().toLowerCase()
+  const q = foldAccents(search.trim())
   const visible = draft.filter((c) => {
     const def = COLUMN_DEFS.find((d) => d.key === c.key)
-    return !q || def?.label.toLowerCase().includes(q)
+    return !q || foldAccents(def?.label ?? '').includes(q)
   })
 
   return (

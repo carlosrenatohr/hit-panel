@@ -2,6 +2,7 @@ import type { JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { GripVertical, Lock, Search, SlidersHorizontal, X } from 'lucide-preact'
 import type { Customer } from '../lib/customer'
+import { foldAccents } from '../lib/format'
 import { Button, IconButton, inputCls } from './ui'
 
 export interface CustomerColumnDef {
@@ -107,10 +108,10 @@ export function CustomerColumnPicker({ prefs }: { prefs: ReturnType<typeof useCu
     })
   }
 
-  const q = search.trim().toLowerCase()
+  const q = foldAccents(search.trim())
   const visible = draft.filter((c) => {
     const def = CUSTOMER_COLUMN_DEFS.find((d) => d.key === c.key)
-    return !q || def?.label.toLowerCase().includes(q)
+    return !q || foldAccents(def?.label ?? '').includes(q)
   })
 
   return (
