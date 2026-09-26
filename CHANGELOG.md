@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.12] — 2026-09-26
+
+### Fixed
+- Paquetería global search: terms stopped matching after the accent-insensitive pattern introduced LIKE bracket classes (`[aá]`), which do NOT match in this cluster (same root cause as the customer autocomplete hotfix). Search now uses a plain accent-folded term (`foldAccents`) and resolves the billing client name to ids first (`client_id.in.(…)` in the `or()`, dot-notation — the equals form and embed filters inside `or()` both 400 on this PostgREST). Typing a client's name now also finds their packages.
+- Removed the dead `toIlikePattern` helper.
+
+### Changed
+- Billing action icons (invoice rows: ver/editar/cerrar/anular/archivar; detail: WhatsApp/copiar link/imprimir/desenlazar; form close) now use the same `Tooltip` as the Customers action icons instead of the browser `title` attribute.
+
 ## [0.4.11] — 2026-09-26
 
 ### Added
