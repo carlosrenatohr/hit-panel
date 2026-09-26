@@ -137,7 +137,10 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
     try {
       const { rows } = await customerApi.list({ search: f.search.trim(), pageSize: 50 })
       const ids = rows.map((c) => c.id).filter((x): x is string => !!x)
-      if (ids.length) arms.push(`client_id=in.(${ids.join(',')})`)
+      if (ids.length) {
+        // Double-quote the ids: or() values with special chars (UUID dashes) must be quoted (PGRST100 otherwise).
+        arms.push(`client_id=in.(${ids.map((x) => `"${x}"`).join(',')})`)
+      }
     } catch {
       // Keep the package-field search if the clients lookup fails.
     }
