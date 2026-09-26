@@ -308,11 +308,14 @@ export function BottomSheet({
   onClose,
   title,
   children,
+  fullscreen = false,
 }: {
   open: boolean
   onClose: () => void
   title: string
   children: ComponentChildren
+  /** Cover the whole viewport (used by the mobile status selector) instead of a bottom drawer. */
+  fullscreen?: boolean
 }) {
   useEffect(() => {
     if (!open) return
@@ -334,15 +337,21 @@ export function BottomSheet({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div class="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white px-5 pb-6 pt-3 shadow-xl">
-        <div class="mx-auto mb-3 h-1 w-10 rounded-full bg-gray-200" aria-hidden="true" />
+      <div
+        class={
+          fullscreen
+            ? 'flex h-dvh w-full flex-col bg-white px-5 pb-6 pt-3 shadow-xl'
+            : 'max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white px-5 pb-6 pt-3 shadow-xl'
+        }
+      >
+        {!fullscreen && <div class="mx-auto mb-3 h-1 w-10 rounded-full bg-gray-200" aria-hidden="true" />}
         <div class="mb-4 flex items-center justify-between">
           <h2 class="text-lg font-semibold text-secondary">{title}</h2>
           <button type="button" class="text-gray-400 hover:text-gray-700" onClick={onClose} aria-label="Cerrar">
             <X class="h-4 w-4" />
           </button>
         </div>
-        {children}
+        {fullscreen ? <div class="flex-1 overflow-y-auto">{children}</div> : children}
       </div>
     </div>
   )

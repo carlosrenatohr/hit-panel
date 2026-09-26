@@ -4,12 +4,14 @@ import Shipments from './Shipments';
 import { listPackages, getProviders, createPackage, type ListFilters } from '../lib/insforge';
 import { customerApi } from '../lib/customer';
 
-// The create modal now requires a client (typed → created at submit) and a
-// service type. Shared fixture for the shipped tests that reach the submit.
+// The create modal now requires a client (typed → created at submit), a
+// service type and a weight greater than zero. Shared fixture for the
+// shipped tests that reach the submit.
 async function pickNewClientAndService() {
   fireEvent.input(screen.getByPlaceholderText(/Buscar cliente o escribir uno nuevo/), { target: { value: 'Ana P' } });
   fireEvent.mouseDown(await screen.findByText(/Crear cliente:/));
   fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+  fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '5.5' } });
 }
 
 const mockPkgs = vi.hoisted(() => [
@@ -213,7 +215,7 @@ describe('Shipments', () => {
   it('applies a status from the mobile filter sheet without dropping the other filters', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Filtrar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Selector de estado' }));
     fireEvent.click(await screen.findByRole('radio', { name: /Excepción/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtro' }));
 
@@ -227,7 +229,7 @@ describe('Shipments', () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Aéreo/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Filtrar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Selector de estado' }));
     fireEvent.click(await screen.findByRole('radio', { name: /Excepción/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtro' }));
 
@@ -240,12 +242,36 @@ describe('Shipments', () => {
   it('filters by the pickup-ready shortcut in the mobile header', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Listos para retiro: En destino (Nicaragua)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Listos para retiro' }));
 
     await waitFor(() => {
       const calls = vi.mocked(listPackages).mock.calls.map((c) => c[0]);
       expect(calls.some((f) => f.status === 'en_destino')).toBe(true);
     });
+  });
+
+  it('shows the selected status on the primary selector and opens the sheet from it', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="en_destino" />);
+
+    const selector = await screen.findByRole('button', { name: 'Selector de estado' });
+    await waitFor(() => expect(selector.textContent).toContain('En destino (Nicaragua)'));
+
+    fireEvent.click(selector);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Filtrar órdenes' });
+    expect(within(dialog).getByRole('radio', { name: /En destino/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('clears the pickup filter when the pressed star is tapped again', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="en_destino" />);
+
+    const star = await screen.findByRole('button', { name: 'Listos para retiro' });
+    await waitFor(() => expect(star).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(star);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Selector de estado' }).textContent).toContain('Todos los estados'),
+    );
   });
 
   it('blocks creation with a hint when the agency has no provider', async () => {
@@ -365,6 +391,12 @@ describe('Shipments', () => {
 
     // The status select shows the default label, not 'Seleccionar…'.
     expect(screen.getByDisplayValue('En bodega Miami')).toBeTruthy();
+
+    // Sensible defaults: 1 piece and today's reception date (local calendar day).
+    expect((screen.getByLabelText('Piezas') as HTMLInputElement).value).toBe('1');
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    expect((screen.getByLabelText('Fecha de recepción (opcional)') as HTMLInputElement).value).toBe(today);
   });
 
   it('creates a new client first, then the package with status and service', async () => {
@@ -380,6 +412,7 @@ describe('Shipments', () => {
 
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25001234' } });
     fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'aereo' } });
+    fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '4.2' } });
     // A date entered in the modal must keep its calendar day (local midnight),
     // not fall a day behind by parsing as UTC midnight.
     fireEvent.change(screen.getByLabelText('Fecha de recepción (opcional)'), { target: { value: '2026-09-23' } });
@@ -407,11 +440,27 @@ describe('Shipments', () => {
 
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25004444' } });
     fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'maritimo' } });
+    fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '3.1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() =>
       expect(vi.mocked(createPackage)).toHaveBeenCalledWith(expect.objectContaining({ clientId: 'c1', serviceType: 'maritimo' })),
     );
     expect(vi.mocked(customerApi.create)).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing or zero weight before creating', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25001500' } });
+    await pickNewClientAndService();
+
+    fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+
+    expect(await screen.findByText(/El peso \(lb\) es obligatorio y debe ser mayor a 0/)).toBeTruthy();
+    expect(vi.mocked(createPackage)).not.toHaveBeenCalled();
   });
 });

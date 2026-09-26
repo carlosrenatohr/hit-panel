@@ -1,7 +1,7 @@
 import { Anchor, GripVertical, Package, Plane, Scale, Search, SlidersHorizontal, Trophy, Users, X } from 'lucide-preact'
 import { useState } from 'preact/hooks'
 import type { CustomerAggregateStats } from '../lib/customer'
-import { fmtLbs } from '../lib/format'
+import { foldAccents, fmtLbs } from '../lib/format'
 import { MAX_VISIBLE_CARDS, capCards } from '../lib/cards'
 import { Button, Card, IconButton, inputCls } from './ui'
 
@@ -92,8 +92,8 @@ export function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => v
     })
   }
 
-  const q = search.trim().toLowerCase()
-  const filtered = ALL_CARD_OPTIONS.filter((c) => !q || c.label.toLowerCase().includes(q))
+  const q = foldAccents(search.trim())
+  const filtered = ALL_CARD_OPTIONS.filter((c) => !q || foldAccents(c.label).includes(q))
 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
