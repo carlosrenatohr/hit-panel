@@ -63,7 +63,7 @@ function ChipBtn({
       onClick={onClick}
       aria-pressed={active}
       class={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-        active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+        active ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
       }`}
     >
       <span>

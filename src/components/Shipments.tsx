@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheck, Square, Star } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, MapPin, Package, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheck, Square } from 'lucide-preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -12,6 +12,7 @@ import {
   providerLabel,
   STATUS_LABEL,
   STATUS_ORDER,
+  STATUS_SOFT,
   toCSV,
 } from '../lib/format'
 import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
@@ -510,18 +511,18 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
           class="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
         >
           <span class="flex items-center gap-3">
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Star class="h-5 w-5" aria-hidden="true" />
+            <span class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${STATUS_SOFT.en_destino}`}>
+              <MapPin class="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span class="text-2xl font-bold leading-none tabular-nums text-secondary">
+              {summaryLoading ? (
+                <span class="inline-block h-6 w-8 animate-pulse rounded bg-gray-100" />
+              ) : (
+                summary.en_destino ?? 0
+              )}
             </span>
             <span class="min-w-0">
-              <span class="block text-xl font-bold leading-none tabular-nums text-primary">
-                {summaryLoading ? (
-                  <span class="inline-block h-6 w-8 animate-pulse rounded bg-gray-100" />
-                ) : (
-                  summary.en_destino ?? 0
-                )}
-              </span>
-              <span class="mt-1 block text-sm font-semibold text-secondary">Listos para retiro</span>
+              <span class="block text-sm font-semibold text-secondary">Listos para retiro</span>
               <span class="block text-xs text-gray-500">{STATUS_LABEL.en_destino}</span>
             </span>
           </span>

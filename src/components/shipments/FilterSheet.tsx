@@ -56,11 +56,11 @@ export default function FilterSheet({
             >
               <span
                 class={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                  selected ? 'border-primary' : 'border-gray-300'
+                  selected ? 'border-navy' : 'border-gray-300'
                 }`}
                 aria-hidden="true"
               >
-                {selected && <span class="h-2.5 w-2.5 rounded-full bg-primary" />}
+                {selected && <span class="h-2.5 w-2.5 rounded-full bg-navy" />}
               </span>
               <span
                 class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
@@ -70,7 +70,7 @@ export default function FilterSheet({
               >
                 <Icon class="h-4 w-4" />
               </span>
-              <span class={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-primary' : 'text-gray-700'}`}>
+              <span class={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-navy' : 'text-gray-700'}`}>
                 {r.label}
               </span>
               <span class="shrink-0 text-sm font-medium tabular-nums text-gray-400">
