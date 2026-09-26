@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheck, Square, Star } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheck, Square, Star } from 'lucide-preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -9,9 +9,7 @@ import {
   downloadCSV,
   fmtDate,
   isHazmat,
-  officeFlag,
   providerLabel,
-  SERVICE_EMOJI,
   STATUS_LABEL,
   STATUS_ORDER,
   toCSV,
@@ -427,14 +425,48 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
+  function openCreate() {
+    setCreateError(null)
+    setCreateWarning(null)
+    // Preselect the agency's default provider (junction is_default) — the
+    // modal only renders a <select> when the agency has more than one.
+    setCreateForm({
+      almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '',
+      weightLb: '', pieces: '', receivedAt: '',
+      providerCode: (providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '',
+      client: null,
+      status: 'en_almacen',
+    })
+    setShowCreate(true)
+  }
+
   return (
     <div class="mx-auto max-w-7xl space-y-4">
-      <div class="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight text-secondary">Paquetería</h1>
-          <p class="text-sm text-gray-500">{count} resultados</p>
+      {/* Header — on phones it wraps into two compact rows: (1) title + Buscar/Filtrar,
+          (2, ml-auto) the action icons with their labels hidden below md. */}
+      <div class="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+        <div class="flex items-center gap-2">
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight text-secondary">Paquetería</h1>
+            <p class="text-sm text-gray-500">{count} resultados</p>
+          </div>
+          <div class="flex items-center gap-2 lg:hidden">
+            <IconButton
+              label="Buscar"
+              onClick={() => {
+                searchRef.current?.focus()
+                searchRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+              }}
+            >
+              <Search class="h-4 w-4" />
+            </IconButton>
+            <Button variant="ghost" onClick={() => setShowFilter(true)}>
+              <SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
+              Filtrar
+            </Button>
+          </div>
         </div>
-        <div class="flex gap-2">
+        <div class="ml-auto flex items-center gap-0.5 sm:gap-1 md:gap-2">
           <IconButton label="Actualizar" onClick={reload} disabled={loading}>
             <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </IconButton>
@@ -442,54 +474,30 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
           <span class="hidden md:inline-flex">
             <ColumnPicker prefs={colPrefs} />
           </span>
-          <Button variant="ghost" onClick={() => setShowCal((v) => !v)}>
+          <Button
+            variant="ghost"
+            aria-label={showCal ? 'Ocultar calendario' : 'Calendario'}
+            onClick={() => setShowCal((v) => !v)}
+          >
             <CalendarDays class="h-4 w-4" aria-hidden="true" />
-            {showCal ? 'Ocultar calendario' : 'Calendario'}
+            <span class="hidden md:inline">{showCal ? 'Ocultar calendario' : 'Calendario'}</span>
           </Button>
-          <Button variant="ghost" onClick={doExport} disabled={exporting}>
+          <Button
+            variant="ghost"
+            aria-label={exporting ? 'Exportando…' : 'Exportar CSV'}
+            onClick={doExport}
+            disabled={exporting}
+          >
             <Download class="h-4 w-4" aria-hidden="true" />
-            {exporting ? 'Exportando…' : 'Exportar CSV'}
+            <span class="hidden md:inline">{exporting ? 'Exportando…' : 'Exportar CSV'}</span>
           </Button>
           {canWrite && user.role !== 'viewer' && (
-            <Button
-              variant="primary"
-              onClick={() => {
-                setCreateError(null)
-                setCreateWarning(null)
-                // Preselect the agency's default provider (junction is_default) — the
-                // modal only renders a <select> when the agency has more than one.
-                setCreateForm({
-                  almacenId: '', trackingNumber: '', serviceType: '', referenciaName: '',
-                  weightLb: '', pieces: '', receivedAt: '',
-                  providerCode: (providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '',
-                  client: null,
-                  status: 'en_almacen',
-                })
-                setShowCreate(true)
-              }}
-            >
+            <Button variant="primary" aria-label="Crear paquete" onClick={openCreate}>
               <Plus class="h-4 w-4" aria-hidden="true" />
-              Crear paquete
+              <span class="hidden md:inline">Crear paquete</span>
             </Button>
           )}
         </div>
-      </div>
-
-      {/* Mobile actions — the search icon jumps to the field below, Filtrar opens the sheet */}
-      <div class="flex items-center gap-2 lg:hidden">
-        <IconButton
-          label="Buscar"
-          onClick={() => {
-            searchRef.current?.focus()
-            searchRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-          }}
-        >
-          <Search class="h-4 w-4" />
-        </IconButton>
-        <Button variant="ghost" onClick={() => setShowFilter(true)}>
-          <SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
-          Filtrar
-        </Button>
       </div>
 
       {/* Immediate action: packages already in Nicaragua waiting for the customer */}
@@ -566,7 +574,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
               </option>
             ))}
           </select>
-          <div class="flex items-center gap-2">
+          {/* Sort lives in the mobile list header below; desktop keeps it here */}
+          <div class="hidden items-center gap-2 lg:flex">
             <label for="shipments-sort" class="whitespace-nowrap text-xs font-medium text-gray-500">
               Ordenar por
             </label>
@@ -620,6 +629,28 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
       {err && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
 
+      {/* Mobile: section header with count + compact sort (desktop keeps them in the filter card) */}
+      <div class="flex items-center justify-between gap-3 lg:hidden">
+        <h2 class="text-lg font-bold text-secondary">Paquetes ({count})</h2>
+        <select
+          id="shipments-sort-m"
+          aria-label="Ordenar por"
+          class="max-w-44 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-800 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+          value={`${filters.sortCol}:${filters.ascending ? 'asc' : 'desc'}`}
+          onChange={(e) => {
+            const v = (e.target as HTMLSelectElement).value
+            const [col, dir] = v.split(':')
+            patch({ sortCol: col, ascending: dir === 'asc' })
+          }}
+        >
+          {SORTS.map((s) => (
+            <option key={s.col} value={`${s.col}:${s.dir}`}>
+              {s.label} {s.col === 'status_rank' ? '🎯' : s.dir === 'asc' ? '↑' : '↓'}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* List — cards on mobile, table on desktop */}
       <Card>
         {/* Mobile cards */}
@@ -641,51 +672,49 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                   key={p.id}
                   type="button"
                   onClick={() => onOpen(p.almacen_id)}
-                  class="flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                  class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                 >
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="min-w-0 truncate font-semibold text-secondary">{p.almacen_id}</span>
-                    <span class="flex shrink-0 items-center gap-1.5">
-                      <StatusPill s={p.effective_status as ShipmentStatus} />
-                      {p.manual_status && (
-                        <span title={`Estado manual: ${p.manual_status}`} class="text-orange-500" aria-label="Estado manual">
-                          <Pencil class="h-3 w-3" />
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-1.5 text-sm text-gray-700">
-                    <span class="truncate">{cleanName(p.referencia_name)}</span>
-                    {isHazmat(p.referencia_name) && <HazmatBadge />}
-                    {p.photo_ref && <span title="Tiene foto">🖼️</span>}
-                    {p.invoice_packages?.some((ip) => ip.active) ? (
-                      <span title="Tiene factura" class="text-primary/70">
-                        <FileText class="h-3.5 w-3.5" />
+                  <span
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500"
+                    aria-hidden="true"
+                  >
+                    <Package class="h-4 w-4" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="flex items-center justify-between gap-2">
+                      <span class="min-w-0 truncate font-semibold text-secondary">{p.almacen_id}</span>
+                      <span class="flex shrink-0 items-center gap-1.5">
+                        <StatusPill s={p.effective_status as ShipmentStatus} />
+                        {p.manual_status && (
+                          <span title={`Estado manual: ${p.manual_status}`} class="text-orange-500" aria-label="Estado manual">
+                            <Pencil class="h-3 w-3" />
+                          </span>
+                        )}
                       </span>
-                    ) : null}
-                  </div>
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-                    <span>{providerLabel(p.providers?.code)}</span>
-                    <span>
-                      {p.effective_service_type ? SERVICE_EMOJI[p.effective_service_type] : '—'} {officeFlag(p.origin_office)}
                     </span>
-                    <span>
-                      {p.pieces ?? '—'} pzs · {p.weight_lb != null ? `${p.weight_lb} lb` : 'peso sin dato'}
+                    <span class="mt-0.5 flex items-center gap-1.5 text-sm text-gray-700">
+                      <span class="min-w-0 truncate">{cleanName(p.referencia_name)}</span>
+                      {isHazmat(p.referencia_name) && <HazmatBadge />}
+                      {p.photo_ref && <span title="Tiene foto">🖼️</span>}
+                      {p.invoice_packages?.some((ip) => ip.active) ? (
+                        <span title="Tiene factura" class="text-primary/70">
+                          <FileText class="h-3.5 w-3.5" />
+                        </span>
+                      ) : null}
                     </span>
-                    <span class="ml-auto flex items-center gap-1.5">
-                      {fmtDate(p.last_event_at)}
-                      {showStale && <StaleBadge days={stale as number} />}
+                    <span class="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                      <span class="min-w-0 truncate">
+                        {providerLabel(p.providers?.code)} · {p.pieces ?? '—'} pzs ·{' '}
+                        {p.weight_lb != null ? `${p.weight_lb} lb` : 'peso sin dato'}
+                      </span>
+                      <span class="ml-auto flex shrink-0 items-center gap-1.5">
+                        {fmtDate(p.last_event_at)}
+                        {showStale && <StaleBadge days={stale as number} />}
+                        {showRecDays && <DaysBadge days={recDays as number} />}
+                      </span>
                     </span>
-                  </div>
-                  {p.received_at && (
-                    <div class="flex items-center gap-1.5 text-xs text-gray-400">
-                      <span>Recibido Miami: {fmtDate(p.received_at)}</span>
-                      {showRecDays && <DaysBadge days={recDays as number} />}
-                    </div>
-                  )}
-                  {p.tracking_number && (
-                    <div class="truncate font-mono text-xs text-gray-400">{p.tracking_number}</div>
-                  )}
+                  </span>
+                  <ChevronRight class="h-4 w-4 shrink-0 text-gray-300" aria-hidden="true" />
                 </button>
               )
             })
