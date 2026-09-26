@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.10] — 2026-09-26
+
+### Added
+- Resumen: a **Requiere acción** block puts exceptions to review (only when there are any) and packages ready for pickup above the KPIs, each card navigating to Paquetería with that status already applied.
+- Status bars are clickable drilldowns and show their share of the range total; provider KPIs show their share of the provider total. Status percentages hide while the dashboard status filter is active, because `dashboard_stats` narrows `total` to `p_status` and every ratio would read 100% (same reasoning as Reports' Trend).
+- Paquetería reads a **`?estado=`** query param — same seed pattern as `?cliente=`/`?unassigned=1` — applied once when the view mounts.
+- Mobile Paquetería: compact status chip row with counts, a **Filtrar** bottom sheet ("Filtrar órdenes" + "Aplicar filtro") whose draft selection never disturbs transport, provider or period filters, a pickup-ready shortcut card and a status pill on each row. Desktop keeps the lifecycle cards unchanged.
+
+### Changed
+- "Pipeline por estado" is now "Estados de los paquetes", and the new controls speak Spanish (`Buscar`, `Filtrar`, `Aplicar filtro`).
+- Added `BottomSheet`, `STATUS_SHORT` and `StatusChips` as the shared primitives behind the mobile filter flow; `docs/05-features-and-usage.md` documents the drilldown, the share percentages and the mobile filters.
+
 ## [0.4.9] — 2026-09-24
 
 ### Changed
