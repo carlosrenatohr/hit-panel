@@ -301,6 +301,53 @@ export function Modal({
   )
 }
 
+/** Bottom sheet overlay — same contract as Modal (Escape, backdrop, aria), anchored to the
+ *  bottom edge for the mobile filter flow. */
+export function BottomSheet({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  children: ComponentChildren
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div
+      class="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div class="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white px-5 pb-6 pt-3 shadow-xl">
+        <div class="mx-auto mb-3 h-1 w-10 rounded-full bg-gray-200" aria-hidden="true" />
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-secondary">{title}</h2>
+          <button type="button" class="text-gray-400 hover:text-gray-700" onClick={onClose} aria-label="Cerrar">
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 /** Confirmation overlay for destructive/audited actions (replaces window.confirm). */
 export function ConfirmDialog({
   open,

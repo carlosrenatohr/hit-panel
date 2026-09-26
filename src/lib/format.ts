@@ -11,6 +11,18 @@ export const STATUS_LABEL: Record<ShipmentStatus, string> = {
   desconocido: 'Desconocido',
 }
 
+// Short labels for the compact mobile status chips — same canonical keys as
+// STATUS_LABEL, so a new status can never drift between the two presentations.
+export const STATUS_SHORT: Record<ShipmentStatus, string> = {
+  en_almacen: 'Bodega',
+  parcial: 'Parcial',
+  en_transito: 'Tránsito',
+  en_destino: 'Destino',
+  entregado: 'Entregado',
+  excepcion: 'Excepción',
+  desconocido: 'Desconocido',
+}
+
 // Solid dot — compact indicator for dense table rows.
 export const STATUS_DOT: Record<ShipmentStatus, string> = {
   en_almacen: 'bg-green-500',
