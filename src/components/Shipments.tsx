@@ -1,5 +1,5 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Pencil, Plus, RefreshCw, Search, SquareCheck, Square } from 'lucide-preact'
-import { useCallback, useEffect, useState } from 'preact/hooks'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Pencil, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheck, Square, Star } from 'lucide-preact'
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
 import {
@@ -22,9 +22,10 @@ import type { Pkg, ShipmentStatus, SessionUser } from '../lib/types'
 import ClientSearch from './ui/ClientSearch'
 import { customerApi } from '../lib/customer'
 import { DateRangePicker } from './DateRangePicker'
-import LifecycleOverview, { TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
+import LifecycleOverview, { StatusChips, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
+import FilterSheet from './shipments/FilterSheet'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
-import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusDot } from './ui'
+import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusPill } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
 
 const PAGE_SIZE = 25
@@ -85,6 +86,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   const selectedOrg = user.agency // tenant is pinned: a user only sees their own agency
   const [providers, setProviders] = useState<AgencyProvider[]>([])
   const [searchInput, setSearchInput] = useState('')
+  // Mobile header search action jumps to the existing search field instead of duplicating it.
+  const searchRef = useRef<HTMLInputElement>(null)
   // Default window is the current month (matches the DateRangePicker 'Este mes' preset).
   // `statusSeed` (Dashboard drilldown ?estado=) is read once here, at mount, so the filter
   // is never sticky: navigating away clears the query param and remounts without it.
@@ -106,9 +109,13 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   // Per-status totals for the lifecycle cards (see the summary effect below).
   const [summary, setSummary] = useState<Partial<Record<ShipmentStatus, number>>>({})
   const [summaryLoading, setSummaryLoading] = useState(true)
+  // Count with the same base filters but no status predicate — the "Todos" chip/row.
+  const [summaryTotal, setSummaryTotal] = useState(0)
   const [exporting, setExporting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [showCal, setShowCal] = useState(false)
+  // Mobile filter sheet — proposes a status, applies through the same `filters.status`.
+  const [showFilter, setShowFilter] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -300,16 +307,22 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       from: filters.from,
       to: filters.to,
     }
-    Promise.all(
-      STATUS_ORDER.map((s) =>
-        listPackages({ ...base, statuses: [s], page: 1, pageSize: 1 }).then((r) => [s, r.count] as const),
+    // +1 unpredicated read for the "Todos" counter (a status outside STATUS_ORDER would make a
+    // plain sum of the per-status counts lie).
+    Promise.all([
+      Promise.all(
+        STATUS_ORDER.map((s) =>
+          listPackages({ ...base, statuses: [s], page: 1, pageSize: 1 }).then((r) => [s, r.count] as const),
+        ),
       ),
-    )
-      .then((rows) => {
+      listPackages({ ...base, page: 1, pageSize: 1 }).then((r) => r.count),
+    ])
+      .then(([rows, all]) => {
         if (cancelled) return
         const next: Partial<Record<ShipmentStatus, number>> = {}
         for (const [s, c] of rows) next[s] = c
         setSummary(next)
+        setSummaryTotal(all)
       })
       .catch(() => {
         if (!cancelled) setSummary({})
@@ -462,6 +475,61 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         </div>
       </div>
 
+      {/* Mobile actions — the search icon jumps to the field below, Filtrar opens the sheet */}
+      <div class="flex items-center gap-2 lg:hidden">
+        <IconButton
+          label="Buscar"
+          onClick={() => {
+            searchRef.current?.focus()
+            searchRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }}
+        >
+          <Search class="h-4 w-4" />
+        </IconButton>
+        <Button variant="ghost" onClick={() => setShowFilter(true)}>
+          <SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
+          Filtrar
+        </Button>
+      </div>
+
+      {/* Immediate action: packages already in Nicaragua waiting for the customer */}
+      {(summaryLoading || (summary.en_destino ?? 0) > 0) && (
+        <button
+          type="button"
+          onClick={() => patch({ status: filters.status === 'en_destino' ? undefined : 'en_destino' })}
+          aria-pressed={filters.status === 'en_destino'}
+          aria-label={`Listos para retiro: ${STATUS_LABEL.en_destino}`}
+          class="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
+        >
+          <span class="flex items-center gap-3">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Star class="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span class="min-w-0">
+              <span class="block text-xl font-bold leading-none tabular-nums text-primary">
+                {summaryLoading ? (
+                  <span class="inline-block h-6 w-8 animate-pulse rounded bg-gray-100" />
+                ) : (
+                  summary.en_destino ?? 0
+                )}
+              </span>
+              <span class="mt-1 block text-sm font-semibold text-secondary">Listos para retiro</span>
+              <span class="block text-xs text-gray-500">{STATUS_LABEL.en_destino}</span>
+            </span>
+          </span>
+          <ChevronRight class="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+        </button>
+      )}
+
+      {/* Compact status filter — same toggle as the desktop lifecycle cards */}
+      <StatusChips
+        counts={summary}
+        total={summaryTotal}
+        loading={summaryLoading}
+        activeStatus={filters.status as ShipmentStatus | undefined}
+        onStatusChange={(s) => patch({ status: s })}
+      />
+
       {/* Top controls — transport type + date range on the same level */}
       <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div class="flex flex-col gap-1.5">
@@ -483,6 +551,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
           <div class="relative col-span-2 lg:col-span-2">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
             <input
+              ref={searchRef}
               class={`${inputCls} w-full pl-9`}
               placeholder="Buscar guía, tracking, nombre o casillero…"
               value={searchInput}
@@ -521,12 +590,15 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         </div>
       </Card>
 
-      <LifecycleOverview
-        counts={summary}
-        loading={summaryLoading}
-        activeStatus={filters.status as ShipmentStatus | undefined}
-        onStatusChange={(s) => patch({ status: s })}
-      />
+      {/* Desktop keeps the full lifecycle cards; mobile uses the chip row above instead */}
+      <div class="hidden lg:block">
+        <LifecycleOverview
+          counts={summary}
+          loading={summaryLoading}
+          activeStatus={filters.status as ShipmentStatus | undefined}
+          onStatusChange={(s) => patch({ status: s })}
+        />
+      </div>
 
       {showCal && (
         <MonthCalendar
@@ -535,6 +607,16 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
           loadEvents={loadRecvMonth}
         />
       )}
+
+      <FilterSheet
+        open={showFilter}
+        onClose={() => setShowFilter(false)}
+        counts={summary}
+        total={summaryTotal}
+        loading={summaryLoading}
+        activeStatus={filters.status as ShipmentStatus | undefined}
+        onApply={(s) => patch({ status: s })}
+      />
 
       {err && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
 
@@ -562,9 +644,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                   class="flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                 >
                   <div class="flex items-center justify-between gap-2">
-                    <span class="font-semibold text-secondary">{p.almacen_id}</span>
-                    <span class="flex items-center gap-1.5">
-                      <StatusDot s={p.effective_status as ShipmentStatus} />
+                    <span class="min-w-0 truncate font-semibold text-secondary">{p.almacen_id}</span>
+                    <span class="flex shrink-0 items-center gap-1.5">
+                      <StatusPill s={p.effective_status as ShipmentStatus} />
                       {p.manual_status && (
                         <span title={`Estado manual: ${p.manual_status}`} class="text-orange-500" aria-label="Estado manual">
                           <Pencil class="h-3 w-3" />
