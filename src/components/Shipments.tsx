@@ -125,7 +125,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   const [showCreate, setShowCreate] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [createWarning, setCreateWarning] = useState<string | null>(null)
   const [invoiceId, setInvoiceId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState({
     almacenId: '',
@@ -418,18 +417,12 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         clientId,
         status: createForm.status,
       })
-      if (res.warning) {
-        // Created, but the tracking already exists in another tenant — keep the modal
-        // open so the staff member reads the warning before closing. The package is
-        // live server-side: propagate the change to every subscribed view.
-        bumpData('packages')
-        reload()
-        setCreateWarning(res.warning)
-      } else {
-        setShowCreate(false)
-        setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', weightLb: '', pieces: '1', receivedAt: ymd(new Date()), providerCode: '', client: null, status: 'en_almacen' })
-        resetAfterCreate(createdNewClient)
-      }
+      // ADR-013: create_package es idempotente por tenant y nunca avisa ni
+      // bloquea cross-tenant → el éxito SIEMPRE cierra el modal (el camino de
+      // `warning` se eliminó cuando el Worker dejó de devolverlo).
+      setShowCreate(false)
+      setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', weightLb: '', pieces: '1', receivedAt: ymd(new Date()), providerCode: '', client: null, status: 'en_almacen' })
+      resetAfterCreate(createdNewClient)
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
     } finally {
@@ -459,7 +452,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
   function openCreate() {
     setCreateError(null)
-    setCreateWarning(null)
     // Preselect the agency's default provider (junction is_default) — the
     // modal only renders a <select> when the agency has more than one.
     setCreateForm({
@@ -862,9 +854,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             {createError && (
               <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{createError}</div>
             )}
-            {createWarning && (
-              <div class="mb-3 rounded-md bg-amber-50 p-2 text-sm text-amber-800">{createWarning}</div>
-            )}
 
             <div class="space-y-3">
               <Field label="Guía (almacén)">
@@ -992,7 +981,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             </div>
 
             <div class="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null); setCreateWarning(null) }}>Cancelar</Button>
+              <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null) }}>Cancelar</Button>
               <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId || !createForm.client || !createForm.serviceType || providers.length === 0}>
                 {createLoading ? 'Creando…' : 'Crear'}
               </Button>

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Manual-create modal: the amber cross-tenant `warning` banner is gone — `create_package` is now idempotent **per tenant** (ADR-013) and never warns or blocks across tenants; success always closes the modal (contract change with the Worker: the RPC response no longer carries `warning`).
+
+### Added
+- Refetch on tab focus / visibility change through the shared `dataVersion` bus (~5s throttle): returning to the panel while another window, device, or the ingester changed data refreshes every subscribed view without needing "Actualizar" or polling.
+
 ## [0.4.13] — 2026-09-28
 
 ### Fixed

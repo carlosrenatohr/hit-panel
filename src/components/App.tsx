@@ -12,7 +12,7 @@ import Reports from './Reports'
 import Shell from './Shell'
 import ShipmentDetail from './ShipmentDetail'
 import Shipments from './Shipments'
-import { bumpData } from '../lib/dataVersion'
+import { bumpData, startFocusRefetch } from '../lib/dataVersion'
 import { Spinner } from './ui'
 
 export type View = 'overview' | 'shipments' | 'reports' | 'facturacion' | 'customers' | 'integraciones' | 'configuracion'
@@ -37,6 +37,10 @@ export default function App() {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Al volver a la pestaña, las vistas suscriptas al bus refetchean (throttle 5s):
+  // otra ventana, otro dispositivo o el worker pudieron cambiar los datos.
+  useEffect(() => startFocusRefetch(), [])
 
   if (loading) {
     return (
