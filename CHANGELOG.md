@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.14] — 2026-09-29
+
 ### Removed
 - Manual-create modal: the amber cross-tenant `warning` banner is gone — `create_package` is now idempotent **per tenant** (ADR-013) and never warns or blocks across tenants; success always closes the modal (contract change with the Worker: the RPC response no longer carries `warning`).
 
