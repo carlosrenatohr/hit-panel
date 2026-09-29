@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/preact'
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/preact'
 import type { InvoiceListRow } from '../../lib/billing'
 import Facturacion from './Facturacion'
+import { bumpData } from '../../lib/dataVersion'
 
 const listInvoices = vi.hoisted(() => vi.fn())
 const archiveInvoice = vi.hoisted(() => vi.fn())
@@ -29,7 +30,8 @@ afterEach(() => {
 })
 
 // The list reloads twice before any action: on mount, then when the search
-// debounce (350 ms) replaces the filters object. The post-archive reload is #3.
+// debounce (350 ms) replaces the filters object. The post-archive reload is #3+
+// (the bus bump and the local rev may batch into one or two more effect runs).
 async function renderAndWait(role: 'admin' | 'billing' | 'viewer') {
   listInvoices.mockResolvedValue({ rows: [ROW], count: 1 })
   render(<Facturacion role={role} />)
@@ -47,7 +49,7 @@ describe('Facturacion — archivar', () => {
     fireEvent.click(screen.getByLabelText('Archivar factura #7'))
     expect(confirm).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(archiveInvoice).toHaveBeenCalledWith('i1', 'Archivada desde la lista'))
-    await waitFor(() => expect(listInvoices).toHaveBeenCalledTimes(3), { timeout: 2000 })
+    await waitFor(() => expect(listInvoices.mock.calls.length).toBeGreaterThanOrEqual(3), { timeout: 2000 })
   })
 
   it('does not archive when the confirmation is declined', async () => {
@@ -62,5 +64,14 @@ describe('Facturacion — archivar', () => {
     await renderAndWait('viewer')
     expect(screen.queryByLabelText('Archivar factura #7')).toBeNull()
     expect(screen.queryByLabelText('Anular factura #7')).toBeNull()
+  })
+
+  it('refetches the list when invoices/packages change from another view', async () => {
+    await renderAndWait('admin')
+    const before = listInvoices.mock.calls.length
+
+    act(() => bumpData('invoices', 'packages'))
+
+    await waitFor(() => expect(listInvoices.mock.calls.length).toBeGreaterThan(before), { timeout: 2000 })
   })
 })

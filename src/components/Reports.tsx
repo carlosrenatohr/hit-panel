@@ -17,6 +17,7 @@ import {
 } from '../lib/format'
 import { billingApi } from '../lib/billing'
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
+import { useDataVersion } from '../lib/dataVersion'
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, SessionUser, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
@@ -48,7 +49,10 @@ export default function Reports({ user }: { user: SessionUser }) {
   // -- Billing state lives on the invoice + the invoice_packages link (source of truth), never on the package status — the filter uses the worker endpoint (RLS default-deny blocks the SDK's PostgREST embed for this table). --
   const [billingFilter, setBillingFilter] = useState<'all' | 'sin' | 'facturadas'>('all')
   const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set())
-  useEffect(() => { billingApi.linkedPackageIds().then(({ ids }) => setLinkedIds(new Set(ids))).catch(() => {}) }, [])
+  // The "facturadas/sin" partition depends on live invoice links — refetch when a
+  // package or invoice changes anywhere.
+  const dataRev = useDataVersion('packages', 'invoices')
+  useEffect(() => { billingApi.linkedPackageIds().then(({ ids }) => setLinkedIds(new Set(ids))).catch(() => {}) }, [dataRev])
   const shown = useMemo(() => {
     if (billingFilter === 'facturadas') return rows.filter((r) => linkedIds.has(r.id))
     if (billingFilter === 'sin') return rows.filter((r) => !linkedIds.has(r.id))
@@ -88,7 +92,10 @@ export default function Reports({ user }: { user: SessionUser }) {
     setFilters((f) => ({ ...f, ...p }))
   }
 
-  // Refetches whenever ANY filter changes (search/provider/status/service/date range).
+  // Refetches whenever ANY filter changes (search/provider/status/service/date range)
+  // or a mutation lands elsewhere; one pipeline owned by the effect so the latest
+  // request can't be overwritten by a slower stale one.
+  const [rev, setRev] = useState(0)
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -100,15 +107,10 @@ export default function Reports({ user }: { user: SessionUser }) {
     return () => {
       cancelled = true
     }
-  }, [filters])
+  }, [filters, rev, dataRev])
 
   function reload() {
-    setLoading(true)
-    setErr(null)
-    exportPackages({ ...filters, organizationId }, EXPORT_CAP)
-      .then((r) => setRows(r))
-      .catch(() => setErr('No se pudieron cargar los datos.'))
-      .finally(() => setLoading(false))
+    setRev((v) => v + 1)
   }
 
   // "vs período anterior" needs a bounded range — shift the same span immediately before it.

@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { billingApi, type Exceptions as Ex, type ExceptionRow } from '../../lib/billing'
+import { useDataVersion } from '../../lib/dataVersion'
 import { Card, SectionTitle, Spinner } from '../ui'
 
 function Section({ title, rows, onOpen }: { title: string; rows: ExceptionRow[]; onOpen: (id: string) => void }) {
@@ -30,6 +31,9 @@ export default function ExceptionsView({ onOpen }: { onOpen: (id: string) => voi
   const [ex, setEx] = useState<Ex | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  // Exceptions derive from invoices + packages (linked/off-catalog state) — stay
+  // fresh after any billing or package mutation while the tab is open.
+  const dataRev = useDataVersion('invoices', 'packages')
 
   useEffect(() => {
     let cancelled = false
@@ -41,7 +45,7 @@ export default function ExceptionsView({ onOpen }: { onOpen: (id: string) => voi
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [dataRev])
 
   if (loading) return <Spinner label="Cargando excepciones…" />
   if (err) return <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>

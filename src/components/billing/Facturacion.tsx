@@ -1,6 +1,7 @@
 import { CalendarClock, Download, FileText, Plus, RefreshCw, Search } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { billingApi, type DateRangeSummary, type FreightType, type InvoiceFilters, type InvoiceListRow, type InvoiceStatus, type MonthlyClose } from '../../lib/billing'
+import { bumpData, useDataVersion } from '../../lib/dataVersion'
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner } from '../ui'
@@ -49,6 +50,11 @@ export default function Facturacion({ role }: { role: Role }) {
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  // Re-invalidates the list on demand (refresh button, row actions) without
+  // touching the filters; `dataRev` propagates invoice/package mutations from
+  // any view so the list is never stale.
+  const [rev, setRev] = useState(0)
+  const dataRev = useDataVersion('invoices', 'packages')
 
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -74,6 +80,12 @@ export default function Facturacion({ role }: { role: Role }) {
   }, [searchInput])
 
   function reload() {
+    setRev((v) => v + 1)
+  }
+
+  // Single fetch pipeline: the effect owns the request, its cleanup cancels the
+  // previous in-flight one, so a slow response can never overwrite a newer one.
+  useEffect(() => {
     let cancelled = false
     setLoading(true)
     setErr(null)
@@ -89,8 +101,7 @@ export default function Facturacion({ role }: { role: Role }) {
     return () => {
       cancelled = true
     }
-  }
-  useEffect(reload, [filters, page])
+  }, [filters, page, rev, dataRev])
 
   // Load summary when date range filters change (debounced with reload)
   useEffect(() => {
@@ -103,7 +114,7 @@ export default function Facturacion({ role }: { role: Role }) {
       .then((s) => !cancelled && setSummary(s))
       .catch(() => !cancelled && setSummary(null))
     return () => { cancelled = true }
-  }, [filters.from, filters.to])
+  }, [filters.from, filters.to, dataRev])
 
   function patch(p: Partial<InvoiceFilters>) {
     setFilters((f) => ({ ...f, ...p }))
@@ -147,6 +158,7 @@ export default function Facturacion({ role }: { role: Role }) {
     try {
       const v = await billingApi.closeInvoice(r.id)
       setDetailId(v.id)
+      bumpData('invoices')
       reload()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo cerrar la factura.')
@@ -161,6 +173,7 @@ export default function Facturacion({ role }: { role: Role }) {
     try {
       const v = await billingApi.voidInvoice(r.id, 'Anulada desde la lista')
       setDetailId(v.id)
+      bumpData('invoices', 'packages')
       reload()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo anular la factura.')
@@ -176,6 +189,7 @@ export default function Facturacion({ role }: { role: Role }) {
       await billingApi.archiveInvoice(r.id, 'Archivada desde la lista')
       // -- The archived invoice no longer resolves: close its detail view. --
       if (detailId === r.id) setDetailId(null)
+      bumpData('invoices', 'packages')
       reload()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo archivar la factura.')
@@ -350,6 +364,7 @@ export default function Facturacion({ role }: { role: Role }) {
           onCreated={(v) => {
             setShowForm(false)
             setDetailId(v.id)
+            bumpData('invoices', 'packages')
             reload()
           }}
         />
@@ -361,6 +376,7 @@ export default function Facturacion({ role }: { role: Role }) {
           onCreated={(v) => {
             setEditingId(null)
             setDetailId(v.id)
+            bumpData('invoices', 'packages')
             reload()
           }}
         />
