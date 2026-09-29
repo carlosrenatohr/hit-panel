@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/preact';
+import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/preact';
 import Shipments from './Shipments';
 import { listPackages, getProviders, createPackage, type ListFilters } from '../lib/insforge';
 import { customerApi } from '../lib/customer';
+import { bumpData } from '../lib/dataVersion';
 
 // The create modal now requires a client (typed → created at submit), a
 // service type and a weight greater than zero. Shared fixture for the
@@ -134,24 +135,34 @@ describe('Shipments', () => {
     });
   });
 
-  it('refetches the list when refreshToken changes (e.g. after a soft delete)', async () => {
-    const { rerender } = render(<Shipments user={mockUser} onOpen={() => {}} refreshToken={0} />);
+  it('refetches the list when packages change elsewhere (cross-view bus)', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
     await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThanOrEqual(1));
     const before = vi.mocked(listPackages).mock.calls.length;
 
-    rerender(<Shipments user={mockUser} onOpen={() => {}} refreshToken={1} />);
+    act(() => bumpData('packages'));
 
     await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before));
   });
 
-  it('refetches the summary cards when refreshToken changes', async () => {
-    const { rerender } = render(<Shipments user={mockUser} onOpen={() => {}} refreshToken={0} />);
+  it('refetches the summary cards when packages change elsewhere', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
     await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThanOrEqual(1));
     const before = vi.mocked(listPackages).mock.calls.length;
 
-    rerender(<Shipments user={mockUser} onOpen={() => {}} refreshToken={1} />);
+    act(() => bumpData('packages'));
 
     // Summary fires N calls (one per status), list fires 1 call.
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before + 1));
+  });
+
+  it('the Actualizar button refetches both the list and the lifecycle cards', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThanOrEqual(1));
+    const before = vi.mocked(listPackages).mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: /Actualizar/ }));
+
     await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before + 1));
   });
 
@@ -424,6 +435,32 @@ describe('Shipments', () => {
         expect.objectContaining({ almacenId: '25001234', clientId: 'client-created-id', status: 'en_almacen', serviceType: 'aereo', receivedAt: expect.stringMatching(/^2026-09-23T/) }),
       ),
     );
+  });
+
+  it('refreshes the list + cards and clears filters/page after creating a package', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    // Drill in with a status filter so "clearing filters" is observable.
+    render(<Shipments user={mockUser} onOpen={() => {}} statusSeed="en_destino" />);
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThanOrEqual(1));
+    const before = vi.mocked(listPackages).mock.calls.length;
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25003333' } });
+    await pickNewClientAndService();
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+
+    await waitFor(() => expect(vi.mocked(createPackage)).toHaveBeenCalled());
+
+    // D6: after a successful create the list and lifecycle cards refetch, and the
+    // filters reset to the current-month default (no status) so the new row is
+    // visible on page 1 instead of hidden by the drilldown filter.
+    await waitFor(() => {
+      expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before);
+      const last = vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
+      expect(last.status).toBeUndefined();
+      expect(last.statuses).toBeUndefined();
+      expect(last.from).toBe(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`);
+    });
   });
 
   it('links an existing tenant client instead of creating one', async () => {

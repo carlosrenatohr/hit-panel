@@ -16,6 +16,7 @@ import {
 } from '../lib/format'
 import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { AgencyProvider, ListFilters } from '../lib/insforge'
+import { bumpData, useDataVersion } from '../lib/dataVersion'
 import type { Pkg, ShipmentStatus, SessionUser } from '../lib/types'
 import ClientSearch from './ui/ClientSearch'
 import { customerApi } from '../lib/customer'
@@ -76,7 +77,7 @@ function pageWindow(current: number, total: number): (number | '…')[] {
   return out
 }
 
-export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, statusSeed, refreshToken }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; unassignedSeed?: boolean; statusSeed?: string | null; refreshToken?: number }) {
+export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, statusSeed }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; unassignedSeed?: boolean; statusSeed?: string | null }) {
   const colPrefs = useColumnPrefs()
   const visibleCols = colPrefs.columns
     .filter((c) => c.visible)
@@ -104,6 +105,10 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     }
   })
   const [page, setPage] = useState(1)
+  // Re-invalidates list + cards on demand (refresh button, post-mutation reload)
+  // without changing the filters. `dataRev` propagates mutations from any view.
+  const [rev, setRev] = useState(0)
+  const dataRev = useDataVersion('packages', 'invoices')
   const [rows, setRows] = useState<Pkg[]>([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -225,6 +230,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       const inv = await billingApi.bulkCreate({ packageIds: [...selected] })
       setInvoiceId(inv.id)
       clearSelection()
+      bumpData('invoices', 'packages')
       reload()
     } catch (e) {
       const raw = e instanceof Error ? e.message : 'No se pudo crear la factura.'
@@ -280,15 +286,10 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     return () => {
       cancelled = true
     }
-  }, [filters, page, refreshToken])
+  }, [filters, page, dataRev, rev])
 
   function reload() {
-    setLoading(true)
-    setErr(null)
-    listPackages({ ...filters, page, pageSize: PAGE_SIZE, organizationId: selectedOrg })
-      .then((r) => { setRows(r.rows); setCount(r.count) })
-      .catch(() => setErr('No se pudieron cargar los paquetes.'))
-      .finally(() => setLoading(false))
+    setRev((v) => v + 1)
   }
 
   // Per-status totals for the lifecycle cards: one lightweight count-read per status (pageSize:1),
@@ -333,7 +334,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     return () => {
       cancelled = true
     }
-  }, [filters.search, filters.providerId, filters.service, filters.from, filters.to, selectedOrg, refreshToken])
+  }, [filters.search, filters.providerId, filters.service, filters.from, filters.to, selectedOrg, dataRev, rev])
 
   function patch(p: Partial<ListFilters>) {
     setFilters((f) => ({ ...f, ...p }))
@@ -423,12 +424,29 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       } else {
         setShowCreate(false)
         setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', weightLb: '', pieces: '1', receivedAt: ymd(new Date()), providerCode: '', client: null, status: 'en_almacen' })
+        resetAfterCreate()
       }
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
     } finally {
       setCreateLoading(false)
     }
+  }
+
+  // The created package must land in view: clear every filter, the search box and
+  // the page so the new row is visible instead of hidden by a stale status/date
+  // range filter or a deep page. Default window = current month (matches mount).
+  function resetAfterCreate() {
+    const now = new Date()
+    const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    setFilters({ sortCol: 'status_rank', ascending: true, from, to })
+    setSearchInput('')
+    setPage(1)
+    // The package and (possibly) the billing client are fresh on the server; every
+    // view that derives from them (lifecycle cards, Clientes KPIs) must refetch.
+    bumpData('packages', 'clients')
+    setRev((v) => v + 1)
   }
 
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
