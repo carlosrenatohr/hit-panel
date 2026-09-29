@@ -76,6 +76,17 @@ Dos reglas que evitan el parpadeo y la lluvia de requests de antes:
   (stale-while-revalidate): antes la tabla entera se reemplazaba por el spinner
   al volver a la pestaña.
 
+### Decisiones asociadas (2026-09-29)
+
+- **Caché de datos en el cliente (localStorage / IndexedDB / Service Worker): ninguna esta ronda.**
+  Con el refetch silencioso + la ventana de 60 s el costo por foco ya bajó a 1 request, y una caché
+  traería invalidación —y con ella un estado obsoleto visible— sin un problema medido que resolver.
+  Reconsiderar si sube el volumen por página o si algún día el panel necesita funcionar offline.
+- **Cloudflare Queues: diferir**, solo recomendación escrita. El panel no encola nada; las piezas
+  candidatas (re-scrape masivo de guías, facturación en background) todavía no existen. Diseño y
+  señales de activación: `hit-ever2/docs/scaling-and-hosting.md` §Cloudflare Queues (también
+  registrado en `backlog.md` §P3).
+
 Cada fetch completado llama a `markDataFresh()` y `startFocusRefetch` no vuelve
 a pedir nada si los datos tienen menos de 60 s.
 
