@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, within, act } from '@testing-librar
 import Shipments from './Shipments';
 import { listPackages, getProviders, createPackage, type ListFilters } from '../lib/insforge';
 import { customerApi } from '../lib/customer';
-import { bumpData } from '../lib/dataVersion';
+import { bumpData, bumpList } from '../lib/dataVersion';
 
 // The create modal now requires a client (typed → created at submit), a
 // service type and a weight greater than zero. Shared fixture for the
@@ -143,6 +143,30 @@ describe('Shipments', () => {
     act(() => bumpData('packages'));
 
     await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('un refetch del focus (bumpList) recarga solo la tabla, nunca los 8 counts', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBeGreaterThanOrEqual(1));
+    const before = vi.mocked(listPackages).mock.calls.length;
+
+    act(() => bumpList('packages'));
+
+    // Exactamente la lista (1 request); las tarjetas no se reconsultan.
+    await waitFor(() => expect(vi.mocked(listPackages).mock.calls.length).toBe(before + 1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(vi.mocked(listPackages).mock.calls.length).toBe(before + 1);
+  });
+
+  it('el refetch del focus no reemplaza la tabla por el spinner (sin parpadeo)', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    act(() => bumpList('packages'));
+
+    // El tbody sigue pintando las filas: el swap de datos es silencioso.
+    expect(screen.getAllByText('910500').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('910501').length).toBeGreaterThan(0);
   });
 
   it('refetches the summary cards when packages change elsewhere', async () => {

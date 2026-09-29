@@ -1,7 +1,7 @@
 import { CalendarClock, Download, FileText, Plus, RefreshCw, Search } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { billingApi, type DateRangeSummary, type FreightType, type InvoiceFilters, type InvoiceListRow, type InvoiceStatus, type MonthlyClose } from '../../lib/billing'
-import { bumpData, useDataVersion } from '../../lib/dataVersion'
+import { bumpData, useDataVersion, useFetchGate } from '../../lib/dataVersion'
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner } from '../ui'
@@ -48,13 +48,15 @@ export default function Facturacion({ role }: { role: Role }) {
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<InvoiceListRow[]>([])
   const [count, setCount] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   // Re-invalidates the list on demand (refresh button, row actions) without
   // touching the filters; `dataRev` propagates invoice/package mutations from
   // any view so the list is never stale.
   const [rev, setRev] = useState(0)
   const dataRev = useDataVersion('invoices', 'packages')
+  // Gate: refetch del bus con la misma query → swap silencioso, sin spinner.
+  const listKey = JSON.stringify([filters, page, rev])
+  const { loading, begin: beginList, done: doneList } = useFetchGate(listKey)
 
   const [showForm, setShowForm] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -86,8 +88,8 @@ export default function Facturacion({ role }: { role: Role }) {
   // Single fetch pipeline: the effect owns the request, its cleanup cancels the
   // previous in-flight one, so a slow response can never overwrite a newer one.
   useEffect(() => {
+    beginList()
     let cancelled = false
-    setLoading(true)
     setErr(null)
     billingApi
       .listInvoices({ ...filters, page, pageSize: PAGE_SIZE })
@@ -97,11 +99,11 @@ export default function Facturacion({ role }: { role: Role }) {
         setCount(r.count)
       })
       .catch((e) => !cancelled && setErr(e instanceof Error ? e.message : 'No se pudieron cargar las facturas.'))
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => !cancelled && doneList())
     return () => {
       cancelled = true
     }
-  }, [filters, page, rev, dataRev])
+  }, [listKey, dataRev, beginList, doneList])
 
   // Load summary when date range filters change (debounced with reload)
   useEffect(() => {
