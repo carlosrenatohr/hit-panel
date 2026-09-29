@@ -18,6 +18,7 @@ import {
   statusLabel,
 } from '../lib/format'
 import { addNote, addTag, deletePackage, getPackageDetail, setManualStatus, setPackageClient, setPackageService } from '../lib/insforge'
+import { bumpData } from '../lib/dataVersion'
 import { refreshCooldownUntil, refreshPackage } from '../lib/refresh'
 import { configApi } from '../lib/config'
 import type { PackageDetail, ShipmentStatus, SessionUser } from '../lib/types'
@@ -360,7 +361,12 @@ export default function ShipmentDetail({
               packageIds: [d.pkg.id],
             }}
             onClose={() => setShowInvoice(false)}
-            onCreated={() => setShowInvoice(false)}
+            onCreated={() => {
+              setShowInvoice(false)
+              // An invoice was created/updated for this package — the link icons
+              // and the "facturadas" filter in Paquetería/Reportes depend on it.
+              bumpData('invoices', 'packages')
+            }}
           />
         )}
 
@@ -369,6 +375,7 @@ export default function ShipmentDetail({
             id={viewInvoiceId}
             canWrite={canBill}
             onClose={() => setViewInvoiceId(null)}
+            onChanged={() => bumpData('invoices', 'packages')}
           />
         )}
 

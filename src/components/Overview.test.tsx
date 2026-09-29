@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/preact';
+import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/preact';
 import Overview from './Overview';
 import { getStats } from '../lib/insforge';
 import { customerApi } from '../lib/customer';
+import { bumpData } from '../lib/dataVersion';
 import type { SessionUser } from '../lib/types';
 
 const mockStats = vi.hoisted(() => ({
@@ -144,6 +145,19 @@ describe('Overview', () => {
 
     await waitFor(() => expect(screen.getByText('Resumen')).toBeTruthy());
     expect(screen.queryByText(/clientes por revisar/)).toBeNull();
+  });
+
+  it('refreshes when packages change elsewhere and via the Actualizar button', async () => {
+    renderOverview();
+    await waitFor(() => expect(screen.getByText('Resumen')).toBeTruthy());
+    const before = vi.mocked(getStats).mock.calls.length;
+
+    act(() => bumpData('packages'));
+    await waitFor(() => expect(vi.mocked(getStats).mock.calls.length).toBeGreaterThan(before));
+
+    const before2 = vi.mocked(getStats).mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: /Actualizar/ }));
+    await waitFor(() => expect(vi.mocked(getStats).mock.calls.length).toBeGreaterThan(before2));
   });
 
   it('hides status percentages while a status filter is active', async () => {

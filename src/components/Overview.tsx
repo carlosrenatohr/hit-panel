@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
 import { customerApi } from '../lib/customer'
 import { getProviders, getStats, getUnassignedPackages } from '../lib/insforge'
+import { useDataVersion } from '../lib/dataVersion'
 import { capCards } from '../lib/cards'
 import type { Provider, ShipmentStatus, Stats, SessionUser } from '../lib/types'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
@@ -44,31 +45,43 @@ export default function Overview({
   const [to, setTo] = useState('')
   const [status, setStatus] = useState('')
 
-  async function load() {
-    setLoading(true)
-    setErr(null)
-    try {
-      const [s, p, u, rc] = await Promise.all([
-        getStats(user.agency, from || undefined, to || undefined, status || undefined),
-        getProviders(user.agency),
-        getUnassignedPackages(user.agency, from || undefined, to || undefined, 1),
-        customerApi.list({ statuses: ['review'], pageSize: 1 }).then((r) => r.count).catch(() => 0),
-      ])
-      setStats(s)
-      setProviders(p)
-      setUnassignedCount(u.count)
-      setReviewCount(rc)
-    } catch {
-      setErr('No se pudo cargar el resumen.')
-    } finally {
-      setLoading(false)
-    }
+  // Single fetch pipeline owed by the effect — its cleanup cancels any in-flight
+  // request, so a slow response never overwrites a newer one. `dataRev` keeps the
+  // dashboard fresh after package/client mutations from any view.
+  const dataRev = useDataVersion('packages', 'clients')
+  const [rev, setRev] = useState(0)
+  function load() {
+    setRev((v) => v + 1)
   }
 
   useEffect(() => {
-    void load()
+    let cancelled = false
+    setLoading(true)
+    setErr(null)
+    Promise.all([
+      getStats(user.agency, from || undefined, to || undefined, status || undefined),
+      getProviders(user.agency),
+      getUnassignedPackages(user.agency, from || undefined, to || undefined, 1),
+      customerApi.list({ statuses: ['review'], pageSize: 1 }).then((r) => r.count).catch(() => 0),
+    ])
+      .then(([s, p, u, rc]) => {
+        if (cancelled) return
+        setStats(s)
+        setProviders(p)
+        setUnassignedCount(u.count)
+        setReviewCount(rc)
+      })
+      .catch(() => {
+        if (!cancelled) setErr('No se pudo cargar el resumen.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, status])
+  }, [from, to, status, rev, dataRev])
 
   if (err) return <p class="text-red-600">{err}</p>
   if (!stats) return <Spinner label="Cargando resumen…" />

@@ -1,11 +1,12 @@
-import { Archive, Ban, Flag, History, Layers, Pencil, Plus, Save, SlidersHorizontal, UserCheck, Users, GitMerge } from 'lucide-preact'
+import { Archive, Ban, Flag, History, Layers, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, UserCheck, Users, GitMerge } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
 import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput } from '../lib/customer'
 import type { Role, SessionUser } from '../lib/types'
 import { navigate } from '../lib/router'
 import { getSimilarClients, mergeClients, type SimilarClientPair } from '../lib/insforge'
-import { Button, Card, ConfirmDialog, Field, inputCls, Modal, SectionTitle, SegmentedTabs, type SegmentedTab, Spinner, Tooltip } from './ui'
+import { bumpData, useDataVersion } from '../lib/dataVersion'
+import { Button, Card, ConfirmDialog, Field, IconButton, inputCls, Modal, SectionTitle, SegmentedTabs, Spinner, Tooltip } from './ui'
 import ClientSearch from './ui/ClientSearch'
 import { DateRangePicker } from './DateRangePicker'
 import CustomerCards, { CardPickerModal, ALL_CARD_OPTIONS, DEFAULT_CARD_HIDDEN, CARD_STORAGE_KEY, loadCardHidden } from './CustomerCards'
@@ -90,6 +91,12 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   const [stats, setStats] = useState<CustomerAggregateStats | null>(null)
   const [form, setForm] = useState<(CustomerInput & { id?: string }) | null>(null)
   const [revision, setRevision] = useState(0)
+  // Cross-view: Clientes KPIs derive from packages (weights, counts) and invoices
+  // (top billing clients), so their refetch must also follow the global bus.
+  const dataRev = useDataVersion('clients', 'packages', 'invoices')
+  // The bitácora reads only billing_client events — narrow scope so a packages or
+  // invoices bump elsewhere never triggers a wasted audit refetch.
+  const auditRev = useDataVersion('clients')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -131,7 +138,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'No se pudieron cargar los clientes.'))
       .finally(() => !cancelled && setLoading(false))
     return () => { cancelled = true }
-  }, [page, revision, statuses, search, from, to])
+  }, [page, revision, statuses, search, from, to, dataRev])
 
   useEffect(() => {
     let cancelled = false
@@ -140,7 +147,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       .then((s) => !cancelled && setStats(s))
       .catch(() => !cancelled && setStats(null))
     return () => { cancelled = true }
-  }, [from, to, statuses, revision])
+  }, [from, to, statuses, revision, dataRev])
 
   useEffect(() => {
     let cancelled = false
@@ -155,7 +162,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       .catch(() => !cancelled && setAuditRows([]))
       .finally(() => !cancelled && setAuditLoading(false))
     return () => { cancelled = true }
-  }, [auditPage, revision])
+  }, [auditPage, revision, auditRev])
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const auditTotalPages = Math.max(1, Math.ceil(auditCount / PAGE_SIZE))
@@ -197,6 +204,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       else await customerApi.create(payload)
       setForm(null)
       setRevision((value) => value + 1)
+      bumpData('clients')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar el cliente.')
     } finally {
@@ -215,6 +223,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
     try {
       await customerApi.update(customer.id, { active: deactivating ? false : true })
       setRevision((value) => value + 1)
+      bumpData('clients')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cambiar el estado del cliente.')
     } finally {
@@ -242,6 +251,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       setArchiveTarget(null)
       setArchivePreview(null)
       setRevision((value) => value + 1)
+      bumpData('clients')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo archivar el cliente.')
     } finally {
@@ -286,6 +296,8 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       if (result.ok) {
         setSimilarPairs((prev) => prev.filter((p) => p.idA !== pair.idA || p.idB !== pair.idB))
         setRevision((v) => v + 1)
+        // Packages were reassigned between clients — Paquetería rows move too.
+        bumpData('clients', 'packages')
       } else {
         setError(result.error ?? 'No se pudo fusionar.')
       }
@@ -311,6 +323,9 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
             <History class="h-3.5 w-3.5" aria-hidden="true" /> Bitácora
           </button>
         </div>
+        <IconButton label="Actualizar" onClick={() => setRevision((v) => v + 1)} disabled={loading}>
+          <RefreshCw class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </IconButton>
         {canWrite && (
           <>
             <Button variant="ghost" onClick={loadDuplicates}><GitMerge class="h-4 w-4" /> Duplicados</Button>

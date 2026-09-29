@@ -12,6 +12,7 @@ import Reports from './Reports'
 import Shell from './Shell'
 import ShipmentDetail from './ShipmentDetail'
 import Shipments from './Shipments'
+import { bumpData } from '../lib/dataVersion'
 import { Spinner } from './ui'
 
 export type View = 'overview' | 'shipments' | 'reports' | 'facturacion' | 'customers' | 'integraciones' | 'configuracion'
@@ -19,9 +20,6 @@ export type View = 'overview' | 'shipments' | 'reports' | 'facturacion' | 'custo
 export default function App() {
   const [user, setUser] = useState<SessionUser | null>(null)
   const [loading, setLoading] = useState(true)
-  // Bumped after a package is soft-deleted so the Shipments list refetches
-  // (the deleted row must leave the table without losing filters/page).
-  const [listReload, setListReload] = useState(0)
   const route = useRoute()
   const view = route.view
   const detail = route.guia
@@ -63,7 +61,7 @@ export default function App() {
   return (
     <Shell user={user} view={view} onView={(v) => navigate({ view: v })} onLogout={logout}>
       {view === 'overview' && <Overview user={user} onGoShipments={() => navigate({ view: 'shipments' })} onGoUnassigned={() => navigate({ view: 'shipments', unassigned: true })} onGoStatus={(s) => navigate({ view: 'shipments', estado: s })} onGoReview={() => navigate({ view: 'customers', estado: 'review' })} />}
-      {view === 'shipments' && <Shipments user={user} clientSeed={route.cliente} unassignedSeed={route.unassigned} statusSeed={route.estado} refreshToken={listReload} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
+      {view === 'shipments' && <Shipments user={user} clientSeed={route.cliente} unassignedSeed={route.unassigned} statusSeed={route.estado} onOpen={(guia) => navigate({ view: 'shipments', guia })} />}
       {view === 'reports' && <Reports user={user} />}
       {view === 'facturacion' && user.role !== 'viewer' && <Facturacion role={user.role} />}
       {view === 'customers' && user.role !== 'viewer' && <Customers user={user} role={user.role} statusSeed={route.estado} />}
@@ -74,7 +72,7 @@ export default function App() {
         />
       )}
       {view === 'configuracion' && user.role !== 'viewer' && <Configuracion user={user} />}
-      {detail && <ShipmentDetail guia={detail} user={user} onClose={() => navigate({ view })} onDeleted={() => setListReload((v) => v + 1)} onChanged={() => setListReload((v) => v + 1)} />}
+      {detail && <ShipmentDetail guia={detail} user={user} onClose={() => navigate({ view })} onDeleted={() => bumpData('packages')} onChanged={() => bumpData('packages')} />}
     </Shell>
   )
 }

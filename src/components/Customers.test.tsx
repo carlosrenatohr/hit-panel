@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/preact'
+import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/preact'
 import Customers from './Customers'
 import { customerApi } from '../lib/customer'
+import { bumpData } from '../lib/dataVersion'
 
 const clients = vi.hoisted(() => [
   { id: 'c1', name: 'Ana', nameNormalized: 'ana', casillero: '5012', toReview: false, email: null, phone: null, address: null, companyName: null, taxId: null, active: true, defaultRateId: null, defaultRateCardId: null, packageCount: 3 },
@@ -213,5 +214,29 @@ describe('Customers', () => {
     await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Bitácora' }))
     await waitFor(() => expect(screen.getByText('Bitácora de clientes')).toBeInTheDocument())
+  })
+
+  it('refetches the table and the KPI cards when packages change elsewhere', async () => {
+    render(<Customers user={mockUser} role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    const listBefore = vi.mocked(customerApi.list).mock.calls.length
+    const statsBefore = vi.mocked(customerApi.stats).mock.calls.length
+
+    act(() => bumpData('packages'))
+
+    await waitFor(() => expect(vi.mocked(customerApi.list).mock.calls.length).toBeGreaterThan(listBefore))
+    await waitFor(() => expect(vi.mocked(customerApi.stats).mock.calls.length).toBeGreaterThan(statsBefore))
+  })
+
+  it('the Actualizar button forces a list + cards refetch', async () => {
+    render(<Customers user={mockUser} role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    const listBefore = vi.mocked(customerApi.list).mock.calls.length
+    const statsBefore = vi.mocked(customerApi.stats).mock.calls.length
+
+    fireEvent.click(screen.getByRole('button', { name: /Actualizar/ }))
+
+    await waitFor(() => expect(vi.mocked(customerApi.list).mock.calls.length).toBeGreaterThan(listBefore))
+    await waitFor(() => expect(vi.mocked(customerApi.stats).mock.calls.length).toBeGreaterThan(statsBefore))
   })
 })
