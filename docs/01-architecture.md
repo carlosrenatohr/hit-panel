@@ -53,6 +53,32 @@
 2. `database.rpc('set_manual_status', {...})` → la función verifica `is_staff()` y actualiza.
 3. El panel recarga el detalle.
 
+## Frescura de datos (refetch silencioso)
+
+No hay polling. El panel se mantiene fresco por tres vías, todas sobre el bus
+compartido `src/lib/dataVersion.ts`:
+
+| Vía | Cuánto pide | Qué refresca |
+|---|---|---|
+| **Mutación** (`bumpData`) | lo que pida la vista | cuerpo **y** contadores |
+| **Focus / visibility** (`bumpList`; throttle 5 s, ventana de frescura 60 s) | **1 request** (la lista) | solo el cuerpo |
+| **"Actualizar"** (`rev` local) | todo | cuerpo y contadores |
+
+Dos reglas que evitan el parpadeo y la lluvia de requests de antes:
+
+- **Dos niveles de suscripción.** `useDataVersion()` (tablas, listas, KPIs)
+  reacciona a cualquier bump; `useCounterVersion()` (las tarjetas de ciclo de
+  vida de Paquetería — 8 requests, uno por estado) solo reacciona a `bumpData`.
+  Un alt-tab ya no dispara los contadores.
+- **`useFetchGate(key)`.** El spinner solo se pinta cuando cambia la query key
+  (filtros/página/org) o cuando el usuario pide "Actualizar". Un refetch con la
+  misma key conserva lo que hay en pantalla y cambia los datos en silencio
+  (stale-while-revalidate): antes la tabla entera se reemplazaba por el spinner
+  al volver a la pestaña.
+
+Cada fetch completado llama a `markDataFresh()` y `startFocusRefetch` no vuelve
+a pedir nada si los datos tienen menos de 60 s.
+
 ## Por qué escala
 
 - **Usuarios**: agregar personas = crear un usuario + fila en `app_users`. Sin tocar código.

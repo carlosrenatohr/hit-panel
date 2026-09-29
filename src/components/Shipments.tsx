@@ -16,7 +16,7 @@ import {
 } from '../lib/format'
 import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
 import type { AgencyProvider, ListFilters } from '../lib/insforge'
-import { bumpData, useDataVersion } from '../lib/dataVersion'
+import { bumpData, useCounterVersion, useDataVersion, useFetchGate } from '../lib/dataVersion'
 import type { Pkg, ShipmentStatus, SessionUser } from '../lib/types'
 import ClientSearch from './ui/ClientSearch'
 import { customerApi } from '../lib/customer'
@@ -108,13 +108,30 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   // Re-invalidates list + cards on demand (refresh button, post-mutation reload)
   // without changing the filters. `dataRev` propagates mutations from any view.
   const [rev, setRev] = useState(0)
+  // Nivel cuerpo: la tabla refetchea en mutaciones Y en el focus de la pestaña.
   const dataRev = useDataVersion('packages', 'invoices')
+  // Nivel contadores: solo mutaciones o "Actualizar". El focus nunca dispara los
+  // 8 counts de las tarjetas de ciclo de vida (era el request más caro del panel).
+  const counterRev = useCounterVersion('packages', 'invoices')
   const [rows, setRows] = useState<Pkg[]>([])
   const [count, setCount] = useState(0)
-  const [loading, setLoading] = useState(true)
+  // Keys del gate: cambian con filtros/página/org o con `rev` (recarga manual).
+  // Un refetch del bus con la misma key es silencioso — la tabla no se va a un
+  // spinner (eso era el parpadeo al volver a la pestaña).
+  const listKey = JSON.stringify([filters, page, selectedOrg, rev])
+  const { loading, begin: beginList, done: doneList } = useFetchGate(listKey)
   // Per-status totals for the lifecycle cards (see the summary effect below).
   const [summary, setSummary] = useState<Partial<Record<ShipmentStatus, number>>>({})
-  const [summaryLoading, setSummaryLoading] = useState(true)
+  const summaryKey = JSON.stringify([
+    selectedOrg,
+    filters.search,
+    filters.providerId,
+    filters.service,
+    filters.from,
+    filters.to,
+    rev,
+  ])
+  const { loading: summaryLoading, begin: beginSummary, done: doneSummary } = useFetchGate(summaryKey)
   // Count with the same base filters but no status predicate — the "Todos" chip/row.
   const [summaryTotal, setSummaryTotal] = useState(0)
   const [exporting, setExporting] = useState(false)
@@ -271,8 +288,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   }, [])
 
   useEffect(() => {
+    beginList()
     let cancelled = false
-    setLoading(true)
     setErr(null)
     listPackages({ ...filters, page, pageSize: PAGE_SIZE, organizationId: selectedOrg })
       .then((r) => {
@@ -281,11 +298,11 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         setCount(r.count)
       })
       .catch(() => !cancelled && setErr('No se pudieron cargar los paquetes.'))
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => !cancelled && doneList())
     return () => {
       cancelled = true
     }
-  }, [filters, page, dataRev, rev])
+  }, [listKey, dataRev, beginList, doneList])
 
   function reload() {
     setRev((v) => v + 1)
@@ -297,8 +314,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   // filters the table. Keyed on the raw filter fields, not `filters`, so page/sort changes don't
   // refire the counters.
   useEffect(() => {
+    beginSummary()
     let cancelled = false
-    setSummaryLoading(true)
     const base: ListFilters = {
       organizationId: selectedOrg,
       search: filters.search,
@@ -328,12 +345,14 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         if (!cancelled) setSummary({})
       })
       .finally(() => {
-        if (!cancelled) setSummaryLoading(false)
+        if (!cancelled) doneSummary()
       })
     return () => {
       cancelled = true
     }
-  }, [filters.search, filters.providerId, filters.service, filters.from, filters.to, selectedOrg, dataRev, rev])
+    // `counterRev`: las tarjetas se recontan en mutaciones y en "Actualizar",
+    // nunca en el focus (ese es justo el coste que queríamos bajar).
+  }, [summaryKey, counterRev, beginSummary, doneSummary])
 
   function patch(p: Partial<ListFilters>) {
     setFilters((f) => ({ ...f, ...p }))

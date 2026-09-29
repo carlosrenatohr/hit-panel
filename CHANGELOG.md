@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Refetch al volver a la pestaña: **1 request en Paquetería en vez de 9** y sin parpadeo. El bus `dataVersion` ahora tiene dos niveles — `bumpData` (mutación → tabla **y** contadores) y `bumpList` (focus → solo el cuerpo), con `useCounterVersion()` para las tarjetas de ciclo de vida; además una ventana de frescura de 60 s evita el refetch si los datos se acaban de cargar.
+- Refetch silencioso en todas las vistas suscriptas (`Shipments`, `Resumen`, `Clientes`, `Reportes`, `Facturación`): el nuevo `useFetchGate(key)` pinta el spinner solo cuando cambian filtros/página o cuando el usuario pulsa "Actualizar". Un refetch del bus conserva las filas y las tarjetas en pantalla y cambia los datos en silencio (stale-while-revalidate).
+
+### Fixed
+- El parpadeo al cambiar de ventana y volver: la tabla ya no se reemplaza por el spinner en un refetch de fondo, y las tarjetas del ciclo de vida ya no se reconsultan (8 requests por evento) salvo en una mutación o en "Actualizar".
+
 ## [0.4.14] — 2026-09-29
 
 ### Removed

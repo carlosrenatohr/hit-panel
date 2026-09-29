@@ -17,7 +17,7 @@ import {
 } from '../lib/format'
 import { billingApi } from '../lib/billing'
 import { exportPackages, getProviders, listPackages } from '../lib/insforge'
-import { useDataVersion } from '../lib/dataVersion'
+import { useDataVersion, useFetchGate } from '../lib/dataVersion'
 import type { ListFilters } from '../lib/insforge'
 import type { Pkg, Provider, SessionUser, ShipmentStatus } from '../lib/types'
 import ChartCanvas from './charts/ChartCanvas'
@@ -72,7 +72,6 @@ export default function Reports({ user }: { user: SessionUser }) {
   }, [rows, billingFilter, linkedIds])
   // "vs período anterior" counts come from the server (no billing filter there) — only honest when unfiltered.
   const showTrend = billingFilter === 'all'
-  const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const sections = useReportSections()
 
@@ -108,18 +107,21 @@ export default function Reports({ user }: { user: SessionUser }) {
   // or a mutation lands elsewhere; one pipeline owned by the effect so the latest
   // request can't be overwritten by a slower stale one.
   const [rev, setRev] = useState(0)
+  // Gate: un refetch del bus con los mismos filtros es silencioso (sin spinner).
+  const rowsKey = JSON.stringify([filters, rev])
+  const { loading, begin: beginRows, done: doneRows } = useFetchGate(rowsKey)
   useEffect(() => {
+    beginRows()
     let cancelled = false
-    setLoading(true)
     setErr(null)
     exportPackages({ ...filters, organizationId }, EXPORT_CAP)
       .then((r) => !cancelled && setRows(r))
       .catch(() => !cancelled && setErr('No se pudieron cargar los datos.'))
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => !cancelled && doneRows())
     return () => {
       cancelled = true
     }
-  }, [filters, rev, dataRev])
+  }, [rowsKey, dataRev, beginRows, doneRows])
 
   function reload() {
     setRev((v) => v + 1)

@@ -5,7 +5,7 @@ import { customerApi, type Customer, type CustomerAggregateStats, type CustomerD
 import type { Role, SessionUser } from '../lib/types'
 import { navigate } from '../lib/router'
 import { getSimilarClients, mergeClients, type SimilarClientPair } from '../lib/insforge'
-import { bumpData, useDataVersion } from '../lib/dataVersion'
+import { bumpData, useDataVersion, useFetchGate } from '../lib/dataVersion'
 import { Button, Card, ConfirmDialog, Field, IconButton, inputCls, Modal, SectionTitle, SegmentedTabs, Spinner, Tooltip } from './ui'
 import ClientSearch from './ui/ClientSearch'
 import { DateRangePicker } from './DateRangePicker'
@@ -97,7 +97,10 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   // The bitácora reads only billing_client events — narrow scope so a packages or
   // invoices bump elsewhere never triggers a wasted audit refetch.
   const auditRev = useDataVersion('clients')
-  const [loading, setLoading] = useState(true)
+  // Gate: un refetch del bus con la misma query es silencioso — la tabla y los
+  // KPIs conservan lo que tienen en pantalla en vez de caer al spinner.
+  const listKey = JSON.stringify([page, statuses, search, from, to, revision])
+  const { loading, begin: beginList, done: doneList } = useFetchGate(listKey)
   const [saving, setSaving] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -125,8 +128,8 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   useEffect(() => { try { localStorage.setItem(CARD_STORAGE_KEY, JSON.stringify(cardHidden)) } catch { /* */ } }, [cardHidden])
 
   useEffect(() => {
+    beginList()
     let cancelled = false
-    setLoading(true)
     setError(null)
     customerApi
       .list({ search: search || undefined, statuses: statuses.length ? statuses : undefined, from: from || undefined, to: to || undefined, page, pageSize: PAGE_SIZE })
@@ -136,9 +139,9 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
         setCount(result.count)
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'No se pudieron cargar los clientes.'))
-      .finally(() => !cancelled && setLoading(false))
+      .finally(() => !cancelled && doneList())
     return () => { cancelled = true }
-  }, [page, revision, statuses, search, from, to, dataRev])
+  }, [listKey, dataRev, beginList, doneList])
 
   useEffect(() => {
     let cancelled = false

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { fmtDateTime, providerLabel, STATUS_LABEL, STATUS_ORDER } from '../lib/format'
 import { customerApi } from '../lib/customer'
 import { getProviders, getStats, getUnassignedPackages } from '../lib/insforge'
-import { useDataVersion } from '../lib/dataVersion'
+import { useDataVersion, useFetchGate } from '../lib/dataVersion'
 import { capCards } from '../lib/cards'
 import type { Provider, ShipmentStatus, Stats, SessionUser } from '../lib/types'
 import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
@@ -39,7 +39,6 @@ export default function Overview({
   // Clients flagged for data review (toReview) — non-fatal read: the dashboard keeps
   // working if the customer service is down, the card simply does not appear.
   const [reviewCount, setReviewCount] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -53,10 +52,14 @@ export default function Overview({
   function load() {
     setRev((v) => v + 1)
   }
+  // Gate: un refetch del bus con los mismos filtros es silencioso — el
+  // dashboard conserva lo que tiene en pantalla en vez de caer al spinner.
+  const statsKey = JSON.stringify([user.agency, from, to, status, rev])
+  const { loading, begin: beginLoad, done: doneLoad } = useFetchGate(statsKey)
 
   useEffect(() => {
+    beginLoad()
     let cancelled = false
-    setLoading(true)
     setErr(null)
     Promise.all([
       getStats(user.agency, from || undefined, to || undefined, status || undefined),
@@ -75,13 +78,13 @@ export default function Overview({
         if (!cancelled) setErr('No se pudo cargar el resumen.')
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) doneLoad()
       })
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, status, rev, dataRev])
+  }, [statsKey, dataRev, beginLoad, doneLoad])
 
   if (err) return <p class="text-red-600">{err}</p>
   if (!stats) return <Spinner label="Cargando resumen…" />
