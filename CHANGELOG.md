@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.13] — 2026-09-28
+
+### Fixed
+- State refreshes instantly after every panel mutation (same session). Paquetería's lifecycle cards and counters update immediately when a manual package is created, a bulk invoice is created, a detail mutation lands, or the Actualizar button is used — instead of waiting for a filter change or a view remount.
+- Cross-view data invalidation through a shared bus (`packages`/`clients`/`invoices`): Clientes KPIs, Facturación list + period summary, Excepciones, Resumen and Reportes refetch as soon as a related mutation happens anywhere in the panel.
+- Race fix: every view fetches through a single cancellable effect, so a slower in-flight response can no longer overwrite a newer one (the table could revert to pre-action data when creating/editing while a search or refresh was in flight).
+- Creating a manual package now clears the active filters and jumps to page 1, so the new package is immediately visible instead of hiding behind a stale status/period filter and looking like nothing happened.
+- Clientes gains the Actualizar button the other views already had.
+
+### Changed
+- Replaced Shipments' `refreshToken` prop and App's `listReload` counter with the shared `dataVersion` bus — one mechanism, no prop drilling.
+
 ## [0.4.12] — 2026-09-26
 
 ### Fixed
