@@ -35,6 +35,10 @@ La tabla central de trabajo diario.
 - **Exportar CSV**: respeta los filtros actuales (hasta 2000 filas).
 - **Indicador de "estancado"**: si un paquete lleva >10 días sin evento y no está entregado, muestra
   `⚠ Nd` para priorizar seguimiento.
+- **Columna «Etiquetas»** (visible por defecto): hasta 3 chips + `+N`. Cada chip es un botón de
+  filtro → filtra la tabla por esa etiqueta y deja un chip removible **Etiqueta** en la tarjeta de
+  filtros (al quitarlo se apaga el filtro). Las etiquetas de la página se piden aparte
+  (`package_tags` por `package_id`): un join en la lista repetiría cada paquete una vez por etiqueta.
 - Clic en una fila → abre el **detalle**.
 
 ## Detalle del envío
@@ -43,14 +47,25 @@ Panel lateral con todo:
 
 - **Datos**: proveedor, tracking, casillero, servicio, estado scrapeado vs efectivo, piezas, peso,
   volumen, dimensiones, origen/destino, remitente, referencia, valor declarado, fechas.
+- **Orden de los paneles** (de arriba hacia abajo): Resumen → **Acciones** → Detalles internos →
+  Etiquetas y notas internas → Historial de eventos → Notas del proveedor → **Zona de riesgo**
+  (panel propio, siempre el último, con **Eliminar paquete**).
 - **Historial de eventos** (timeline).
 - **Notas del proveedor** (lo que viene de Cargotrack, incl. `RETIRADO`).
-- **Etiquetas y notas internas** de HIT.
+- **Etiquetas y notas internas** de HIT: cada etiqueta lleva su ✕ (**Quitar etiqueta**) →
+  `delete_package_tag` la borra por (guía, label[, valor]) y lo audita. Solo `admin`/`staff`.
 - **Acciones** (solo `admin`/`staff`):
-  - **Cambiar estado** (override manual) con nota opcional → escribe `manual_status` y queda registrado
-    quién y cuándo. El estado efectivo del cliente pasa a ser este.
+  - **Peso (lb)**: se edita en el panel y guarda con `set_package_weight`. Sin columna override: un
+    refresh del proveedor puede pisar el valor a mano; el cambio queda como nota en el paquete
+    («Peso actualizado: X → Y lb») y en `audit_logs`.
+  - **Cambiar estado** con nota opcional → escribe `manual_status` y queda registrado quién y cuándo.
+    El estado efectivo del cliente pasa a ser este, y el panel lo rotula **«Estado fijado
+    manualmente»** / **(fijado manualmente)**.
   - **Agregar etiqueta** (label + valor opcional).
   - **Agregar nota interna**.
+  - **Datos de Cargotrack / Refrescar ahora**: solo si la agencia es `is_scrapable`. **Falla
+    cerrada**: si `/api/config/info` no responde se asume scraping apagado — no aparecen ni el
+    bloque de refresco ni las etiquetas scrapeadas (**Actualizado**, «Cargotrack no devolvió peso»).
 
 ## Reportes
 
@@ -63,5 +78,5 @@ Panel lateral con todo:
 
 - Los datos los refresca el Worker (cron cada 2h por proveedor + email trigger). El panel siempre
   muestra lo último que hay en la base.
-- El override manual es la forma de corregir/forzar un estado (p. ej. marcar `Entregado` cuando el
+- Fijar el estado manualmente es la forma de corregir/forzar uno (p. ej. marcar `Entregado` cuando el
   proveedor no lo refleja por color).

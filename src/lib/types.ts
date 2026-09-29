@@ -78,6 +78,7 @@ export interface ProviderNote {
 
 export interface Tag {
   id: string
+  package_id: string
   label: string
   value: string | null
   created_by: string | null

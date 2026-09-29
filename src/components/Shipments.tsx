@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Pencil, Plus, RefreshCw, Search, SquareCheck, Square } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Plus, RefreshCw, Search, SquareCheck, Square, X } from 'lucide-preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -14,10 +14,10 @@ import {
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
-import { createPackage, exportPackages, getProviders, listPackages } from '../lib/insforge'
+import { createPackage, exportPackages, getProviders, getTagsForPackages, listPackages } from '../lib/insforge'
 import type { AgencyProvider, ListFilters } from '../lib/insforge'
 import { bumpData, useCounterVersion, useDataVersion, useFetchGate } from '../lib/dataVersion'
-import type { Pkg, ShipmentStatus, SessionUser } from '../lib/types'
+import type { Pkg, ShipmentStatus, SessionUser, Tag } from '../lib/types'
 import ClientSearch from './ui/ClientSearch'
 import { customerApi } from '../lib/customer'
 import { DateRangePicker } from './DateRangePicker'
@@ -115,6 +115,10 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   const counterRev = useCounterVersion('packages', 'invoices')
   const [rows, setRows] = useState<Pkg[]>([])
   const [count, setCount] = useState(0)
+  // Etiquetas de la página actual: pre-query por package_id (un embed en la lista
+  // repetiría cada paquete una vez por etiqueta). Llegan después que las filas — la
+  // tabla pinta sola y los chips aparecen cuando responde.
+  const [tagsByPkg, setTagsByPkg] = useState<Record<string, Tag[]>>({})
   // Keys del gate: cambian con filtros/página/org o con `rev` (recarga manual).
   // Un refetch del bus con la misma key es silencioso — la tabla no se va a un
   // spinner (eso era el parpadeo al volver a la pestaña).
@@ -129,6 +133,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     filters.service,
     filters.from,
     filters.to,
+    filters.tag?.label,
+    filters.tag?.value ?? null,
     rev,
   ])
   const { loading: summaryLoading, begin: beginSummary, done: doneSummary } = useFetchGate(summaryKey)
@@ -296,6 +302,13 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         if (cancelled) return
         setRows(r.rows)
         setCount(r.count)
+        if (r.rows.length === 0) {
+          setTagsByPkg({})
+          return
+        }
+        getTagsForPackages(r.rows.map((x) => x.id))
+          .then((t) => !cancelled && setTagsByPkg(t))
+          .catch(() => !cancelled && setTagsByPkg({}))
       })
       .catch(() => !cancelled && setErr('No se pudieron cargar los paquetes.'))
       .finally(() => !cancelled && doneList())
@@ -323,6 +336,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       service: filters.service,
       from: filters.from,
       to: filters.to,
+      tag: filters.tag,
     }
     // +1 unpredicated read for the "Todos" counter (a status outside STATUS_ORDER would make a
     // plain sum of the per-status counts lie).
@@ -357,6 +371,11 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   function patch(p: Partial<ListFilters>) {
     setFilters((f) => ({ ...f, ...p }))
     setPage(1)
+  }
+
+  /** Chip de la tabla → filtro con chip removible en la tarjeta de filtros. */
+  function applyTagFilter(label: string, value?: string | null) {
+    patch({ tag: { label, value: value ?? null } })
   }
 
   async function doExport() {
@@ -619,6 +638,21 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             </select>
           </div>
         </div>
+        {filters.tag && (
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <span class="text-xs font-medium uppercase tracking-wide text-gray-400">Etiqueta</span>
+            <button
+              type="button"
+              onClick={() => patch({ tag: undefined })}
+              title="Quitar filtro de etiqueta"
+              class="inline-flex items-center gap-1 rounded-full bg-navy/10 px-2.5 py-1 text-xs font-medium text-navy transition-colors hover:bg-navy/20"
+            >
+              {filters.tag.label}
+              {filters.tag.value ? `: ${filters.tag.value}` : ''}
+              <X class="h-3 w-3" aria-hidden="true" />
+            </button>
+          </div>
+        )}
       </Card>
 
       {/* Desktop keeps the full lifecycle cards; mobile uses the primary selector above instead */}
@@ -707,11 +741,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                       <span class="min-w-0 truncate font-semibold text-secondary">{p.almacen_id}</span>
                       <span class="flex shrink-0 items-center gap-1.5">
                         <StatusPill s={p.effective_status as ShipmentStatus} />
-                        {p.manual_status && (
-                          <span title={`Estado manual: ${p.manual_status}`} class="text-orange-500" aria-label="Estado manual">
-                            <Pencil class="h-3 w-3" />
-                          </span>
-                        )}
                       </span>
                     </span>
                     <span class="mt-0.5 flex items-center gap-1.5 text-sm text-gray-700">
@@ -808,7 +837,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                     </td>
                     {visibleCols.map((c) => (
                       <td key={c.key} class="px-4 py-3">
-                        {c.render(p)}
+                        {c.render(p, { tags: tagsByPkg, onTagClick: applyTagFilter })}
                       </td>
                     ))}
                   </tr>

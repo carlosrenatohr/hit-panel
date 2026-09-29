@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Módulo de paquetería (detalle)**: el peso se edita desde el panel (`setPackage_weight` → `set_package_weight`) y cada etiqueta lleva su ✕ para borrarla (`delete_package_tag`). El peso va directo a `weight_lb` —sin columna override: un refresh del proveedor puede pisarlo— y el cambio queda como nota en el paquete («Peso actualizado: X → Y lb») y en `audit_logs`.
+- **Columna «Etiquetas»** en la tabla de Envíos, visible por defecto: hasta 3 chips + `+N`, y cada chip es un filtro con chip removible **Etiqueta** en la tarjeta de filtros. Las etiquetas de la página se piden por `package_id` (`getTagsForPackages`) para no duplicar filas con un join.
+
 ### Changed
+- **Orden de los paneles del detalle**: Resumen → Acciones → Detalles internos → Etiquetas y notas internas → Historial → Notas del proveedor → **Zona de riesgo** (ahora panel propio y último, con «Eliminar paquete»).
+- **Bloqueado el scraping de forma fallida-closed**: si `/api/config/info` no responde se asume `is_scrapable=false` — ni el bloque de Cargotrack («Datos de Cargotrack» / «Refrescar ahora») ni las etiquetas scrapeadas («Actualizado», «Cargotrack no devolvió peso») se muestran.
+- Copy: se elimina «override manual» de la UI → **«Estado fijado manualmente»** / **(fijado manualmente)** y «Cambiar estado» a secas.
 - Refetch al volver a la pestaña: **1 request en Paquetería en vez de 9** y sin parpadeo. El bus `dataVersion` ahora tiene dos niveles — `bumpData` (mutación → tabla **y** contadores) y `bumpList` (focus → solo el cuerpo), con `useCounterVersion()` para las tarjetas de ciclo de vida; además una ventana de frescura de 60 s evita el refetch si los datos se acaban de cargar.
 - Refetch silencioso en todas las vistas suscriptas (`Shipments`, `Resumen`, `Clientes`, `Reportes`, `Facturación`): el nuevo `useFetchGate(key)` pinta el spinner solo cuando cambian filtros/página o cuando el usuario pulsa "Actualizar". Un refetch del bus conserva las filas y las tarjetas en pantalla y cambia los datos en silencio (stale-while-revalidate).
+
+### Removed
+- El lápiz naranja de «estado manual» en la columna Estado de la tabla y en la tarjeta móvil: la columna queda limpia y el detalle explica el estado fijado.
 
 ### Fixed
 - El parpadeo al cambiar de ventana y volver: la tabla ya no se reemplaza por el spinner en un refetch de fondo, y las tarjetas del ciclo de vida ya no se reconsultan (8 requests por evento) salvo en una mutación o en "Actualizar".
