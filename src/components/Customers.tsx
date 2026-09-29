@@ -94,6 +94,9 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   // Cross-view: Clientes KPIs derive from packages (weights, counts) and invoices
   // (top billing clients), so their refetch must also follow the global bus.
   const dataRev = useDataVersion('clients', 'packages', 'invoices')
+  // The bitácora reads only billing_client events — narrow scope so a packages or
+  // invoices bump elsewhere never triggers a wasted audit refetch.
+  const auditRev = useDataVersion('clients')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -159,7 +162,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       .catch(() => !cancelled && setAuditRows([]))
       .finally(() => !cancelled && setAuditLoading(false))
     return () => { cancelled = true }
-  }, [auditPage, revision, dataRev])
+  }, [auditPage, revision, auditRev])
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
   const auditTotalPages = Math.max(1, Math.ceil(auditCount / PAGE_SIZE))

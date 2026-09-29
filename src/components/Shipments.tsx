@@ -399,9 +399,11 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       // Worker creates the billing client, then the package links it. A package
       // never ships clientless.
       let clientId = createForm.client.id
+      let createdNewClient = false
       if (!clientId) {
         const created = await customerApi.create({ name: createForm.client.name })
         clientId = created.id
+        createdNewClient = true
       }
       const res = await createPackage({
         almacenId: createForm.almacenId.trim(),
@@ -416,15 +418,17 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         clientId,
         status: createForm.status,
       })
-      reload()
       if (res.warning) {
         // Created, but the tracking already exists in another tenant — keep the modal
-        // open so the staff member reads the warning before closing.
+        // open so the staff member reads the warning before closing. The package is
+        // live server-side: propagate the change to every subscribed view.
+        bumpData('packages')
+        reload()
         setCreateWarning(res.warning)
       } else {
         setShowCreate(false)
         setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', weightLb: '', pieces: '1', receivedAt: ymd(new Date()), providerCode: '', client: null, status: 'en_almacen' })
-        resetAfterCreate()
+        resetAfterCreate(createdNewClient)
       }
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
@@ -436,16 +440,18 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   // The created package must land in view: clear every filter, the search box and
   // the page so the new row is visible instead of hidden by a stale status/date
   // range filter or a deep page. Default window = current month (matches mount).
-  function resetAfterCreate() {
+  function resetAfterCreate(createdNewClient: boolean) {
     const now = new Date()
     const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
     const to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     setFilters({ sortCol: 'status_rank', ascending: true, from, to })
     setSearchInput('')
     setPage(1)
-    // The package and (possibly) the billing client are fresh on the server; every
-    // view that derives from them (lifecycle cards, Clientes KPIs) must refetch.
-    bumpData('packages', 'clients')
+    // The package (and only when the operator created a brand-new client, the
+    // client too) is fresh on the server; every view that derives from it
+    // (lifecycle cards, Clientes KPIs) must refetch.
+    if (createdNewClient) bumpData('packages', 'clients')
+    else bumpData('packages')
     setRev((v) => v + 1)
   }
 

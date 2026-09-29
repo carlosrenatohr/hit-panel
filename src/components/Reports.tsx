@@ -50,9 +50,21 @@ export default function Reports({ user }: { user: SessionUser }) {
   const [billingFilter, setBillingFilter] = useState<'all' | 'sin' | 'facturadas'>('all')
   const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set())
   // The "facturadas/sin" partition depends on live invoice links — refetch when a
-  // package or invoice changes anywhere.
+  // package or invoice changes anywhere. One cancellable pipeline like the rows
+  // effect below: a slow response can't overwrite a newer one.
   const dataRev = useDataVersion('packages', 'invoices')
-  useEffect(() => { billingApi.linkedPackageIds().then(({ ids }) => setLinkedIds(new Set(ids))).catch(() => {}) }, [dataRev])
+  useEffect(() => {
+    let cancelled = false
+    billingApi
+      .linkedPackageIds()
+      .then(({ ids }) => {
+        if (!cancelled) setLinkedIds(new Set(ids))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [dataRev])
   const shown = useMemo(() => {
     if (billingFilter === 'facturadas') return rows.filter((r) => linkedIds.has(r.id))
     if (billingFilter === 'sin') return rows.filter((r) => !linkedIds.has(r.id))
