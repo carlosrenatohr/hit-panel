@@ -341,30 +341,13 @@ describe('Shipments', () => {
     });
   });
 
-  it('keeps the modal open and shows the warning on a tracking collision', async () => {
+  it('muestra el mensaje RPC en español cuando la creación falla', async () => {
     vi.mocked(getProviders).mockResolvedValue([
       { id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true },
     ]);
-    vi.mocked(createPackage).mockResolvedValueOnce({
-      id: 'p-1', almacenId: '25007777', organizationId: 'original-express',
-      warning: 'tracking 1Z9AA already exists in tenant hit',
-    });
-    render(<Shipments user={mockUser} onOpen={() => {}} />);
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
-    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25007777' } });
-    await pickNewClientAndService();
-    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
-
-    await waitFor(() => expect(screen.getByText(/already exists in tenant hit/)).toBeTruthy());
-    expect(screen.getByText('Crear paquete manual')).toBeTruthy();
-  });
-
-  it('shows the RPC message when creation is blocked cross-org', async () => {
-    vi.mocked(getProviders).mockResolvedValue([
-      { id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true },
-    ]);
-    vi.mocked(createPackage).mockRejectedValueOnce(new Error('guide 25006666 already exists in tenant hit — creation blocked'));
+    // ADR-013: create_package nunca bloquea cross-tenant; sus errores de
+    // validación (cliente, proveedor, permisos) son mensajes RPC en español.
+    vi.mocked(createPackage).mockRejectedValueOnce(new Error('El proveedor global_connection no está habilitado para tu agencia.'));
     render(<Shipments user={mockUser} onOpen={() => {}} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
@@ -372,7 +355,7 @@ describe('Shipments', () => {
     await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
-    await waitFor(() => expect(screen.getByText(/creation blocked/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/no está habilitado para tu agencia/)).toBeTruthy());
     expect(screen.getByText('Crear paquete manual')).toBeTruthy();
   });
 
@@ -450,6 +433,10 @@ describe('Shipments', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() => expect(vi.mocked(createPackage)).toHaveBeenCalled());
+
+    // ADR-013: el éxito de create_package SIEMPRE cierra el modal (antes, con
+    // `warning`, quedaba abierto para leer el aviso cross-tenant).
+    await waitFor(() => expect(screen.queryByText('Crear paquete manual')).toBeNull());
 
     // D6: after a successful create the list and lifecycle cards refetch, and the
     // filters reset to the current-month default (no status) so the new row is

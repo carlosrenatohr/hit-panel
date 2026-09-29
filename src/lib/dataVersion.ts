@@ -8,7 +8,9 @@
 //
 // HARD RULE: call `bumpData()` from mutation handlers only — never from inside
 // an effect that also subscribes with `useDataVersion`, or the subscription
-// loops forever.
+// loops forever. (Excepción deliberada: el refetch por focus/visibility de
+// `startFocusRefetch` bumpa desde un listener discreto — sus vistas refetchan
+// sin volver a bumpar, así que no puede loopear.)
 
 import { useEffect, useState } from 'preact/hooks'
 
@@ -50,4 +52,35 @@ export function useDataVersion(...domains: DataDomain[]): number {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
   return v
+}
+
+// ─── Refetch al volver a la pestaña (focus / visibilitychange) ───────────────
+// Otra ventana, otro dispositivo o el worker pueden haber cambiado los datos
+// mientras el panel estaba en segundo plano. Al volver, un bump de TODOS los
+// dominios hace que cada vista suscripta refetchee sola (mismo bus que las
+// mutaciones — sin polling ni "Actualizar" manual).
+// Throttle ~5s para no flapear en toggles rápidos de foco/visibilidad;
+// el primer evento dentro de la ventana tras montar se deduplica porque las
+// vistas ya fetchearon al montar. Devuelve una stop() para desuscribirse.
+const FOCUS_THROTTLE_MS = 5_000
+
+export function startFocusRefetch(throttleMs = FOCUS_THROTTLE_MS): () => void {
+  // Sembrado en `now()`: un focus inmediato tras montar es redundante con el
+  // fetch inicial de cada vista; volver después de N segundos sí refetchea.
+  let lastBumpAt = Date.now()
+
+  const onVisible = () => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+    const now = Date.now()
+    if (now - lastBumpAt < throttleMs) return
+    lastBumpAt = now
+    bumpData('packages', 'clients', 'invoices')
+  }
+
+  window.addEventListener('focus', onVisible)
+  document.addEventListener('visibilitychange', onVisible)
+  return () => {
+    window.removeEventListener('focus', onVisible)
+    document.removeEventListener('visibilitychange', onVisible)
+  }
 }

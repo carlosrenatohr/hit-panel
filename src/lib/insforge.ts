@@ -229,7 +229,7 @@ export async function createPackage(input: {
   providerCode?: string | null
   clientId?: string | null
   status?: ShipmentStatus | null
-}): Promise<{ id: string; almacenId: string; organizationId: string; warning?: string | null }> {
+}): Promise<{ id: string; almacenId: string; organizationId: string }> {
   const { error, data } = await insforge.database.rpc('create_package', {
     p_almacen_id: input.almacenId,
     p_tracking_number: input.trackingNumber ?? null,
@@ -252,12 +252,11 @@ export async function createPackage(input: {
     p_status: input.status ?? null,
   })
   if (error) throw error
-  // The RPC reports cross-tenant ledger collisions as a JSON error (not a raise, so
-  // its audit row survives) — surface the actionable message to the staff member.
-  const d = data as { id: string; almacen_id: string; organization_id: string; warning?: string | null; error?: string | null; message?: string | null } | null
+  const d = data as { id: string; almacen_id: string; organization_id: string; error?: string | null; message?: string | null } | null
   if (!d) throw new Error('No se pudo crear el paquete.')
   if (d.error) throw new Error(d.message ?? 'No se pudo crear el paquete.')
-  return { id: d.id, almacenId: d.almacen_id, organizationId: d.organization_id, warning: d.warning ?? null }
+  // ADR-013: `warning` ya no existe (create_package nunca avisa cross-tenant).
+  return { id: d.id, almacenId: d.almacen_id, organizationId: d.organization_id }
 }
 
 export async function setManualStatus(guia: string, status: string, note?: string): Promise<void> {
