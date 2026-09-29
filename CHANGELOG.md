@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-29
+
 ### Added
 - **Módulo de paquetería (detalle)**: el peso se edita desde el panel (`setPackage_weight` → `set_package_weight`) y cada etiqueta lleva su ✕ para borrarla (`delete_package_tag`). El peso va directo a `weight_lb` —sin columna override: un refresh del proveedor puede pisarlo— y el cambio queda como nota en el paquete («Peso actualizado: X → Y lb») y en `audit_logs`.
 - **Columna «Etiquetas»** en la tabla de Envíos, visible por defecto: hasta 3 chips + `+N`, y cada chip es un filtro con chip removible **Etiqueta** en la tarjeta de filtros. Las etiquetas de la página se piden por `package_id` (`getTagsForPackages`) para no duplicar filas con un join.
