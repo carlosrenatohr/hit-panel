@@ -102,6 +102,7 @@ export interface ListFilters {
   pageSize?: number
   organizationId?: string  // tenant filter — staff gets pinned; admin/billing can override
   clientId?: string        // filter by assigned client; pass 'null' string for unassigned packages
+  tag?: { label: string; value?: string | null } // etiqueta — resuelta a ids antes del IN
 }
 
 export interface ListResult {
@@ -155,6 +156,16 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   else if (f.service) q = q.eq('effective_service_type', f.service)
   if (f.clientId === 'null') q = q.is('client_id', null)
   else if (f.clientId) q = q.eq('client_id', f.clientId)
+  // Filtro por etiqueta: se resuelve primero etiqueta → package_ids y se filtra con IN.
+  // Un filtro embebido (`package_tags.label`) repetiría cada paquete una vez por etiqueta.
+  if (f.tag) {
+    let tq = insforge.database.from('package_tags').select('package_id').eq('label', f.tag.label)
+    if (f.tag.value) tq = tq.eq('value', f.tag.value)
+    const { data: tagRows, error: tagErr } = await tq
+    const tagIds = [...new Set(((tagRows ?? []) as { package_id: string }[]).map((r) => r.package_id))]
+    if (tagErr || tagIds.length === 0) return { rows: [], count: 0 }
+    q = q.in('id', tagIds)
+  }
   if (f.from) q = q.gte('received_at', f.from)
   // `to` is a date-only string; received_at is timestamptz. `lte('2026-07-10')` compares against
   // midnight and drops everything received later that day. Use `< next day` to include the whole day.
@@ -206,6 +217,20 @@ export async function getPackageDetail(guia: string, organizationId?: string): P
     tags: (tagRes.data as Tag[]) ?? [],
     notes: (noteRes.data as Note[]) ?? [],
   }
+}
+
+/**
+ * Tags of one page of packages, pre-queried by `package_id`. An embed on the list query
+ * would repeat each package once per tag (PostgREST fan-out), so the list stays a flat
+ * row-per-package query and the tags arrive as a side read keyed by package.
+ */
+export async function getTagsForPackages(ids: string[]): Promise<Record<string, Tag[]>> {
+  if (!ids.length) return {}
+  const { data, error } = await insforge.database.from('package_tags').select('*').in('package_id', ids)
+  if (error) throw error
+  const out: Record<string, Tag[]> = {}
+  for (const t of (data as Tag[]) ?? []) (out[t.package_id] ??= []).push(t)
+  return out
 }
 
 // ── Writes (staff-only RPCs) ────────────────────────────────────────────────────
@@ -298,6 +323,32 @@ export async function setPackageService(guia: string, serviceType: string | null
   const { error } = await insforge.database.rpc('set_package_service', {
     p_guia: guia,
     p_service_type: serviceType ?? null,
+  })
+  if (error) throw error
+}
+
+/**
+ * Edits the package weight in place (migration 20260929105752). There is no
+ * override column by design: a scraper refresh may overwrite the manual value —
+ * the history of the change is kept in `package_notes` + `audit_logs`.
+ */
+export async function setPackageWeight(guia: string, weightLb: number): Promise<void> {
+  const { error } = await insforge.database.rpc('set_package_weight', {
+    p_guia: guia,
+    p_weight_lb: weightLb,
+  })
+  if (error) throw error
+}
+
+/**
+ * Deletes every tag matching (guia, label[, value]) — `package_tags` has no
+ * uniqueness on (package_id, label), so the RPC removes all matches.
+ */
+export async function deleteTag(guia: string, label: string, value?: string): Promise<void> {
+  const { error } = await insforge.database.rpc('delete_package_tag', {
+    p_guia: guia,
+    p_label: label,
+    p_value: value ?? null,
   })
   if (error) throw error
 }

@@ -17,7 +17,7 @@ import {
   STATUS_ORDER,
   statusLabel,
 } from '../lib/format'
-import { addNote, addTag, deletePackage, getPackageDetail, setManualStatus, setPackageClient, setPackageService } from '../lib/insforge'
+import { addNote, addTag, deletePackage, getPackageDetail, setManualStatus, setPackageClient, setPackageService, deleteTag, setPackageWeight } from '../lib/insforge'
 import { bumpData } from '../lib/dataVersion'
 import { refreshCooldownUntil, refreshPackage } from '../lib/refresh'
 import { configApi } from '../lib/config'
@@ -65,10 +65,13 @@ export default function ShipmentDetail({
   const [tagLabel, setTagLabel] = useState('')
   const [tagValue, setTagValue] = useState('')
   const [noteBody, setNoteBody] = useState('')
+  const [weightInput, setWeightInput] = useState('')
   const [showInvoice, setShowInvoice] = useState(false)
   const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null)
   // Agencies with is_scrapable = false work manual-only: no re-scrape affordance.
-  const [scrapable, setScrapable] = useState(true)
+  // Fail closed: mientras /api/config/info no responda, el scraping se asume
+  // APAGADO — ni el bloque de Cargotrack ni las etiquetas scrapeadas se muestran.
+  const [scrapable, setScrapable] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [invoiceInfo, setInvoiceInfo] = useState<{ fiscalYear: number; invoiceNumber: number; status: string } | null>(null)
@@ -84,6 +87,8 @@ export default function ShipmentDetail({
     }
   }, [])
 
+  const weightLb = Number(weightInput.replace(',', '.'))
+  const weightValid = weightInput.trim() !== '' && Number.isFinite(weightLb) && weightLb > 0
   const canWrite = user.role === 'admin' || user.role === 'staff'
   const canBill = user.role === 'admin' || user.role === 'billing'
   const canRefresh = user.role === 'admin' && scrapable
@@ -139,6 +144,11 @@ export default function ShipmentDetail({
       }
     }
   }, [guia])
+
+  // El input se re-siembra con el valor del servidor tras cada carga del detalle.
+  useEffect(() => {
+    setWeightInput(d?.pkg.weight_lb != null ? String(d.pkg.weight_lb) : '')
+  }, [d?.pkg.weight_lb, guia])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -427,7 +437,7 @@ export default function ShipmentDetail({
                   ) : (
                     <span
                       class="italic text-gray-400"
-                      title="Cargotrack no devolvió peso para este paquete"
+                      title={scrapable ? 'Cargotrack no devolvió peso para este paquete' : undefined}
                     >
                       peso sin dato
                     </span>
@@ -499,105 +509,41 @@ export default function ShipmentDetail({
               {d.pkg.description && <p class="mt-3 text-sm text-gray-600">{d.pkg.description}</p>}
               {d.pkg.manual_status && (
                 <p class="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800">
-                  Override manual: <b>{statusLabel(d.pkg.manual_status)}</b> por {d.pkg.manual_status_by ?? '—'} ·{' '}
+                  Estado fijado manualmente: <b>{statusLabel(d.pkg.manual_status)}</b> por {d.pkg.manual_status_by ?? '—'} ·{' '}
                   {fmtDateTime(d.pkg.manual_status_at)}
                   {d.pkg.manual_status_note ? ` — ${d.pkg.manual_status_note}` : ''}
                 </p>
               )}
             </section>
 
-            {/* Timeline */}
-            <section class="rounded-xl border border-gray-100 bg-white p-4">
-              <h3 class="mb-3 text-sm font-semibold text-secondary">Historial de eventos</h3>
-              {d.events.length === 0 ? (
-                <p class="text-sm text-gray-400">Sin eventos.</p>
-              ) : (
-                <ol class="ml-1 space-y-4 border-l-2 border-gray-100 pl-4">
-                  {d.events.map((e, i) => (
-                    <li key={e.id} class="relative text-sm">
-                      <span
-                        class={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full ${
-                          i === d.events.length - 1 ? 'bg-primary' : 'bg-gray-300'
-                        }`}
-                      />
-                      <div class="text-gray-800">{e.description ?? '—'}</div>
-                      <div class="text-xs text-gray-400">
-                        {fmtDateTime(e.occurred_at)} {e.office ? `· ${e.office}` : ''}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-
-            {/* Provider notes */}
-            {d.providerNotes.length > 0 && (
-              <section class="rounded-xl border border-gray-100 bg-white p-4">
-                <h3 class="mb-3 text-sm font-semibold text-secondary">Notas del proveedor</h3>
-                <ul class="space-y-2">
-                  {d.providerNotes.map((n) => (
-                    <li key={n.id} class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                      {n.body}
-                      <span class="block text-xs text-gray-400">
-                        {n.author ?? '—'} · {n.noted_at ?? ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {/* Internal tags + notes */}
-            <section class="rounded-xl border border-gray-100 bg-white p-4">
-              <h3 class="mb-3 flex items-center gap-1.5 text-sm font-semibold text-secondary">
-                <Tag class="h-4 w-4 text-gray-400" aria-hidden="true" /> Etiquetas y notas internas
-              </h3>
-              <div class="mb-3 flex flex-wrap gap-2">
-                {d.tags.length === 0 && <span class="text-sm text-gray-400">Sin etiquetas.</span>}
-                {d.tags.map((t) => (
-                  <span key={t.id} class="rounded-full bg-navy/10 px-2.5 py-1 text-xs font-medium text-navy">
-                    {t.label}
-                    {t.value ? `: ${t.value}` : ''}
-                  </span>
-                ))}
-              </div>
-              <ul class="space-y-2">
-                {d.notes.map((n) => (
-                  <li key={n.id} class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                    {n.body}
-                    <span class="block text-xs text-gray-400">
-                      {n.created_by ?? '—'} · {fmtDateTime(n.created_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            {/* Internal details (secondary, collapsed by default) */}
-            <details class="rounded-xl border border-gray-100 bg-white p-4">
-              <summary class="cursor-pointer select-none text-sm font-medium text-gray-500">Detalles internos</summary>
-              <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-gray-100 pt-3 text-sm">
-                <Fact k="Casillero" v={d.pkg.casillero} />
-                <Fact k="Referencia" v={d.pkg.referencia_name} />
-                <Fact k="Cliente" v={d.pkg.billing_clients?.name ?? d.pkg.client_id ?? null} />
-                <Fact k="Remitente" v={d.pkg.remitente} />
-                <Fact k="Valor declarado" v={d.pkg.declared_value} />
-                <Fact k="Dimensiones" v={d.pkg.dimensions} />
-                <Fact k="Peso (lb)" v={d.pkg.weight_lb ?? 'Sin dato'} />
-                <Fact k="Volumen (cf)" v={d.pkg.volume_cf} />
-                <Fact k="Origen" v={d.pkg.origin_office} />
-                <Fact k="Destino" v={d.pkg.dest_office} />
-                <Fact k="Estado del proveedor" v={statusLabel(d.pkg.status)} />
-                <Fact k="Recibido" v={fmtDate(d.pkg.received_at)} />
-                <Fact k="Actualizado" v={fmtDateTime(d.pkg.scraped_at)} />
-              </dl>
-            </details>
-
             {/* Actions */}
             {canWrite && (
               <section class="rounded-xl border-l-4 border-primary bg-white p-4 shadow-sm">
                 <h3 class="mb-3 text-sm font-semibold text-secondary">Acciones</h3>
                 <div class="space-y-4">
+                  <div>
+                    <div class="mb-1 text-xs font-medium text-gray-500">Peso (lb)</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <input
+                        class={`${inputCls} w-28`}
+                        inputmode="decimal"
+                        placeholder="0.0"
+                        value={weightInput}
+                        onInput={(e) => setWeightInput((e.target as HTMLInputElement).value)}
+                      />
+                      <Button
+                        variant="ghost"
+                        disabled={busy || !weightValid}
+                        onClick={() => run(() => setPackageWeight(guia, weightLb))}
+                      >
+                        <Check class="h-4 w-4" aria-hidden="true" /> Guardar peso
+                      </Button>
+                      <span class="text-xs text-gray-400">
+                        Actual: {d.pkg.weight_lb != null ? `${d.pkg.weight_lb} lb` : 'sin dato'}
+                      </span>
+                    </div>
+                  </div>
+
                   {canRefresh && (
                     <div>
                       <div class="mb-1 text-xs font-medium text-gray-500">Datos de Cargotrack</div>
@@ -622,7 +568,7 @@ export default function ShipmentDetail({
                   )}
 
                   <div>
-                    <div class="mb-1 text-xs font-medium text-gray-500">Cambiar estado (override manual)</div>
+                    <div class="mb-1 text-xs font-medium text-gray-500">Cambiar estado</div>
                     <div class="flex flex-wrap gap-2">
                       <select class={inputCls} value={newStatus} onChange={(e) => setNewStatus((e.target as HTMLSelectElement).value)}>
                         <option value="">Seleccionar…</option>
@@ -680,7 +626,7 @@ export default function ShipmentDetail({
                       <span class="text-sm text-gray-600">
                         Actual: {d.pkg.effective_service_type === 'maritimo' ? 'Marítimo' : d.pkg.effective_service_type === 'aereo' ? 'Aéreo' : 'Sin definir'}
                         {d.pkg.service_type_override && (
-                          <span class="ml-1 text-xs text-orange-600">(override manual)</span>
+                          <span class="ml-1 text-xs text-orange-600">(fijado manualmente)</span>
                         )}
                       </span>
                       <select
@@ -731,13 +677,119 @@ export default function ShipmentDetail({
                     </div>
                   </div>
 
-                  <div class="border-t border-gray-100 pt-3">
-                    <div class="mb-1 text-xs font-medium text-red-500">Zona de riesgo</div>
-                    <Button variant="danger" onClick={openDelete} disabled={busy}>
-                      <Trash2 class="h-4 w-4" aria-hidden="true" /> Eliminar paquete
-                    </Button>
-                  </div>
                 </div>
+              </section>
+            )}
+
+            {/* Internal details (secondary, collapsed by default) */}
+            <details class="rounded-xl border border-gray-100 bg-white p-4">
+              <summary class="cursor-pointer select-none text-sm font-medium text-gray-500">Detalles internos</summary>
+              <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-gray-100 pt-3 text-sm">
+                <Fact k="Casillero" v={d.pkg.casillero} />
+                <Fact k="Referencia" v={d.pkg.referencia_name} />
+                <Fact k="Cliente" v={d.pkg.billing_clients?.name ?? d.pkg.client_id ?? null} />
+                <Fact k="Remitente" v={d.pkg.remitente} />
+                <Fact k="Valor declarado" v={d.pkg.declared_value} />
+                <Fact k="Dimensiones" v={d.pkg.dimensions} />
+                <Fact k="Peso (lb)" v={d.pkg.weight_lb ?? 'Sin dato'} />
+                <Fact k="Volumen (cf)" v={d.pkg.volume_cf} />
+                <Fact k="Origen" v={d.pkg.origin_office} />
+                <Fact k="Destino" v={d.pkg.dest_office} />
+                <Fact k="Estado del proveedor" v={statusLabel(d.pkg.status)} />
+                <Fact k="Recibido" v={fmtDate(d.pkg.received_at)} />
+                {scrapable && <Fact k="Actualizado" v={fmtDateTime(d.pkg.scraped_at)} />}
+              </dl>
+            </details>
+
+            {/* Internal tags + notes */}
+            <section class="rounded-xl border border-gray-100 bg-white p-4">
+              <h3 class="mb-3 flex items-center gap-1.5 text-sm font-semibold text-secondary">
+                <Tag class="h-4 w-4 text-gray-400" aria-hidden="true" /> Etiquetas y notas internas
+              </h3>
+              <div class="mb-3 flex flex-wrap gap-2">
+                {d.tags.length === 0 && <span class="text-sm text-gray-400">Sin etiquetas.</span>}
+                {d.tags.map((t) => (
+                  <span key={t.id} class="inline-flex items-center gap-1 rounded-full bg-navy/10 px-2.5 py-1 text-xs font-medium text-navy">
+                    {t.label}
+                    {t.value ? `: ${t.value}` : ''}
+                    {canWrite && (
+                      <button
+                        type="button"
+                        aria-label={`Quitar etiqueta ${t.label}`}
+                        title="Quitar etiqueta"
+                        disabled={busy}
+                        onClick={() => run(() => deleteTag(guia, t.label, t.value || undefined))}
+                        class="text-navy/50 transition-colors hover:text-red-600"
+                      >
+                        <X class="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+              <ul class="space-y-2">
+                {d.notes.map((n) => (
+                  <li key={n.id} class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                    {n.body}
+                    <span class="block text-xs text-gray-400">
+                      {n.created_by ?? '—'} · {fmtDateTime(n.created_at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {/* Timeline */}
+            <section class="rounded-xl border border-gray-100 bg-white p-4">
+              <h3 class="mb-3 text-sm font-semibold text-secondary">Historial de eventos</h3>
+              {d.events.length === 0 ? (
+                <p class="text-sm text-gray-400">Sin eventos.</p>
+              ) : (
+                <ol class="ml-1 space-y-4 border-l-2 border-gray-100 pl-4">
+                  {d.events.map((e, i) => (
+                    <li key={e.id} class="relative text-sm">
+                      <span
+                        class={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full ${
+                          i === d.events.length - 1 ? 'bg-primary' : 'bg-gray-300'
+                        }`}
+                      />
+                      <div class="text-gray-800">{e.description ?? '—'}</div>
+                      <div class="text-xs text-gray-400">
+                        {fmtDateTime(e.occurred_at)} {e.office ? `· ${e.office}` : ''}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            {/* Provider notes */}
+            {d.providerNotes.length > 0 && (
+              <section class="rounded-xl border border-gray-100 bg-white p-4">
+                <h3 class="mb-3 text-sm font-semibold text-secondary">Notas del proveedor</h3>
+                <ul class="space-y-2">
+                  {d.providerNotes.map((n) => (
+                    <li key={n.id} class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                      {n.body}
+                      <span class="block text-xs text-gray-400">
+                        {n.author ?? '—'} · {n.noted_at ?? ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* Zona de riesgo — pane propio, siempre al final */}
+            {canWrite && (
+              <section class="rounded-xl border border-red-100 bg-white p-4">
+                <h3 class="mb-3 text-sm font-semibold text-red-600">Zona de riesgo</h3>
+                <p class="mb-3 text-xs text-gray-500">
+                  El paquete queda oculto de todas las vistas operativas (borrado lógico, nunca físico).
+                </p>
+                <Button variant="danger" onClick={openDelete} disabled={busy}>
+                  <Trash2 class="h-4 w-4" aria-hidden="true" /> Eliminar paquete
+                </Button>
               </section>
             )}
           </div>

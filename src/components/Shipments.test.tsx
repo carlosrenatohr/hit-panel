@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/preact';
 import Shipments from './Shipments';
-import { listPackages, getProviders, createPackage, type ListFilters } from '../lib/insforge';
+import { listPackages, getProviders, createPackage, getTagsForPackages, type ListFilters } from '../lib/insforge';
+import type { Pkg } from '../lib/types';
 import { customerApi } from '../lib/customer';
 import { bumpData, bumpList } from '../lib/dataVersion';
 
@@ -91,6 +92,7 @@ vi.mock('../lib/insforge', () => ({
     return Promise.resolve({ rows: mockPkgs, count });
   }),
   getProviders: vi.fn().mockResolvedValue([]),
+  getTagsForPackages: vi.fn().mockResolvedValue({}),
   exportPackages: vi.fn().mockResolvedValue(mockPkgs),
   createPackage: vi.fn().mockResolvedValue({ id: 'p-1', almacen_id: '123', organization_id: 'hit' }),
 }));
@@ -511,4 +513,49 @@ describe('Shipments', () => {
     expect(await screen.findByText(/El peso \(lb\) es obligatorio y debe ser mayor a 0/)).toBeTruthy();
     expect(vi.mocked(createPackage)).not.toHaveBeenCalled();
   });
+
+  it('la columna Etiquetas filtra al hacer click y deja un chip removible', async () => {
+    vi.mocked(getTagsForPackages).mockResolvedValue({
+      '1': [{ id: 't1', package_id: '1', label: 'cliente', value: 'Ana', created_by: 'admin', created_at: '2026-09-01T00:00:00Z' }],
+    });
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    const chip = await screen.findByRole('button', { name: 'cliente: Ana' });
+    fireEvent.click(chip);
+
+    await waitFor(() =>
+      expect(vi.mocked(listPackages)).toHaveBeenCalledWith(expect.objectContaining({ tag: { label: 'cliente', value: 'Ana' } })),
+    );
+    expect(screen.getByTitle('Quitar filtro de etiqueta')).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle('Quitar filtro de etiqueta'));
+    await waitFor(() => {
+      const last = vi.mocked(listPackages).mock.calls.at(-1)?.[0] as ListFilters;
+      expect(last.tag).toBeUndefined();
+    });
+    vi.mocked(getTagsForPackages).mockResolvedValue({});
+  });
+
+  it('la columna Etiquetas muestra un guion cuando la página no tiene etiquetas', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    // "—" en la columna de etiquetas de ambas filas (tabla escritorio; móvil no usa columnas).
+    expect(vi.mocked(getTagsForPackages)).toHaveBeenCalledWith(['1', '2']);
+  });
+
+  it('ya no dibuja el lápiz de estado manual (tabla ni tarjeta móvil)', async () => {
+    const original = vi.mocked(listPackages).getMockImplementation();
+    vi.mocked(listPackages).mockImplementation(async () => ({
+      rows: [{ ...mockPkgs[0], manual_status: 'entregado' }] as unknown as Pkg[],
+      count: 1,
+    }));
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.queryByLabelText('Estado manual')).toBeNull();
+    expect(screen.queryAllByTitle(/Estado manual/)).toHaveLength(0);
+    vi.mocked(listPackages).mockImplementation(original!);
+  });
+
 });

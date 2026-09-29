@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import ShipmentDetail from './ShipmentDetail';
-import { deletePackage, getPackageDetail, setPackageClient } from '../lib/insforge';
+import { deletePackage, deleteTag, getPackageDetail, setPackageClient, setPackageWeight } from '../lib/insforge';
+import { configApi } from '../lib/config';
 import type { PackageDetail } from '../lib/types';
 
 // The untyped mockDetail fixture misses a few Pkg fields; build overrides from it
@@ -69,6 +70,8 @@ vi.mock('../lib/insforge', () => ({
   deletePackage: vi.fn().mockResolvedValue(undefined),
   setPackageClient: vi.fn().mockResolvedValue(undefined),
   setPackageService: vi.fn().mockResolvedValue(undefined),
+  setPackageWeight: vi.fn().mockResolvedValue(undefined),
+  deleteTag: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../lib/config', () => ({
@@ -226,4 +229,69 @@ describe('ShipmentDetail', () => {
 
     expect(screen.getByText(/Mock ClientSearch: \(vacío\)/)).toBeTruthy();
   });
+
+  it('guarda el peso editado en Acciones con set_package_weight', async () => {
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    // El input se siembra con el valor del servidor (5.2 lb en el fixture) tras los effects.
+    await waitFor(() => expect((screen.getByPlaceholderText('0.0') as HTMLInputElement).value).toBe('5.2'));
+    const input = screen.getByPlaceholderText('0.0') as HTMLInputElement;
+    fireEvent.input(input, { target: { value: '7.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar peso' }));
+
+    await waitFor(() => expect(vi.mocked(setPackageWeight)).toHaveBeenCalledWith('910500', 7.5));
+  });
+
+  it('quita una etiqueta con su ✕ vía delete_package_tag', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue({
+      ...mockDetail,
+      tags: [{ id: 't1', package_id: '1', label: 'cliente', value: 'Ana', created_by: 'admin@hit-cargo.com', created_at: '2026-09-01T00:00:00Z' }],
+    } as unknown as PackageDetail);
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Quitar etiqueta cliente' }));
+    await waitFor(() => expect(vi.mocked(deleteTag)).toHaveBeenCalledWith('910500', 'cliente', 'Ana'));
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({}));
+  });
+
+  it('ordena los paneles y deja la Zona de riesgo como último', async () => {
+    const { container } = render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    const heads = Array.from(container.querySelectorAll('h3, summary')).map((el) =>
+      (el.textContent ?? '').replace(/\s+/g, ' ').trim(),
+    );
+    const order = ['Acciones', 'Detalles internos', 'Etiquetas y notas internas', 'Historial de eventos', 'Zona de riesgo'].map(
+      (t) => {
+        const i = heads.findIndex((h) => h.includes(t));
+        expect(i, `falta el panel "${t}"`).toBeGreaterThan(-1);
+        return i;
+      },
+    );
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it('rotula el estado manual en español y sin "override manual"', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue(
+      detailWith({ manual_status: 'entregado', manual_status_by: 'ana@hit-cargo.com', manual_status_at: '2026-09-01T00:00:00Z' }),
+    );
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.getByText(/Estado fijado manualmente/)).toBeTruthy();
+    expect(screen.queryByText(/override manual/i)).toBeNull();
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({}));
+  });
+
+  it('falla cerrado: si la config no responde, no hay bloque de Cargotrack ni etiquetas scrapeadas', async () => {
+    vi.mocked(configApi.info).mockRejectedValueOnce(new Error('sin red'));
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.queryByText('Datos de Cargotrack')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Refrescar ahora/ })).toBeNull();
+    expect(screen.queryByText('Actualizado')).toBeNull();
+  });
+
 });

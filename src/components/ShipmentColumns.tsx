@@ -1,6 +1,5 @@
 import type { JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
-import { Pencil } from 'lucide-preact'
 import {
   cleanName,
   daysAgo,
@@ -11,15 +10,23 @@ import {
   providerLabel,
   SERVICE_EMOJI,
 } from '../lib/format'
-import type { Pkg, ShipmentStatus } from '../lib/types'
+import type { Pkg, ShipmentStatus, Tag } from '../lib/types'
 import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot } from './ui'
 import { GripVertical, Lock, Search, SlidersHorizontal, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
+export interface ColCtx {
+  /** Etiquetas de la página actual, pre-queriadas por package_id (getTagsForPackages). */
+  tags: Record<string, Tag[]>
+  /** Click en un chip de etiqueta → aplica el filtro removible. */
+  onTagClick?: (label: string, value?: string | null) => void
+}
+
 export interface ColumnDef {
   key: string
   label: string
-  render: (p: Pkg) => JSX.Element | string
+  /** `ctx` es opcional para que las previews del picker rendericen sin etiquetas. */
+  render: (p: Pkg, ctx?: ColCtx) => JSX.Element | string
 }
 
 export const COLUMN_DEFS: ColumnDef[] = [
@@ -40,16 +47,9 @@ export const COLUMN_DEFS: ColumnDef[] = [
     render: (p) => <div class="max-w-[160px] truncate font-mono text-xs text-gray-500">{p.tracking_number ?? '—'}</div>,
   },
   { key: 'provider', label: 'Proveedor', render: (p) => <span class="text-gray-600">{providerLabel(p.providers?.code)}</span> },
-  { key: 'status', label: 'Estado', render: (p) => (
-    <span class="flex items-center gap-1.5">
-      <StatusDot s={p.effective_status as ShipmentStatus} />
-      {p.manual_status && (
-        <span title={`Estado manual: ${p.manual_status}`} class="text-orange-500" aria-label="Estado manual">
-          <Pencil class="h-3 w-3" />
-        </span>
-      )}
-    </span>
-  ) },
+  // Sin el lápiz de "estado manual": la columna se queda limpia y el detalle explica
+  // el estado con "Estado fijado manualmente".
+  { key: 'status', label: 'Estado', render: (p) => <StatusDot s={p.effective_status as ShipmentStatus} /> },
   {
     key: 'service',
     label: 'Servicio',
@@ -99,6 +99,36 @@ export const COLUMN_DEFS: ColumnDef[] = [
           {fmtDate(p.last_event_at)}
           {showStale && <StaleBadge days={stale as number} />}
         </div>
+      )
+    },
+  },
+  {
+    // Visible por defecto: la etiqueta es el criterio operativo del staff (cliente, urgente,
+    // hazmat…). Los chips son botones de filtro — nunca deben abrir la fila.
+    key: 'etiquetas',
+    label: 'Etiquetas',
+    render: (p, ctx) => {
+      const tags = ctx?.tags?.[p.id] ?? []
+      if (!tags.length) return <span class="text-gray-300">—</span>
+      return (
+        <span class="flex flex-wrap items-center gap-1">
+          {tags.slice(0, 3).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              title="Filtrar por esta etiqueta"
+              onClick={(e) => {
+                e.stopPropagation()
+                ctx?.onTagClick?.(t.label, t.value ?? null)
+              }}
+              class="rounded-full bg-navy/10 px-2 py-0.5 text-[11px] font-medium text-navy transition-colors hover:bg-navy/20"
+            >
+              {t.label}
+              {t.value ? `: ${t.value}` : ''}
+            </button>
+          ))}
+          {tags.length > 3 && <span class="text-[11px] text-gray-400">+{tags.length - 3}</span>}
+        </span>
       )
     },
   },
