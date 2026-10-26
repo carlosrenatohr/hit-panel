@@ -29,6 +29,8 @@ const mockPkgs = vi.hoisted(() => [
     service_type_override: null,
     effective_service_type: 'aereo',
     weight_lb: 5.2,
+    weight_override_lb: null,
+    effective_weight_lb: 5.2,
     volume_cf: null,
     pieces: 2,
     dimensions: null,

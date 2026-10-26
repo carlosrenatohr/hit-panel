@@ -147,8 +147,10 @@ export default function ShipmentDetail({
 
   // El input se re-siembra con el valor del servidor tras cada carga del detalle.
   useEffect(() => {
-    setWeightInput(d?.pkg.weight_lb != null ? String(d.pkg.weight_lb) : '')
-  }, [d?.pkg.weight_lb, guia])
+    // Se siembra con el peso EFECTIVO (override del staff si existe) — editar de
+    // nuevo fijará el override actualizado.
+    setWeightInput(d?.pkg.effective_weight_lb != null ? String(d.pkg.effective_weight_lb) : '')
+  }, [d?.pkg.effective_weight_lb, guia])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -362,7 +364,7 @@ export default function ShipmentDetail({
                 {
                   freightType: (d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'MAR' : 'AIR',
                   tier: 'REGULAR',
-                  quantityLbs: d.pkg.weight_lb ?? 0,
+                  quantityLbs: d.pkg.effective_weight_lb ?? 0,
                   guia: d.pkg.almacen_id,
                   tracking: d.pkg.tracking_number ?? null,
                   packageId: d.pkg.id,
@@ -432,8 +434,8 @@ export default function ShipmentDetail({
                   <Package class="h-4 w-4 text-gray-400" aria-hidden="true" />
                   {d.pkg.pieces ?? '—'} pzs
                   <span class="text-gray-300" aria-hidden="true">·</span>
-                  {d.pkg.weight_lb != null ? (
-                    <span class="font-medium tabular-nums text-gray-800">{d.pkg.weight_lb} lb</span>
+                  {d.pkg.effective_weight_lb != null ? (
+                    <span class="font-medium tabular-nums text-gray-800">{d.pkg.effective_weight_lb} lb{d.pkg.weight_override_lb != null && <span class="ml-1 text-[10px] font-normal text-gray-400">(fijado a mano)</span>}</span>
                   ) : (
                     <span
                       class="italic text-gray-400"
@@ -539,7 +541,7 @@ export default function ShipmentDetail({
                         <Check class="h-4 w-4" aria-hidden="true" /> Guardar peso
                       </Button>
                       <span class="text-xs text-gray-400">
-                        Actual: {d.pkg.weight_lb != null ? `${d.pkg.weight_lb} lb` : 'sin dato'}
+                        Actual: {d.pkg.effective_weight_lb != null ? `${d.pkg.effective_weight_lb} lb` : 'sin dato'}
                       </span>
                     </div>
                   </div>
