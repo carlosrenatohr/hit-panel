@@ -30,6 +30,10 @@ export interface Pkg {
   service_type_override: ServiceType
   effective_service_type: ServiceType
   weight_lb: number | null
+  /** Peso fijado por el staff (set_package_weight); el scrape no lo pisa. */
+  weight_override_lb: number | null
+  /** Peso con el que se factura y se reporta: override si existe, si no el scrapeado. */
+  effective_weight_lb: number | null
   volume_cf: number | null
   pieces: number | null
   dimensions: string | null

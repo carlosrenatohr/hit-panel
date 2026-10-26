@@ -57,7 +57,7 @@ const SORTS: { col: string; label: string; dir: 'asc' | 'desc' }[] = [
   { col: 'tracking_number', label: 'Tracking', dir: 'desc' },
   { col: 'effective_status', label: 'Estado', dir: 'desc' },
   { col: 'service_type', label: 'Servicio', dir: 'desc' },
-  { col: 'weight_lb', label: 'Peso', dir: 'desc' },
+  { col: 'effective_weight_lb', label: 'Peso', dir: 'desc' },
   { col: 'pieces', label: 'Piezas', dir: 'desc' },
 ]
 
@@ -390,7 +390,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         { key: 'effective_status', label: 'Estado' },
         { key: 'service_type', label: 'Servicio' },
         { key: 'pieces', label: 'Piezas' },
-        { key: 'weight_lb', label: 'Peso (lb)' },
+        { key: 'effective_weight_lb', label: 'Peso (lb)' },
         { key: 'origin_office', label: 'Origen' },
         { key: 'dest_office', label: 'Destino' },
         { key: 'received_at', label: 'Recibido' },
@@ -756,7 +756,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                     <span class="mt-1 flex items-center gap-2 text-xs text-gray-500">
                       <span class="min-w-0 truncate">
                         {providerLabel(p.providers?.code)} · {p.pieces ?? '—'} pzs ·{' '}
-                        {p.weight_lb != null ? `${p.weight_lb} lb` : 'peso sin dato'}
+                        {p.effective_weight_lb != null ? `${p.effective_weight_lb} lb` : 'peso sin dato'}
                       </span>
                       <span class="ml-auto flex shrink-0 items-center gap-1.5">
                         {fmtDate(p.last_event_at)}

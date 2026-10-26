@@ -55,9 +55,12 @@ Panel lateral con todo:
 - **Etiquetas y notas internas** de HIT: cada etiqueta lleva su ✕ (**Quitar etiqueta**) →
   `delete_package_tag` la borra por (guía, label[, valor]) y lo audita. Solo `admin`/`staff`.
 - **Acciones** (solo `admin`/`staff`):
-  - **Peso (lb)**: se edita en el panel y guarda con `set_package_weight`. Sin columna override: un
-    refresh del proveedor puede pisar el valor a mano; el cambio queda como nota en el paquete
-    («Peso actualizado: X → Y lb») y en `audit_logs`.
+  - **Peso (lb)**: se edita en el panel y guarda con `set_package_weight`, que ahora escribe la
+    columna `weight_override_lb` — **el scrape ya no pisa el peso a mano** (el ingest solo envía
+    `weight_lb`). El peso que se muestra, se factura y se reporta es el efectivo
+    (`effective_weight_lb`): override si existe, si no el scrapeado; en el detalle lleva la marca
+    «(fijado a mano)». El cambio queda como nota en el paquete («Peso fijado a mano: X → Y lb») y
+    en `audit_logs`.
   - **Cambiar estado** con nota opcional → escribe `manual_status` y queda registrado quién y cuándo.
     El estado efectivo del cliente pasa a ser este, y el panel lo rotula **«Estado fijado
     manualmente»** / **(fijado manualmente)**.
