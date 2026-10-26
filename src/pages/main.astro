@@ -1,0 +1,234 @@
+---
+// Landing pública — `/main`. Diseño simple y profesional con la marca Orbit
+// (logo real, tokens primary/navy/neutral del tailwind.config, Montserrat+Poppins).
+// El login de `/` NO se toca: "Acceder al sistema" siempre apunta a `/`.
+import Public from '../layouts/Public.astro'
+import PublicHeader from '../components/public/PublicHeader.astro'
+import PublicFooter from '../components/public/PublicFooter.astro'
+
+const currentPath = '/main'
+
+const contactHref = '/soporte#contacto'
+const panelHref = '/'
+
+// Descripciones basadas en lo que el panel realmente hace (docs 05-features-and-usage.md).
+const pasos = [
+  {
+    n: '01',
+    titulo: 'Llega a la bodega',
+    texto:
+      'La guía se registra al llegar al almacén. Orbit la asocia a un cliente y empieza a seguir su estado automáticamente.',
+  },
+  {
+    n: '02',
+    titulo: 'Viaja y se actualiza',
+    texto:
+      'El estado se refresca cada pocas horas desde el proveedor de rastreo: en almacén, en tránsito, en destino, entregado o con excepción.',
+  },
+  {
+    n: '03',
+    titulo: 'Se factura y se entrega',
+    texto:
+      'Genera la factura por peso y servicio, y el cliente retira con la guía identificada. Todo queda en un solo historial.',
+  },
+]
+
+const funcionalidades = [
+  {
+    titulo: 'Seguimiento en un solo lugar',
+    texto:
+      'Busca por guía, número de rastreo o casillero. Filtra por proveedor, estado, servicio y fechas. Detecta de un vistazo los paquetes que llevan días sin moverse.',
+  },
+  {
+    titulo: 'Corrección sobre la marcha',
+    texto:
+      'Fija el estado, el peso o una nota manual cuando el proveedor no refleja la realidad. El sistema respeta tu corrección y registra quién y cuándo la hizo.',
+  },
+  {
+    titulo: 'Historial completo',
+    texto:
+      'Cada paquete conserva su línea de tiempo de eventos, las notas del proveedor y las etiquetas internas del equipo.',
+  },
+  {
+    titulo: 'Reportes claros',
+    texto:
+      'Matriz de estado por proveedor, distribución por servicio y paquetes recibidos por mes. Exporta a CSV con los filtros que ya estás usando.',
+  },
+  {
+    titulo: 'Facturación sin errores',
+    texto:
+      'La creación de facturas es atómica: o se completa entera o se revierte por completo. Nunca quedan facturas a medias ni cobros duplicados.',
+  },
+  {
+    titulo: 'Permisos por rol',
+    texto:
+      'Administra quién ve, quién opera y quién solo consulta. Los permisos se aplican en la base de datos, no solo en la interfaz.',
+  },
+]
+
+const estados = [
+  'En almacén',
+  'Parcial',
+  'En tránsito',
+  'En destino',
+  'Entregado',
+  'Excepción',
+  'Desconocido',
+]
+---
+
+<Public
+  title="Orbit — Tu operación logística, bajo control"
+  description="Orbit es la plataforma para seguir paquetes, corregir estados y facturar sin errores. Hecha para agencias de carga."
+  canonicalPath="/main"
+>
+  <PublicHeader currentPath={currentPath} />
+
+  <main>
+    <!-- Hero -->
+    <section class="relative overflow-hidden bg-navy text-white">
+      <div
+        class="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-primary/15 blur-3xl"
+        aria-hidden="true"
+      >
+      </div>
+      <div class="relative mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
+        <div class="max-w-3xl">
+          <p
+            class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-1 text-sm font-medium text-white/90"
+          >
+            Plataforma de operación logística
+          </p>
+          <h1 class="mt-6 font-display text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">
+            Tu operación logística,<br />
+            <span class="text-primary">bajo control.</span>
+          </h1>
+          <p class="mt-6 max-w-2xl text-lg leading-relaxed text-white/80">
+            Orbit reúne el seguimiento de paquetes, las correcciones de tu equipo y la facturación en
+            un solo lugar. Sin hojas de cálculo, sin perseguir guías sueltas.
+          </p>
+          <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+            <a
+              href={contactHref}
+              class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-3 font-semibold text-white shadow-lg shadow-primary/30 transition-colors hover:bg-primary-600"
+            >
+              Solicitar una demostración
+            </a>
+            <a
+              href="#producto"
+              class="inline-flex items-center justify-center rounded-lg border border-white/30 px-6 py-3 font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              Conocer Orbit
+            </a>
+          </div>
+          <p class="mt-6 text-sm text-white/60">
+            ¿Ya eres usuario?
+            <a href={panelHref} class="font-medium text-white underline-offset-2 hover:underline">Acceder al sistema</a>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Qué es / producto -->
+    <section id="producto" class="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 class="font-display text-3xl font-extrabold tracking-tight text-navy sm:text-4xl">
+          ¿Qué hace Orbit?
+        </h2>
+        <p class="mt-4 text-lg leading-relaxed text-neutral-text">
+          Orbit nació para operar el flujo real de una agencia de carga: desde que la guía llega al
+          almacén hasta que el cliente retira su paquete.
+        </p>
+      </div>
+
+      <div class="mt-14 grid gap-8 md:grid-cols-3">
+        {
+          pasos.map((paso) => (
+            <div class="rounded-xl border border-slate-200 bg-white p-7 shadow-sm">
+              <span class="font-display text-3xl font-extrabold text-primary">{paso.n}</span>
+              <h3 class="mt-3 font-display text-xl font-bold text-navy">{paso.titulo}</h3>
+              <p class="mt-2 leading-relaxed text-neutral-text">{paso.texto}</p>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- Estados -->
+    <section class="bg-white">
+      <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <div class="text-center">
+          <h2 class="font-display text-2xl font-bold tracking-tight text-navy">
+            Estados que puedes seguir en tiempo real
+          </h2>
+        </div>
+        <ul class="mt-8 flex flex-wrap justify-center gap-3">
+          {
+            estados.map((estado) => (
+              <li class="rounded-full border border-slate-200 bg-neutral-bg px-4 py-2 text-sm font-medium text-navy">
+                {estado}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <!-- Funcionalidades -->
+    <section class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 class="font-display text-3xl font-extrabold tracking-tight text-navy sm:text-4xl">
+          Herramientas para tu día a día
+        </h2>
+        <p class="mt-4 text-lg leading-relaxed text-neutral-text">
+          Cada función resuelve una fricción concreta de la operación de paquetes.
+        </p>
+      </div>
+
+      <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          funcionalidades.map((fn) => (
+            <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+              <span class="inline-block h-1.5 w-10 rounded-full bg-primary" aria-hidden="true" />
+              <h3 class="mt-4 font-display text-lg font-bold text-navy">{fn.titulo}</h3>
+              <p class="mt-2 text-sm leading-relaxed text-neutral-text">{fn.texto}</p>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- CTA final -->
+    <section class="bg-navy text-white">
+      <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <div class="flex flex-col items-center justify-between gap-8 lg:flex-row">
+          <div class="max-w-xl">
+            <h2 class="font-display text-3xl font-extrabold tracking-tight">
+              ¿Quieres ver Orbit en acción?
+            </h2>
+            <p class="mt-3 leading-relaxed text-white/80">
+              Cuéntanos sobre tu operación y te mostramos cómo se adapta a tu agencia. Sin
+              compromiso.
+            </p>
+          </div>
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <a
+              href={contactHref}
+              class="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-3 font-semibold text-white shadow-lg shadow-primary/30 transition-colors hover:bg-primary-600"
+            >
+              Solicitar una demostración
+            </a>
+            <a
+              href={panelHref}
+              class="inline-flex items-center justify-center rounded-lg border border-white/30 px-6 py-3 font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              Acceder al sistema
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <PublicFooter />
+</Public>
