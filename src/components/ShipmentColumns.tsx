@@ -62,11 +62,14 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'carga',
     label: 'Carga',
-    render: (p) => (
-      <span class="text-gray-600">
-        {p.pieces ?? '—'} pzs · {p.weight_lb != null ? `${p.weight_lb} lb` : 'peso sin dato'}
-      </span>
-    ),
+    render: (p) => {
+      // Peso principal = effective_weight_lb (coalesce weight_override_lb, weight_lb):
+      // un peso fijado a mano por el staff se ve al toque, sin esperar al próximo scrape.
+      const weight = p.effective_weight_lb != null ? `${p.effective_weight_lb} lb` : 'peso sin dato'
+      // 1 pza es redundante junto al peso — solo se muestra a partir de 2.
+      const pieces = p.pieces != null && p.pieces > 1 ? `${p.pieces} pzs · ` : ''
+      return <span class="text-gray-600">{pieces}{weight}</span>
+    },
   },
   {
     key: 'ruta',
