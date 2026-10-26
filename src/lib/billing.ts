@@ -84,7 +84,9 @@ export interface InvoiceView extends InvoiceListRow {
     reference: string | null
     comments: string | null
   }>
-  packages: Array<{ packageId: string; source: 'auto' | 'manual'; matchedOc: string | null; guia: string | null; tracking: string | null }>
+  packages: Array<{ packageId: string; source: 'auto' | 'manual'; matchedOc: string | null; guia: string | null; tracking: string | null; active: boolean }>
+  /** Worker-side integrity net: a live invoice bills packages whose active link is missing (double-billing risk). */
+  integrityWarning: boolean | null
 }
 export interface MonthlyClose {
   year: number
