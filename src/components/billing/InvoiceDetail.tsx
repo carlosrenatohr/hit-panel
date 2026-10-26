@@ -1,4 +1,4 @@
-import { Ban, Check, Link2, Lock, Package, Printer, Trash2, X } from 'lucide-preact'
+import { Ban, Check, Link2, Lock, Package, Printer, ShieldAlert, Trash2, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import {
   billingApi,
@@ -296,6 +296,16 @@ export default function InvoiceDetail({
                 <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   <Ban class="h-4 w-4 shrink-0" />
                   Factura anulada — documento inválido.
+                </div>
+              )}
+              {/* Integrity warning (Worker-side net): a live invoice billing packages
+                  without an active link risks double billing. Persistent, not dismissible. */}
+              {inv.integrityWarning && (
+                <div class="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="alert">
+                  <ShieldAlert class="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>
+                    Inconsistencia de facturación: hay paquetes facturados en las líneas sin vínculo activo. Revisa los paquetes enlazados y reporta esto a soporte antes de cobrar de nuevo.
+                  </span>
                 </div>
               )}
 

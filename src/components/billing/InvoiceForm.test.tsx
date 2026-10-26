@@ -14,6 +14,7 @@ const createdView = vi.hoisted((): InvoiceView => ({
   issueDate: '2026-09-05', paidAt: null, status: 'DRAFT', address: null, specialPrice: false,
   observations: null, trackingOrders: [], total: 21, profit: 6, margin: null, paidUsd: 0,
   outstanding: 21, closedAt: null, closedBy: null, lines: [], payments: [], packages: [],
+  integrityWarning: null,
 }))
 
 const createInvoice = vi.hoisted(() => vi.fn().mockResolvedValue(createdView))
@@ -151,7 +152,7 @@ describe('InvoiceForm guided flow', () => {
       lines: [
         { lineNo: 1, description: null, freightType: 'AIR', lineType: 'freight', quantityLbs: 3, unitPrice: 7, total: 21, freightCost: 4.5, profit: 2, priceTier: 'REGULAR', priceOffCatalog: false, packageId: 'p1', packageGuia: 'SG-1', packageTracking: 'TRK1' },
       ],
-      packages: [{ packageId: 'p1', source: 'manual', matchedOc: 'SG-1', guia: 'SG-1', tracking: 'TRK1' }],
+      packages: [{ packageId: 'p1', source: 'manual', matchedOc: 'SG-1', guia: 'SG-1', tracking: 'TRK1', active: true }],
     }
     getInvoice.mockResolvedValue(editView)
     vi.spyOn(window, 'confirm').mockReturnValue(true)

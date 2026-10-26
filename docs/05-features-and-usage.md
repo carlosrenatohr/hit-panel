@@ -74,6 +74,27 @@ Panel lateral con todo:
 - **Rango de fechas** (recibido) que recalcula todo.
 - **Exportar**: "Estados" (la matriz) y "Detallado" (todas las columnas de los paquetes del rango).
 
+## Facturación (billing)
+
+La facturación vive en el Worker (`/api/billing/*`); el panel solo consume la API. Puntos clave
+para el staff:
+
+- **Vínculo activo**: un paquete facturado muestra el ícono de factura en la lista y en el detalle.
+  El vínculo se lee de `invoice_packages` con `active` — al anular una factura el vínculo se libera
+  y el paquete vuelve a verse como no facturado (los vínculos liberados no cuentan como facturado).
+- **Banner de integridad** (InvoiceDetail): si una factura viva factura paquetes sin vínculo activo,
+  el Worker marca `integrityWarning` y el panel muestra un banner ámbar persistente («Inconsistencia
+  de facturación…») hasta que soporte lo resuelva. No se cobra de nuevo sin revisar: hay riesgo de
+  doble cobro. Las facturas anuladas no lo muestran (liberar vínculos es el diseño).
+- **Mensajes de error en español**: la API responde con mensajes listos para el staff («El paquete
+  X ya está facturado (factura N)», «La factura está cerrada — la edición está bloqueada», etc.).
+  Los códigos del envelope (`INVALID_REQUEST`, `PACKAGE_ALREADY_INVOICED`, `NOT_FOUND`,
+  `INVOICE_CREATION_REVERTED`…) son el contrato estable; el texto puede ajustarse sin romper nada.
+- **Reversión automática**: si la creación de una factura falla a mitad del camino (ej. presupuesto
+  de subrequests), el Worker revierte todo (libera vínculos + archiva el encabezado) y responde
+  422 `INVOICE_CREATION_REVERTED` con un código de soporte `F-XXXXXXXX`. El staff reintenta; si se
+  repite, envía el código a soporte.
+
 ## Notas de uso
 
 - Los datos los refresca el Worker (cron cada 2h por proveedor + email trigger). El panel siempre
