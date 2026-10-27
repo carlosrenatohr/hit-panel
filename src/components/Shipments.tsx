@@ -755,7 +755,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                     </span>
                     <span class="mt-1 flex items-center gap-2 text-xs text-gray-500">
                       <span class="min-w-0 truncate">
-                        {providerLabel(p.providers?.code)} · {p.pieces ?? '—'} pzs ·{' '}
+                        {providerLabel(p.providers?.code)} ·{' '}
+                        {p.pieces != null && p.pieces > 1 ? `${p.pieces} pzs · ` : ''}
                         {p.effective_weight_lb != null ? `${p.effective_weight_lb} lb` : 'peso sin dato'}
                       </span>
                       <span class="ml-auto flex shrink-0 items-center gap-1.5">

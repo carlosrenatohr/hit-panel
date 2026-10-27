@@ -328,9 +328,10 @@ export async function setPackageService(guia: string, serviceType: string | null
 }
 
 /**
- * Edits the package weight in place (migration 20260929105752). There is no
- * override column by design: a scraper refresh may overwrite the manual value —
- * the history of the change is kept in `package_notes` + `audit_logs`.
+ * Fija el peso del paquete (migración 20261026230000): escribe `weight_override_lb`
+ * — `effective_weight_lb` lo prioriza sobre el `weight_lb` del scrape, y el ingest
+ * nunca envía el override, así el valor manual ya no lo pisa el scrape. El historial
+ * del cambio queda en `package_notes` + `audit_logs`.
  */
 export async function setPackageWeight(guia: string, weightLb: number): Promise<void> {
   const { error } = await insforge.database.rpc('set_package_weight', {
