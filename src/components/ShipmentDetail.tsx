@@ -432,8 +432,13 @@ export default function ShipmentDetail({
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   <Package class="h-4 w-4 text-gray-400" aria-hidden="true" />
-                  {d.pkg.pieces ?? '—'} pzs
-                  <span class="text-gray-300" aria-hidden="true">·</span>
+                  {/* 1 pza es redundante junto al peso — solo se muestra a partir de 2. */}
+                  {d.pkg.pieces != null && d.pkg.pieces > 1 && (
+                    <>
+                      {d.pkg.pieces} pzs
+                      <span class="text-gray-300" aria-hidden="true">·</span>
+                    </>
+                  )}
                   {d.pkg.effective_weight_lb != null ? (
                     <span class="font-medium tabular-nums text-gray-800">{d.pkg.effective_weight_lb} lb{d.pkg.weight_override_lb != null && <span class="ml-1 text-[10px] font-normal text-gray-400">(fijado a mano)</span>}</span>
                   ) : (
