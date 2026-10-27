@@ -4,6 +4,7 @@
 import PublicHeader from './PublicHeader.astro'
 import PublicFooter from './PublicFooter.astro'
 import LegalNav from './LegalNav.astro'
+import ContactForm from './ContactForm.tsx'
 import type { LegalEntry } from '../../lib/legal'
 
 interface Props {
@@ -13,6 +14,9 @@ interface Props {
 
 const { entry, Content } = Astro.props
 const { title, description, updatedAt } = entry.data
+
+// /soporte aloja el formulario real (CTA de la landing → /soporte#contacto).
+const isSupport = entry.data.slug === 'soporte'
 
 const fmt = new Intl.DateTimeFormat('es-NI', {
   year: 'numeric',
@@ -40,6 +44,20 @@ const currentPath = `/${entry.data.slug}`
           Última actualización: <time datetime={updatedAt.toISOString().slice(0, 10)}>{updated}</time>
         </p>
       </header>
+
+      {
+        isSupport && (
+          <section id="contacto" class="mt-8 scroll-mt-24 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 class="font-display text-xl font-bold text-navy">Envíanos un mensaje</h2>
+            <p class="mt-1 text-sm text-neutral-text">
+              Completa el formulario y te respondemos directamente a tu correo.
+            </p>
+            <div class="mt-5">
+              <ContactForm client:load />
+            </div>
+          </section>
+        )
+      }
 
       <!-- Render del Markdown nativo de Astro. Sin set:html arbitrario. -->
       <div class="prose-legal mt-8">

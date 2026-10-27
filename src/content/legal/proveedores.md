@@ -42,5 +42,5 @@ descrita. Orbit no autoriza a ninguno a utilizar los datos para sus propios fine
 
 ## 6. Contacto
 
-Para consultas sobre este documento o sobre los encargados del tratamiento, escriba a
-**orbit.system.ni@gmail.com**.
+Para consultas sobre este documento o sobre los encargados del tratamiento, usa el
+[formulario de contacto](/soporte#contacto).

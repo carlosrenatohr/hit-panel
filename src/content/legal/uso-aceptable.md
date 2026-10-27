@@ -44,9 +44,9 @@ finales. Comprométete a:
 
 ## 5. Reporte de abuso
 
-Si detecta un uso que viole estas reglas, repórtelo a **orbit.system.ni@gmail.com** con el
-asunto `[SOPORTE]`. Para reportes de seguridad, use `[SEGURIDAD]`; consulte
-[Seguridad](/seguridad).
+Si detecta un uso que viole estas reglas, repórtalo desde el
+[formulario de contacto](/soporte#contacto) con el motivo `Reportar un problema`. Para reportes
+de seguridad, elige `Reportar un problema`; consulte [Seguridad](/seguridad).
 
 ## 6. Aplicación
 
