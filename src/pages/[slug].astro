@@ -1,0 +1,30 @@
+---
+// Ruta dinámica del centro legal. getStaticPaths solo genera las rutas de la
+// allowlist (`LEGAL_SLUGS`) que además estén PUBLICADAS: los drafts no se
+// generan como HTML, no aparecen en la navegación ni en el sitemap.
+import { render } from 'astro:content'
+import Public from '../layouts/Public.astro'
+import LegalDocument from '../components/public/LegalDocument.astro'
+import { LEGAL_SLUGS, getPublishedLegalBySlug } from '../lib/legal'
+
+export async function getStaticPaths() {
+  const paths = []
+  for (const slug of LEGAL_SLUGS) {
+    const entry = await getPublishedLegalBySlug(slug)
+    if (!entry) continue // draft o inexistente → no se genera ruta
+    paths.push({ params: { slug }, props: { entry } })
+  }
+  return paths
+}
+
+const { entry } = Astro.props
+const { Content } = await render(entry)
+---
+
+<Public
+  title={`${entry.data.title} — Orbit`}
+  description={entry.data.description}
+  canonicalPath={`/${entry.data.slug}`}
+>
+  <LegalDocument entry={entry} Content={Content} />
+</Public>

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# El panel (`/`) es una SPA con meta noindex en su HTML; las páginas públicas
+# (/main, /soporte, /uso-aceptable) sí son indexables.

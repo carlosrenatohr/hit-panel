@@ -1,0 +1,56 @@
+---
+// Layout público — separado de Base.astro (que envuelve el panel con `noindex`).
+// Este layout SÍ es indexable: sirve a la landing y a los documentos legales.
+// No se modifica Base.astro para no tocar la pantalla de login de `/`.
+import '../styles/global.css'
+
+interface Props {
+  title: string
+  description?: string
+  /** Canonical path (ej. `/main`, `/soporte`). */
+  canonicalPath?: string
+}
+
+const {
+  title,
+  description = 'Orbit — plataforma de operación logística: seguimiento de paquetes y facturación.',
+  canonicalPath,
+} = Astro.props
+
+const siteUrl = Astro.site ?? new URL(Astro.url.origin)
+const canonical = canonicalPath ? new URL(canonicalPath, siteUrl).href : Astro.url.href
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Página pública: indexable (a diferencia del panel). -->
+    <meta name="robots" content="index, follow" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <!-- Open Graph básico -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Orbit" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <!-- Mismas tipografías que el panel y el sitio (brand book §04). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Poppins:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="min-h-screen bg-neutral-bg text-secondary antialiased">
+    <slot />
+  </body>
+</html>
