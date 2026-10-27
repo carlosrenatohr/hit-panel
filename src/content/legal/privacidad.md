@@ -15,7 +15,7 @@ navOrder: 1
 
 Orbit es la plataforma de operación logística que gestiona el seguimiento de paquetes y la
 facturación asociada. Para consultas sobre este aviso o sobre el tratamiento de sus datos,
-escríbanos a **orbit.system.ni@gmail.com**.
+usa el [formulario de contacto](/soporte#contacto).
 
 ## 2. Datos que tratamos
 
@@ -73,7 +73,7 @@ confidencialidad, está disponible en el documento de [Proveedores](/proveedores
 ## 6. Derechos
 
 Puede solicitar el acceso, la corrección o la supresión de sus datos personales, así como
-la limitación de su tratamiento, escribiendo a **orbit.system.ni@gmail.com**. Responderemos
+la limitación de su tratamiento, a través del [formulario de contacto](/soporte#contacto). Responderemos
 a cada solicitud en un plazo razonable. Cuando la supresión afecte registros que deban
 conservarse por obligación fiscal, indicaremos el alcance de la limitación.
 

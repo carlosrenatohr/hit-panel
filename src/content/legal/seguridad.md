@@ -51,9 +51,10 @@ para poder reconstruir qué cambió y quién lo hizo.
 
 ## 6. Reporte de vulnerabilidades
 
-Si detecta una vulnerabilidad, escríbanos a **orbit.system.ni@gmail.com** con el asunto
-`[SEGURIDAD]` y una descripción clara. No incluya en el correo datos de clientes ni
-credenciales. Le confirmaremos la recepción y le informaremos los próximos pasos.
+Si detecta una vulnerabilidad, repórtala desde el
+[formulario de contacto](/soporte#contacto) con el motivo `Reportar un problema` y una
+descripción clara. No incluyas datos de clientes ni credenciales. Te confirmaremos la
+recepción y te informaremos los próximos pasos.
 
 ## 7. Compromisos
 
