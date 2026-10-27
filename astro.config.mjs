@@ -5,6 +5,9 @@ import tailwind from '@astrojs/tailwind'
 // Static SPA: the panel renders client-side (client:only) and talks to InsForge directly with the
 // signed-in user's JWT. No SSR/secrets at the edge — it deploys as static assets to Cloudflare Pages.
 export default defineConfig({
+  // Canonical origin for the public pages (landing + legal). Without this, the
+  // canonical/og:url tags fall back to the build-time localhost origin.
+  site: 'https://hit-panel.pages.dev',
   integrations: [preact(), tailwind()],
   output: 'static',
 })
