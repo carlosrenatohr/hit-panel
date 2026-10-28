@@ -359,7 +359,12 @@ export default function ShipmentDetail({
           <InvoiceForm
             invoiceId={linkedInvoiceId ?? undefined}
             prefill={linkedInvoiceId ? undefined : {
-              clientName: cleanName(d.pkg.referencia_name) === '—' ? '' : cleanName(d.pkg.referencia_name),
+              // The assigned client is the pricing authority: pass its id so the
+              // Worker applies its default rate, and show the canonical name
+              // (referencia_name is free text and may not match the client row).
+              clientId: d.pkg.client_id ?? undefined,
+              clientName: d.pkg.billing_clients?.name?.trim()
+                || (cleanName(d.pkg.referencia_name) === '—' ? '' : cleanName(d.pkg.referencia_name)),
               lines: [
                 {
                   freightType: (d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'MAR' : 'AIR',

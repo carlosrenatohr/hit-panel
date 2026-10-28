@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Factura individual con la tarifa del cliente**: el detalle del paquete prellena la
+  factura con el `clientId` y el nombre canónico del cliente asignado; el formulario
+  envía el id y la vista previa usa su tarjeta de tarifa por defecto en vez del
+  catálogo general.
+
 ## [0.5.0] — 2026-09-29
 
 ### Added

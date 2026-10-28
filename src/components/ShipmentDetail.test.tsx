@@ -98,6 +98,12 @@ const refreshPackage = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true, pr
 vi.mock('../lib/refresh', () => ({
   refreshPackage,
   refreshCooldownUntil: vi.fn().mockReturnValue(0),
+}))
+
+vi.mock('./billing/InvoiceForm', () => ({
+  default: ({ prefill }: { prefill?: { clientId?: string; clientName?: string } }) => (
+    <div>{`Mock InvoiceForm: ${prefill?.clientId ?? '(sin id)'} | ${prefill?.clientName ?? ''}`}</div>
+  ),
 }));
 
 const adminUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
@@ -230,6 +236,21 @@ describe('ShipmentDetail', () => {
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
 
     expect(screen.getByText(/Mock ClientSearch: \(vacío\)/)).toBeTruthy();
+  });
+
+  it('prefills the invoice with the assigned client id + canonical name (rate authority)', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({
+      client_id: 'c1',
+      billing_clients: { name: 'Original Express' },
+      referencia_name: 'HAZMAT ORIGINAL EXPRESS',
+      effective_status: 'entregado',
+      invoice_packages: [],
+    }));
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Factura' }));
+    await waitFor(() => expect(screen.getByText('Mock InvoiceForm: c1 | Original Express')).toBeTruthy());
   });
 
   it('guarda el peso editado en Acciones con set_package_weight', async () => {

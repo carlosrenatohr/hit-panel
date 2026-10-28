@@ -2,7 +2,7 @@ import { Check, Plus, Trash2, X } from 'lucide-preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier, type UnbilledPackage } from '../../lib/billing'
 import { configApi, type ChargeConcept, type RateCardInfo } from '../../lib/config'
-import type { Customer } from '../../lib/customer'
+import { customerApi, type Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner, Tooltip } from '../ui'
 import ClientSearch from '../ui/ClientSearch'
@@ -158,6 +158,27 @@ export default function InvoiceForm({
     }
   }, [clientId])
 
+  // Prefilled client (package detail): hydrate the canonical name + default rate
+  // so the preview matches what the Worker will price. Server stays authoritative.
+  // Only for the prefill path — a client picked in ClientSearch already carries
+  // its defaults, and re-reading them here would race that selection.
+  useEffect(() => {
+    const prefilledId = prefill?.clientId
+    if (isEdit || !prefilledId) return
+    let alive = true
+    customerApi
+      .get(prefilledId)
+      .then((c) => {
+        if (!alive) return
+        setClientName(c.name)
+        setClientDefaultRate(c.defaultRateCardId ?? c.defaultRateId ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
   const activeConcepts = useMemo(() => concepts.filter((c) => c.active), [concepts])
 
   // Rate cards for a freight (each card prices AIR and MAR; the line picks by service).
@@ -186,15 +207,20 @@ export default function InvoiceForm({
 
   function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; profit: number } {
     const lbs = Number(l.quantityLbs) || 0
-    if (l.rateTableId) {
-      const card = rateCards.find((c) => c.id === l.rateTableId)
-      const entry = card?.currentVersion.entries.find((e) => e.serviceType === l.freightType)
+    // Mirror the Worker's resolution: explicit table, then the client's default
+    // card when it prices this freight, then any org card. Only unmigrated orgs
+    // (no cards) fall back to the legacy catalog preview.
+    const hasFreight = (c: RateCardInfo) => c.currentVersion.entries.some((e) => e.serviceType === l.freightType)
+    const explicit = l.rateTableId ? rateCards.find((c) => c.id === l.rateTableId) : undefined
+    const clientDefault = clientDefaultRate ? rateCards.find((c) => c.id === clientDefaultRate) : undefined
+    const card = explicit ?? (clientDefault && hasFreight(clientDefault) ? clientDefault : rateCards.find(hasFreight))
+    if (card) {
+      const entry = card.currentVersion.entries.find((e) => e.serviceType === l.freightType)
       if (!entry) return { unitPrice: null, total: 0, profit: 0 }
       const total = round2(lbs * entry.price)
       const profit = round2(total - lbs * entry.cost)
       return { unitPrice: entry.price, total, profit }
     }
-    // Client default / legacy: catalog preview (the server resolves the real card).
     const entry = catalog.find((c) => c.freightType === l.freightType)
     const price = entry?.tiers[l.tier]
     if (price == null) return { unitPrice: null, total: 0, profit: 0 }
@@ -291,6 +317,8 @@ export default function InvoiceForm({
       } else {
         view = await billingApi.createInvoice({
           clientName: clientName.trim(),
+          // Empty string = client typed inline (allowCreate) → let the server resolve by name.
+          clientId: clientId || undefined,
           issueDate,
           observations: observations || null,
           lines: cleanLines,

@@ -21,6 +21,14 @@ const createInvoice = vi.hoisted(() => vi.fn().mockResolvedValue(createdView))
 const updateInvoice = vi.hoisted(() => vi.fn().mockResolvedValue(createdView))
 const getInvoice = vi.hoisted(() => vi.fn().mockResolvedValue(createdView))
 const unbilledPackages = vi.hoisted(() => vi.fn().mockResolvedValue({ clientId: 'c1', packages: UNBILLED }))
+const getCustomer = vi.hoisted(() => vi.fn(async (id: string) => ({
+  id,
+  name: id === 'c-orig' ? 'Original Express' : 'Ana',
+  nameNormalized: id === 'c-orig' ? 'original express' : 'ana',
+  casillero: null, toReview: false, email: null, phone: null, address: null,
+  defaultRateId: null,
+  defaultRateCardId: id === 'c-orig' ? 't-orig' : null,
+})))
 
 vi.mock('../../lib/billing', () => ({
   billingApi: {
@@ -31,6 +39,8 @@ vi.mock('../../lib/billing', () => ({
     getInvoice,
   },
 }))
+
+vi.mock('../../lib/customer', () => ({ customerApi: { get: getCustomer } }))
 
 vi.mock('../../lib/config', () => ({
   configApi: {
@@ -53,6 +63,24 @@ vi.mock('../../lib/config', () => ({
             entries: [
               { id: 'e1', serviceType: 'AIR', name: 'Regular', unit: 'lb', price: 7, cost: 4.5 },
               { id: 'e2', serviceType: 'MAR', name: 'Regular', unit: 'lb', price: 2.8, cost: 1.25 },
+            ],
+          },
+        },
+        {
+          id: 't-orig',
+          organizationId: 'hit',
+          name: 'Original Express',
+          structure: 'simple_pair',
+          createdAt: '',
+          updatedAt: '',
+          currentVersion: {
+            id: 'v-orig',
+            version: 1,
+            priceModel: 'weight',
+            currency: 'USD',
+            status: 'published',
+            entries: [
+              { id: 'eo1', serviceType: 'AIR', name: 'Regular', unit: 'lb', price: 12, cost: 6 },
             ],
           },
         },
@@ -168,5 +196,37 @@ describe('InvoiceForm guided flow', () => {
     await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
     const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ packageId: string | null }> }
     expect(body.lines.map((l) => l.packageId).filter(Boolean)).toEqual(['p1', 'p3'])
+  })
+})
+describe('InvoiceForm package-detail prefill (client rate)', () => {
+  it('sends the assigned clientId and previews the client default card, not the catalog', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const onCreated = vi.fn()
+    render(
+      <InvoiceForm
+        prefill={{
+          clientId: 'c-orig',
+          clientName: 'ORIGINAL EXPRESS',
+          packageIds: ['pkg-1'],
+          lines: [{ freightType: 'AIR', tier: 'REGULAR', quantityLbs: 5, packageId: 'pkg-1', guia: 'G-1', tracking: null }],
+        }}
+        onClose={() => {}}
+        onCreated={onCreated}
+      />,
+    )
+
+    await waitFor(() => expect(getCustomer).toHaveBeenCalledWith('c-orig'))
+    // 5 lb × 12 (client default card) — NOT × 7 (first org card/catalog).
+    await waitFor(() => expect(screen.getAllByText('$60.00').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('$12.00/lb').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByText('Crear factura'))
+    await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
+    const payload = createInvoice.mock.calls[0][0]
+    expect(payload.clientId).toBe('c-orig')
+    expect(payload.clientName).toBe('Original Express')
+    expect(payload.lines[0]).toMatchObject({ packageId: 'pkg-1', quantityLbs: 5, freightType: 'AIR' })
+    expect(onCreated).toHaveBeenCalledWith(createdView)
   })
 })

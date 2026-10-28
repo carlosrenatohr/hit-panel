@@ -142,6 +142,8 @@ export interface InvoiceFilters {
 }
 export interface CreateInvoiceInput {
   clientName: string
+  /** Assigned billing client — the server prices with its default rate. */
+  clientId?: string | null
   issueDate?: string
   address?: string | null
   specialPrice?: boolean
