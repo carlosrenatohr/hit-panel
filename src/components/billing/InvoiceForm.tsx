@@ -1,5 +1,5 @@
 import { Check, Plus, Trash2, X } from 'lucide-preact'
-import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightType, type InvoiceView, type PriceTier, type UnbilledPackage } from '../../lib/billing'
 import { configApi, type ChargeConcept, type RateCardInfo } from '../../lib/config'
 import { customerApi, type Customer } from '../../lib/customer'
@@ -119,7 +119,9 @@ export default function InvoiceForm({
                 tier: (l.priceTier ?? 'REGULAR') as PriceTier,
                 quantityLbs: String(l.quantityLbs ?? ''),
                 description: l.description ?? '',
-                rateTableId: null,
+                // Keep the card that priced the line; the client's current
+                // default only fills lines without one (hydrated above).
+                rateTableId: l.rateCardId ?? null,
                 guia,
                 tracking,
                 packageId: l.packageId ?? null,
@@ -158,18 +160,20 @@ export default function InvoiceForm({
     }
   }, [clientId])
 
-  // Prefilled client (package detail): hydrate the canonical name + default rate
-  // so the preview matches what the Worker will price. Server stays authoritative.
-  // Only for the prefill path — a client picked in ClientSearch already carries
-  // its defaults, and re-reading them here would race that selection.
+  // Hydrate the selected / prefilled / edited client: canonical name + assigned
+  // rate card. The Worker prices freight with the client's default card, so the
+  // preview AND the "Tarifa" select must use that same card, not the first org
+  // card. A client picked in ClientSearch already carries its defaults, so only
+  // ids that arrive without them (prefill, edit) are fetched.
+  const defaultsFor = useRef<string | null>(null)
   useEffect(() => {
-    const prefilledId = prefill?.clientId
-    if (isEdit || !prefilledId) return
+    if (!clientId || defaultsFor.current === clientId) return
     let alive = true
     customerApi
-      .get(prefilledId)
+      .get(clientId)
       .then((c) => {
         if (!alive) return
+        defaultsFor.current = clientId
         setClientName(c.name)
         setClientDefaultRate(c.defaultRateCardId ?? c.defaultRateId ?? null)
       })
@@ -177,7 +181,32 @@ export default function InvoiceForm({
     return () => {
       alive = false
     }
-  }, [])
+  }, [clientId])
+
+  // Make the client's card the visible tariff on every freight line that doesn't
+  // carry one yet (guided lines, prefill, edit). Cards that don't price the
+  // line's freight are skipped; the backend still resolves the final price.
+  // Applied once per client card so an explicit "(tarifa del cliente)" choice
+  // made afterwards is respected.
+  const appliedDefaultFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!clientDefaultRate) {
+      appliedDefaultFor.current = null
+      return
+    }
+    const appliedKey = `${clientId ?? ''}:${clientDefaultRate}`
+    if (appliedDefaultFor.current === appliedKey) return
+    const card = rateCards.find((c) => c.id === clientDefaultRate)
+    if (!card) return // cards still loading — retry when they arrive
+    appliedDefaultFor.current = appliedKey
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.rateTableId) return l
+        const entry = card.currentVersion.entries.find((e) => e.serviceType === l.freightType)
+        return entry ? { ...l, rateTableId: card.id, tier: entry.name as PriceTier } : l
+      }),
+    )
+  }, [clientId, clientDefaultRate, rateCards])
 
   const activeConcepts = useMemo(() => concepts.filter((c) => c.active), [concepts])
 
@@ -359,6 +388,7 @@ export default function InvoiceForm({
                   setClientName(c.name)
                   if (!isEdit) {
                     setClientId(c.id)
+                    defaultsFor.current = c.id
                     setClientDefaultRate(c.defaultRateCardId ?? c.defaultRateId ?? null)
                     setSelectedIds([])
                     setLines([])

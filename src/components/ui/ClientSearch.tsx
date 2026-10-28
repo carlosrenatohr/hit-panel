@@ -43,26 +43,29 @@ export default function ClientSearch({
   const [highlight, setHighlight] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
-  const firstRun = useRef(true)
+  /** True only when the last query change came from typing. A programmatic
+   *  change (selection, clear, parent prefill) must not re-run the search: that
+   *  is what reopened the dropdown right after picking a client and made the
+   *  selection look uncommitted. */
+  const typedQuery = useRef(false)
 
   // Keep internal query in sync when parent changes value.
   useEffect(() => { setQuery(value) }, [value])
 
   // Debounced search — starts from the first character (tenant preference: the
-  // staff types a short name and wants matches immediately).
+  // staff types a short name and wants matches immediately). Prefilled or
+  // selected values stay quiet until the user types again.
   useEffect(() => {
     const q = query.trim()
-    const first = firstRun.current
-    firstRun.current = false
-    if (q.length < 1) { setResults([]); return }
+    const typed = typedQuery.current
+    typedQuery.current = false
+    if (!typed || q.length < 1) { setResults([]); setOpen(false); return }
     const t = setTimeout(async () => {
       setLoading(true)
       try {
         const { rows } = await customerApi.list({ search: q, statuses: includeInactive ? undefined : ['active'], pageSize: 8 })
         setResults(rows)
-        // Don't pop the dropdown open for a prefilled value (e.g. the assigned
-        // client in the package detail) — only for a query the user typed.
-        if (!first) setOpen(true)
+        setOpen(true)
         setHighlight(0)
       } catch { setResults([]) }
       finally { setLoading(false) }
@@ -81,6 +84,9 @@ export default function ClientSearch({
 
   function select(c: Customer) {
     onSelect(c)
+    // Selection is final: mirror the name in the input and drop the matches so
+    // focusing again doesn't reopen the list.
+    setResults([])
     setQuery(c.name)
     setOpen(false)
   }
@@ -90,6 +96,7 @@ export default function ClientSearch({
     if (!name) return
     // Build a minimal Customer-like object; the caller will persist via API.
     onSelect({ id: '', name, nameNormalized: name.toLowerCase(), casillero: null, toReview: false, email: null, phone: null, address: null, defaultRateId: null, defaultRateCardId: null })
+    setResults([])
     setOpen(false)
   }
 
@@ -113,7 +120,7 @@ export default function ClientSearch({
           placeholder={loading ? 'Buscando…' : placeholder}
           value={query}
           disabled={disabled}
-          onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+          onInput={(e) => { typedQuery.current = true; setQuery((e.target as HTMLInputElement).value) }}
           onFocus={() => { if (results.length) setOpen(true) }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => Math.min(h + 1, results.length - 1 + (allowCreate && !exactMatch ? 1 : 0))) }
