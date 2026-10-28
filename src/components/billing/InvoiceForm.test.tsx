@@ -67,6 +67,24 @@ vi.mock('../../lib/config', () => ({
           },
         },
         {
+          id: 't-vip',
+          organizationId: 'hit',
+          name: 'Tarjeta VIP',
+          structure: 'simple_pair',
+          createdAt: '',
+          updatedAt: '',
+          currentVersion: {
+            id: 'v-vip',
+            version: 1,
+            priceModel: 'weight',
+            currency: 'USD',
+            status: 'published',
+            entries: [
+              { id: 'ev1', serviceType: 'AIR', name: 'VIP', unit: 'lb', price: 5.5, cost: 4.5 },
+            ],
+          },
+        },
+        {
           id: 't-orig',
           organizationId: 'hit',
           name: 'Original Express',
@@ -98,6 +116,7 @@ vi.mock('../ui/ClientSearch', () => ({
       <button type="button" onClick={() => onSelect({ id: 'c2', name: 'Luis', defaultRateId: 't1' })}>select-client-with-table</button>
       <button type="button" onClick={() => onSelect({ id: 'c3', name: 'Carla', defaultRateCardId: 't1' })}>select-client-with-card</button>
       <button type="button" onClick={() => onSelect({ id: 'c-orig', name: 'Original Express', defaultRateCardId: 't-orig' })}>select-client-orig</button>
+      <button type="button" onClick={() => onSelect({ id: 'c-vip', name: 'Vip Co', defaultRateCardId: 't-vip' })}>select-client-vip</button>
     </>
   ),
 }))
@@ -190,6 +209,23 @@ describe('InvoiceForm guided flow', () => {
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     const payload = createInvoice.mock.calls[0][0]
     expect(payload.lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't1' })
+  })
+
+  it('guided line starts on the card tier (no blank select) and submits it', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderForm()
+    fireEvent.click(screen.getByText('select-client-vip'))
+    await waitFor(() => expect(unbilledPackages).toHaveBeenCalledWith('c-vip'))
+    fireEvent.click(await screen.findByText('SG-1'))
+    const tariff = screen.getByLabelText(/Tarifa/) as HTMLSelectElement
+    expect(tariff.value).toBe('t-vip')
+    const tier = screen.getByDisplayValue('VIP') as HTMLSelectElement
+    expect(tier.value).toBe('VIP')
+    expect(screen.getAllByText('$16.50').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('Crear factura'))
+    await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
+    expect(createInvoice.mock.calls[0][0].lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't-vip', tier: 'VIP' })
   })
 
   it('edit mode keeps the line card that priced it and defaults the rest to the client card', async () => {
