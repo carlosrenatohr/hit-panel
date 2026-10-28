@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   «Tarifa» y la vista previa usa esa tarifa. Antes el selector decía «(tarifa del cliente)»
   y el preview caía a la primera tarjeta de la agencia, aunque el Worker sí cobrara la
   tarifa del cliente. Al editar se conserva la tarjeta que fijó el precio de cada línea.
+- **Tier de la tarjeta**: al aplicar la tarjeta del cliente la línea arranca con el tier de
+  esa tarjeta; antes nacía en `REGULAR` y el selector «Tier» quedaba vacío cuando la
+  tarjeta usaba otro nombre (p. ej. `VIP`).
 - **Factura individual con la tarifa del cliente**: el detalle del paquete prellena la
   factura con el `clientId` y el nombre canónico del cliente asignado; el formulario
   envía el id y la vista previa usa su tarjeta de tarifa por defecto en vez del

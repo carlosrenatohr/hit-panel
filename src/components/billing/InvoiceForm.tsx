@@ -234,6 +234,13 @@ export default function InvoiceForm({
     return entry ? LEGACY_TIERS.filter((t) => entry.tiers[t] != null) : []
   }
 
+  /** Tier to start a line with: the card's own entry name when a card prices it
+   *  (so the tier select isn't left blank), legacy catalog otherwise. */
+  function tierFor(freightType: FreightType, rateCardId: string | null): PriceTier {
+    const tiers = tiersFor(freightType, rateCardId)
+    return tiers[0] ?? 'REGULAR'
+  }
+
   function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; profit: number } {
     const lbs = Number(l.quantityLbs) || 0
     // Mirror the Worker's resolution: explicit table, then the client's default
@@ -281,7 +288,8 @@ export default function InvoiceForm({
   }
 
   function addFreightLine() {
-    setLines((ls) => [...ls, { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: clientDefaultFor('AIR'), guia: null, tracking: null, packageId: null }])
+    const tableId = clientDefaultFor('AIR')
+    setLines((ls) => [...ls, { freightType: 'AIR', tier: tierFor('AIR', tableId), quantityLbs: '', description: '', rateTableId: tableId, guia: null, tracking: null, packageId: null }])
   }
 
   /** Guided flow: select/deselect a package → one freight line per selected package. */
@@ -292,14 +300,15 @@ export default function InvoiceForm({
       if (has) return ls.filter((l) => l.packageId !== pkg.packageId)
       if (ls.some((l) => l.packageId === pkg.packageId)) return ls
       const freightType = pkg.freightType ?? (pkg.serviceType === 'maritimo' ? 'MAR' : 'AIR')
+      const tableId = clientDefaultFor(freightType)
       return [
         ...ls,
         {
           freightType,
-          tier: 'REGULAR',
+          tier: tierFor(freightType, tableId),
           quantityLbs: String(pkg.weightLb ?? ''),
           description: '',
-          rateTableId: clientDefaultFor(freightType),
+          rateTableId: tableId,
           guia: pkg.guia,
           tracking: pkg.tracking,
           packageId: pkg.packageId,
@@ -494,7 +503,7 @@ export default function InvoiceForm({
                   {tiers.length > 0 && (
                     <div class="mt-2 flex items-center gap-2">
                       <span class="text-[11px] text-gray-400">Tier:</span>
-                      <select class={`${inputCls} w-auto text-xs`} value={l.tier} onChange={(e) => setLine(i, { tier: (e.target as HTMLSelectElement).value })}>
+                      <select class={`${inputCls} w-auto text-xs`} value={tiers.includes(l.tier) ? l.tier : tiers[0]} onChange={(e) => setLine(i, { tier: (e.target as HTMLSelectElement).value })}>
                         {tiers.map((t) => <option key={t} value={t}>{TIER_LABEL[t] ?? t}</option>)}
                       </select>
                     </div>
