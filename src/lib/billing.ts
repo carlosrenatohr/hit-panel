@@ -67,6 +67,10 @@ export interface InvoiceView extends InvoiceListRow {
     profit: number
     priceTier: PriceTier | null
     priceOffCatalog: boolean
+    /** Card that priced this line (frozen snapshot) — keeps the original tariff
+     *  selected when editing, so a save never re-prices it by accident. */
+    rateCardId?: string | null
+    pricingSource?: string | null
     packageId: string | null
     packageGuia: string | null
     packageTracking: string | null

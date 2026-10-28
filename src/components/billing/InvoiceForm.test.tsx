@@ -92,10 +92,12 @@ vi.mock('../../lib/config', () => ({
 }))
 
 vi.mock('../ui/ClientSearch', () => ({
-  default: ({ onSelect }: { onSelect: (c: { id: string; name: string; defaultRateId?: string | null }) => void }) => (
+  default: ({ onSelect }: { onSelect: (c: { id: string; name: string; defaultRateId?: string | null; defaultRateCardId?: string | null }) => void }) => (
     <>
       <button type="button" onClick={() => onSelect({ id: 'c1', name: 'Ana' })}>select-client</button>
       <button type="button" onClick={() => onSelect({ id: 'c2', name: 'Luis', defaultRateId: 't1' })}>select-client-with-table</button>
+      <button type="button" onClick={() => onSelect({ id: 'c3', name: 'Carla', defaultRateCardId: 't1' })}>select-client-with-card</button>
+      <button type="button" onClick={() => onSelect({ id: 'c-orig', name: 'Original Express', defaultRateCardId: 't-orig' })}>select-client-orig</button>
     </>
   ),
 }))
@@ -171,6 +173,53 @@ describe('InvoiceForm guided flow', () => {
     expect(payload.lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't1' })
   })
 
+  it('shows the client special rate as the visible tariff (not just implied) and prices with it', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderForm()
+    fireEvent.click(screen.getByText('select-client-with-card'))
+    await waitFor(() => expect(unbilledPackages).toHaveBeenCalledWith('c3'))
+    fireEvent.click(await screen.findByText('SG-1'))
+    // 3 lb × 7 (client card) — the select must name the card, not say "(tarifa del cliente)".
+    const tariff = screen.getByLabelText(/Tarifa/) as HTMLSelectElement
+    expect(tariff.value).toBe('t1')
+    expect(tariff.selectedOptions[0]?.textContent).toBe('Estándar')
+    expect(screen.getAllByText('$21.00').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('$7.00/lb').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('Crear factura'))
+    await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
+    const payload = createInvoice.mock.calls[0][0]
+    expect(payload.lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't1' })
+  })
+
+  it('edit mode keeps the line card that priced it and defaults the rest to the client card', async () => {
+    const editView: InvoiceView = {
+      ...createdView,
+      id: 'inv2',
+      clientId: 'c-orig',
+      status: 'DRAFT',
+      lines: [
+        { lineNo: 1, description: null, freightType: 'AIR', lineType: 'freight', quantityLbs: 2, unitPrice: 7, total: 14, freightCost: 4.5, profit: 2, priceTier: 'REGULAR', priceOffCatalog: false, rateCardId: 't1', packageId: null, packageGuia: null, packageTracking: null },
+        { lineNo: 2, description: null, freightType: 'AIR', lineType: 'freight', quantityLbs: 3, unitPrice: 5, total: 15, freightCost: 4.5, profit: 2, priceTier: 'REGULAR', priceOffCatalog: false, rateCardId: null, packageId: null, packageGuia: null, packageTracking: null },
+      ],
+      packages: [],
+    }
+    getInvoice.mockResolvedValue(editView)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    render(<InvoiceForm invoiceId="inv2" onClose={() => {}} onCreated={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Editar factura')).toBeTruthy())
+    await waitFor(() => expect(getCustomer).toHaveBeenCalledWith('c-orig'))
+    const tariffs = (await screen.findAllByLabelText(/Tarifa/)) as HTMLSelectElement[]
+    // Line 1 keeps its own card; line 2 inherits the client's assigned card.
+    expect(tariffs[0].value).toBe('t1')
+    expect(tariffs[1].value).toBe('t-orig')
+    fireEvent.click(screen.getByText('Guardar cambios'))
+    await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
+    const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ rateTableId: string | null }> }
+    expect(body.lines.map((l) => l.rateTableId)).toEqual(['t1', 't-orig'])
+  })
+
   it('edit mode keeps linked guides selected and lets the user add more', async () => {
     const editView: InvoiceView = {
       ...createdView,
@@ -220,6 +269,9 @@ describe('InvoiceForm package-detail prefill (client rate)', () => {
     // 5 lb × 12 (client default card) — NOT × 7 (first org card/catalog).
     await waitFor(() => expect(screen.getAllByText('$60.00').length).toBeGreaterThan(0))
     expect(screen.getAllByText('$12.00/lb').length).toBeGreaterThan(0)
+    // The client's card is the visible tariff, so the preview can't be mistaken
+    // for the org default.
+    expect((screen.getByLabelText(/Tarifa/) as HTMLSelectElement).value).toBe('t-orig')
 
     fireEvent.click(screen.getByText('Crear factura'))
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))

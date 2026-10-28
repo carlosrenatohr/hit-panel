@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Buscador de clientes**: al elegir un cliente la lista se cerraba y volvía a abrir,
+  porque el nombre seleccionado relanzaba la búsqueda debounced; la selección parecía no
+  quedar firme. Ahora solo una consulta tecleada busca — la selección, el prellenado y el
+  limpiado dejan la lista cerrada hasta que el staff vuelva a escribir.
+- **Tarifa especial del cliente visible por defecto**: al elegir cliente, prellenar desde
+  el paquete o editar un borrador, la tarjeta asignada al cliente aparece seleccionada en
+  «Tarifa» y la vista previa usa esa tarifa. Antes el selector decía «(tarifa del cliente)»
+  y el preview caía a la primera tarjeta de la agencia, aunque el Worker sí cobrara la
+  tarifa del cliente. Al editar se conserva la tarjeta que fijó el precio de cada línea.
 - **Factura individual con la tarifa del cliente**: el detalle del paquete prellena la
   factura con el `clientId` y el nombre canónico del cliente asignado; el formulario
   envía el id y la vista previa usa su tarjeta de tarifa por defecto en vez del
