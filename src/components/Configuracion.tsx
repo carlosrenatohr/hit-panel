@@ -656,7 +656,7 @@ const FREIGHT_LABELS: Record<FreightType, string> = { AIR: 'Aéreo', MAR: 'Marí
 const PRICE_MODEL_LABELS: Record<PriceModel, string> = {
   weight: 'Por peso (US$/lb)',
   volume: 'Por volumen (US$/ft³)',
-  fixed: 'Monto fijo por paquete',
+  fixed: 'Cuota fija (por envío)',
 }
 
 /** One editable card = the two AIR/MAR entries of the current published version. */
@@ -700,7 +700,10 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newModel, setNewModel] = useState<PriceModel>('weight')
+  const [newIsDefault, setNewIsDefault] = useState(false)
   const [modelNotice, setModelNotice] = useState<string | null>(null)
+  /** Flexible pricing pilot: fixed cards + per-kind defaults only when enabled. */
+  const [flexible, setFlexible] = useState(false)
   /** cardId → draft; presence means that card is in edit mode. */
   const [editing, setEditing] = useState<Record<string, CardDraft>>({})
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
@@ -713,8 +716,13 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     setLoading(true)
     setError(null)
     try {
-      const [rates, info] = await Promise.all([configApi.listRateCards(), configApi.info().catch(() => null)])
+      const [rates, info, features] = await Promise.all([
+        configApi.listRateCards(),
+        configApi.info().catch(() => null),
+        configApi.features().catch(() => ({ flexiblePricing: false })),
+      ])
       setCards(rates.cards)
+      setFlexible(features.flexiblePricing)
       setEditing({})
       if (info) setCurrency(info.currency)
     } catch (e) {
@@ -754,12 +762,13 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   }
 
   async function createCard() {
-    if (!newName.trim() || newModel !== 'weight') return
+    if (!newName.trim() || (newModel !== 'weight' && !(newModel === 'fixed' && flexible))) return
     setError(null)
     try {
       const created = await configApi.createRateCard({
         name: newName.trim(),
-        priceModel: 'weight',
+        priceModel: newModel,
+        isDefault: newIsDefault,
         entries: [
           { serviceType: 'AIR', name: 'Regular', price: 0, cost: 0 },
           { serviceType: 'MAR', name: 'Regular', price: 0, cost: 0 },
@@ -769,9 +778,21 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       setCreateOpen(false)
       setNewName('')
       setNewModel('weight')
+      setNewIsDefault(false)
       setModelNotice(null)
       setEditing((prev) => ({ ...prev, [created.id]: toCardDraft(created) }))
       showNotice('Tabla creada. Completa Aéreo y Marítimo y guarda.')
+    } catch (e) {
+      showError(e)
+    }
+  }
+
+  async function makeDefault(id: string) {
+    setError(null)
+    try {
+      const updated = await configApi.setRateCardDefault(id)
+      setCards((prev) => prev.map((x) => (x.pricingKind === updated.pricingKind ? { ...x, isDefault: x.id === updated.id } : x)))
+      showNotice(`"${updated.name}" es la tabla por defecto para ${updated.pricingKind === 'fixed' ? 'servicio fijo' : 'peso'}.`)
     } catch (e) {
       showError(e)
     }
@@ -883,9 +904,15 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-semibold text-gray-800">{card.name}</span>
                   <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{PRICE_MODEL_LABELS[card.currentVersion.priceModel]}</span>
+                  {card.isDefault && <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Por defecto</span>}
                 </div>
               )}
               <div class="flex items-center gap-2">
+                {canWrite && !renaming && flexible && !card.isDefault && (
+                  <Button variant="ghost" onClick={() => void makeDefault(card.id)} disabled={saving === card.id}>
+                    Hacer default
+                  </Button>
+                )}
                 {canWrite && !renaming && (
                   <>
                     <IconButtonSmall label="Renombrar" onClick={() => requestRename(card.id, card.name)}>
@@ -902,6 +929,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
               {(['air', 'mar'] as const).map((key) => {
                 const entry = draft[key]
                 const label = key === 'air' ? 'Aéreo' : 'Marítimo'
+                const isFixed = card.currentVersion.priceModel === 'fixed'
                 return (
                   <div key={key} class="rounded-lg border border-gray-100 p-3">
                     <div class="mb-2 flex items-center justify-between">
@@ -923,7 +951,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                         )}
                       </div>
                       <div>
-                        <div class="text-xs text-gray-400">Precio ({currency})</div>
+                        <div class="text-xs text-gray-400">{isFixed ? `Precio por envío (${currency})` : `Precio (${currency})`}</div>
                         {isEditing ? (
                           <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.price} onChange={(e) => updateField(card.id, key, 'price', (e.target as HTMLInputElement).value)} />
                         ) : (
@@ -931,7 +959,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                         )}
                       </div>
                       <div>
-                        <div class="text-xs text-gray-400">Costo ({currency})</div>
+                        <div class="text-xs text-gray-400">{isFixed ? `Costo por envío (${currency})` : `Costo (${currency})`}</div>
                         {isEditing ? (
                           <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.cost} onChange={(e) => updateField(card.id, key, 'cost', (e.target as HTMLInputElement).value)} />
                         ) : (
@@ -977,15 +1005,26 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                 onChange={(e) => {
                   const m = (e.target as HTMLSelectElement).value as PriceModel
                   setNewModel(m)
-                  setModelNotice(m === 'weight' ? null : 'En construcción — por ahora solo se soporta cobro por peso (US$/lb).')
+                  setModelNotice(m === 'volume' ? 'En construcción — por ahora solo se soporta cobro por peso y cuota fija.' : null)
                 }}
               >
                 <option value="weight">{PRICE_MODEL_LABELS.weight}</option>
+                {flexible && <option value="fixed">{PRICE_MODEL_LABELS.fixed}</option>}
                 <option value="volume">{PRICE_MODEL_LABELS.volume}</option>
-                <option value="fixed">{PRICE_MODEL_LABELS.fixed}</option>
               </select>
             </Field>
             {modelNotice && <p class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{modelNotice}</p>}
+            {newModel === 'fixed' && (
+              <p class="text-xs text-gray-500">
+                Servicio con monto fijo por envío/guía: el cliente paga el precio y el costo interno lo defines tú. El peso no participa en el cobro.
+              </p>
+            )}
+            {flexible && (
+              <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={newIsDefault} onChange={(e) => setNewIsDefault((e.target as HTMLInputElement).checked)} />
+                Marcar como tabla por defecto para este tipo de cobro
+              </label>
+            )}
             {newModel === 'weight' && (
               <p class="text-xs text-gray-500">Se creará con Aéreo y Marítimo vacíos; completalos al editar y guarda.</p>
             )}
@@ -993,7 +1032,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
               <Button variant="ghost" onClick={() => setCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={createCard} disabled={!newName.trim() || newModel !== 'weight'}>
+              <Button onClick={createCard} disabled={!newName.trim() || (newModel !== 'weight' && !(newModel === 'fixed' && flexible))}>
                 <Plus class="h-4 w-4" aria-hidden="true" />
                 Crear
               </Button>

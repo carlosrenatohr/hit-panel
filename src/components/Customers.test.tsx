@@ -14,6 +14,7 @@ vi.mock('../lib/config', () => ({
   configApi: {
     listRateCards: vi.fn().mockResolvedValue({ organizationId: 'hit', cards: [] }),
     audit: vi.fn().mockResolvedValue({ organizationId: 'hit', rows: [], count: 0 }),
+    features: vi.fn().mockResolvedValue({ flexiblePricing: false }),
   },
 }))
 

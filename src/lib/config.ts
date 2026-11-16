@@ -114,6 +114,10 @@ export interface RateCardInfo {
   organizationId: string
   name: string
   structure: string
+  /** Flexible pricing kind ('weight' legacy; 'fixed' = per guía service). */
+  pricingKind: 'weight' | 'fixed' | 'volume'
+  isDefault: boolean
+  active: boolean
   currentVersion: RateCardVersion
   createdAt: string
   updatedAt: string
@@ -204,9 +208,11 @@ export const configApi = {
     api<{ organizationId: string; cards: RateCardInfo[] }>(
       `/rates/v2${organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''}`,
     ),
-  createRateCard: (input: { name: string; priceModel: PriceModel; entries: RateCardEntryInput[] }) =>
+  createRateCard: (input: { name: string; priceModel: PriceModel; entries: RateCardEntryInput[]; isDefault?: boolean }) =>
     api<RateCardInfo>('/rates/v2', { method: 'POST', body: input }),
   renameRateCard: (id: string, name: string) => api<RateCardInfo>(`/rates/v2/${encodeURIComponent(id)}`, { method: 'PATCH', body: { name } }),
+  setRateCardDefault: (id: string) => api<RateCardInfo>(`/rates/v2/${encodeURIComponent(id)}`, { method: 'PATCH', body: { isDefault: true } }),
+  features: () => api<{ flexiblePricing: boolean }>('/features'),
   deleteRateCard: (id: string) => api<{ ok: boolean }>(`/rates/v2/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   replaceCardEntries: (id: string, entries: RateCardEntryInput[]) =>
     api<RateCardInfo>(`/rates/v2/${encodeURIComponent(id)}/entries`, { method: 'PUT', body: { entries } }),

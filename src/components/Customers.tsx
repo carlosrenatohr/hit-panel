@@ -1,7 +1,7 @@
 import { Archive, Ban, Flag, History, Layers, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, UserCheck, Users, GitMerge } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
-import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput } from '../lib/customer'
+import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput, type RateAssignment } from '../lib/customer'
 import type { Role, SessionUser } from '../lib/types'
 import { navigate } from '../lib/router'
 import { getSimilarClients, mergeClients, type SimilarClientPair } from '../lib/insforge'
@@ -105,6 +105,11 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   const [actionId, setActionId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rateCards, setRateCards] = useState<RateCardInfo[]>([])
+  /** Flexible pricing pilot: fixed-service default per client. */
+  const [flexible, setFlexible] = useState(false)
+  const [fixedCardId, setFixedCardId] = useState('')
+  /** Existing assignments (kept intact for non-fixed kinds on save). */
+  const [currentAssignments, setCurrentAssignments] = useState<RateAssignment[]>([])
   const [confirmAction, setConfirmAction] = useState<{ kind: 'save' } | { kind: 'toggle'; customer: Customer } | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<Customer | null>(null)
   const [archivePreview, setArchivePreview] = useState<CustomerDeletePreview | null>(null)
@@ -122,6 +127,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
 
   useEffect(() => {
     configApi.listRateCards().then(({ cards }) => setRateCards(cards)).catch(() => setRateCards([]))
+    configApi.features().then((f) => setFlexible(f.flexiblePricing)).catch(() => setFlexible(false))
   }, [])
 
   useEffect(() => { saveFilters({ statuses, search, from, to }) }, [statuses, search, from, to])
@@ -178,6 +184,18 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   function openEdit(customer: Customer) {
     setError(null)
     setForm({ id: customer.id, name: customer.name, casillero: customer.casillero ?? '', companyName: customer.companyName ?? '', taxId: customer.taxId ?? '', toReview: customer.toReview, email: customer.email ?? '', phone: customer.phone ?? '', address: customer.address ?? '', defaultRateCardId: customer.defaultRateCardId ?? '' })
+    setFixedCardId('')
+    if (flexible) {
+      // Load current assignments: preselect the fixed default and keep the
+      // other kinds intact on save (replace-all semantics server-side).
+      customerApi
+        .rateAssignments(customer.id)
+        .then((rows) => {
+          setCurrentAssignments(rows.map((r) => ({ rateCardId: r.rateCardId, pricingKind: r.pricingKind, transportMode: r.transportMode })))
+          setFixedCardId(rows.find((r) => r.pricingKind === 'fixed')?.rateCardId ?? '')
+        })
+        .catch(() => setCurrentAssignments([]))
+    }
   }
 
   function requestSave() {
@@ -205,6 +223,12 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       }
       if (isEdit && id) await customerApi.update(id, payload)
       else await customerApi.create(payload)
+      // Flexible pricing: sync the client's fixed-service default (edit only —
+      // new clients have no packages yet; defaults can be set right after).
+      if (flexible && isEdit && id) {
+        const fixed = fixedCardId ? [{ rateCardId: fixedCardId, pricingKind: 'fixed' as const, transportMode: null }] : []
+        await customerApi.replaceRateAssignments(id, [...currentAssignments.filter((a) => a.pricingKind !== 'fixed'), ...fixed])
+      }
       setForm(null)
       setRevision((value) => value + 1)
       bumpData('clients')
@@ -364,14 +388,24 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
               <Field label="Dirección">
                 <input class={inputCls} value={form.address ?? ''} onInput={(e) => setForm({ ...form, address: (e.target as HTMLInputElement).value })} />
               </Field>
-              <Field label="Tarifa por defecto">
+              <Field label={flexible ? 'Tarifa por defecto (peso)' : 'Tarifa por defecto'}>
                 <select class={inputCls} value={form.defaultRateCardId ?? ''} onChange={(e) => setForm({ ...form, defaultRateCardId: (e.target as HTMLSelectElement).value })}>
                   <option value="">(sin tarifa asignada)</option>
-                  {rateCards.map((c) => (
+                  {rateCards.filter((c) => c.pricingKind === 'weight').map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </Field>
+              {flexible && (
+                <Field label="Tarifa por defecto (servicio fijo)">
+                  <select class={inputCls} value={fixedCardId} onChange={(e) => setFixedCardId((e.target as HTMLSelectElement).value)}>
+                    <option value="">(sin servicio fijo)</option>
+                    {rateCards.filter((c) => c.pricingKind === 'fixed').map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <label class="flex items-center gap-2 text-sm text-gray-600">
                 <input type="checkbox" checked={form.toReview ?? false} onChange={(e) => setForm({ ...form, toReview: (e.target as HTMLInputElement).checked })} />
                 Requiere revisión
