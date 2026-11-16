@@ -220,6 +220,18 @@ function qs(params: Record<string, unknown>): string {
 export const billingApi = {
   health: () => workerApi<{ module: string; user: { role: string; name: string | null } }>(`${API_BASE}/api/billing/health`),
   catalog: () => workerApi<CatalogEntry[]>(`${API_BASE}/api/billing/catalog`),
+  /** Flexible pricing: fixed-service preview for the create-package form. */
+  pricingPreview: (input: { serviceType: string; clientId?: string | null; rateCardId?: string | null }) =>
+    workerApi<{
+      cardName: string
+      pricingKind: 'fixed' | 'weight'
+      customerCharge: number
+      customerUnit: string
+      currency: 'USD' | 'NIO'
+      quantity: number
+      providerCost?: number
+      grossProfit?: number
+    }>(`${API_BASE}/api/billing/pricing-preview${qs({ serviceType: input.serviceType, clientId: input.clientId ?? undefined, rateCardId: input.rateCardId ?? undefined })}`),
   quote: (freightType: FreightType, tier: PriceTier, lbs: number) =>
     workerApi<Quote>(`${API_BASE}/api/billing/quote${qs({ freightType, tier, lbs })}`),
   listInvoices: (f: InvoiceFilters) => workerApi<{ rows: InvoiceListRow[]; count: number }>(`${API_BASE}/api/billing/invoices${qs({ ...f })}`),

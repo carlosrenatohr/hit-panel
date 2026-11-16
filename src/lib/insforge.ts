@@ -254,6 +254,8 @@ export async function createPackage(input: {
   providerCode?: string | null
   clientId?: string | null
   status?: ShipmentStatus | null
+  /** Flexible pricing: explicit fixed-service card (server validates same-org). */
+  rateCardId?: string | null
 }): Promise<{ id: string; almacenId: string; organizationId: string }> {
   const { error, data } = await insforge.database.rpc('create_package', {
     p_almacen_id: input.almacenId,
@@ -275,6 +277,7 @@ export async function createPackage(input: {
     p_provider_code: input.providerCode ?? null,
     p_client_id: input.clientId ?? null,
     p_status: input.status ?? null,
+    p_rate_card_id: input.rateCardId ?? null,
   })
   if (error) throw error
   const d = data as { id: string; almacen_id: string; organization_id: string; error?: string | null; message?: string | null } | null
