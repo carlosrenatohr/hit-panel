@@ -19,6 +19,8 @@ interface DraftLine {
   tracking: string | null
   /** Package billed by this line (drives the guided flow + server link sync). */
   packageId: string | null
+  /** Fixed package: the panel displays the stored charge; the Worker stays authoritative. */
+  fixedCharge?: number | null
 }
 
 /** Prefill lines may carry display-only guia/tracking/packageId beyond the create shape. */
@@ -242,6 +244,11 @@ export default function InvoiceForm({
   }
 
   function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; profit: number } {
+    // Fixed package: display the stored charge (cost-free preview — the Worker
+    // holds the authoritative snapshot; staff never sees provider cost here).
+    if (l.fixedCharge != null) {
+      return { unitPrice: l.fixedCharge, total: l.fixedCharge, profit: l.fixedCharge }
+    }
     const lbs = Number(l.quantityLbs) || 0
     // Mirror the Worker's resolution: explicit table, then the client's default
     // card when it prices this freight, then any org card. Only unmigrated orgs
@@ -301,17 +308,20 @@ export default function InvoiceForm({
       if (ls.some((l) => l.packageId === pkg.packageId)) return ls
       const freightType = pkg.freightType ?? (pkg.serviceType === 'maritimo' ? 'MAR' : 'AIR')
       const tableId = clientDefaultFor(freightType)
+      const isFixed = pkg.pricingKind === 'fixed' && pkg.customerCharge != null
       return [
         ...ls,
         {
           freightType,
-          tier: tierFor(freightType, tableId),
-          quantityLbs: String(pkg.weightLb ?? ''),
+          tier: isFixed ? 'FIXED' as PriceTier : tierFor(freightType, tableId),
+          // Fixed: one guía = one charge — the stored snapshot is the only input.
+          quantityLbs: isFixed ? '1' : String(pkg.weightLb ?? ''),
           description: '',
-          rateTableId: tableId,
+          rateTableId: isFixed ? null : tableId,
           guia: pkg.guia,
           tracking: pkg.tracking,
           packageId: pkg.packageId,
+          fixedCharge: isFixed ? pkg.customerCharge : null,
         },
       ]
     })
@@ -440,7 +450,11 @@ export default function InvoiceForm({
                       </span>
                       <span class="font-semibold text-gray-700">{p.guia ?? p.packageId.slice(0, 8)}</span>
                       {p.tracking && <span class="font-mono text-gray-400">{p.tracking}</span>}
-                      {p.weightLb != null && <span class="text-gray-400">{p.weightLb} lb</span>}
+                      {p.pricingKind === 'fixed' && p.customerCharge != null ? (
+                        <span class="text-emerald-600">Cuota fija ${p.customerCharge.toFixed(2)}</span>
+                      ) : (
+                        p.weightLb != null && <span class="text-gray-400">{p.weightLb} lb</span>
+                      )}
                       {blocked && <span class="ml-auto text-gray-400">{p.reason}</span>}
                     </button>
                   )

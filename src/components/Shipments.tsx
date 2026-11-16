@@ -1180,7 +1180,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                       <td class="px-3 py-2 font-mono text-xs">{l.guia}</td>
                       <td class="px-3 py-2 font-mono text-xs">{l.tracking ?? '—'}</td>
                       <td class="px-3 py-2">{l.serviceType ?? '—'}</td>
-                      <td class="px-3 py-2">{l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
+                      <td class="px-3 py-2">{l.pricingKind === 'fixed' ? <span class="text-emerald-600">Cuota fija (1 envío)</span> : l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
                       <td class="px-3 py-2 text-right font-medium">${l.total.toFixed(2)}</td>
                     </tr>
                   ))}

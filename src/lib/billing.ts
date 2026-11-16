@@ -166,6 +166,9 @@ export interface UnbilledPackage {
   serviceType: string | null
   freightType: FreightType | null
   weightLb: number | null
+  pricingKind?: string | null
+  customerCharge?: number | null
+  customerUnit?: string | null
   eligible: boolean
   reason: string | null
 }
@@ -184,6 +187,9 @@ export interface BulkPreviewLine {
   total: number
   freightCost: number
   profit: number
+  /** 'fixed' = priced from the package's stored snapshot (quantity is 1 guía). */
+  pricingKind?: 'fixed' | 'weight' | null
+  unit?: string
 }
 export interface BulkPreviewOutput {
   clientName: string
