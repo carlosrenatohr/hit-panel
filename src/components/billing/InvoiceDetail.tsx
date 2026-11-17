@@ -338,7 +338,7 @@ export default function InvoiceDetail({
                             {tracking && <div class="text-[11px] text-gray-500">{tracking}</div>}
                             <div class="text-[11px] text-gray-400">
                               {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
-                              {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
+                              {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : l.pricingSource === 'package_snapshot' ? 'cuota fija' : 'fuera de catálogo'}
                               {l.quantityLbs != null && l.quantityLbs > 0 ? ` · ${l.quantityLbs} lb` : ''}
                             </div>
                           </td>

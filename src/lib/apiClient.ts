@@ -32,7 +32,11 @@ function http(): HttpLike {
 }
 
 function messageOf(e: unknown): string {
-  const m = (e as ErrorLike)?.message
+  // InsForgeError carries the SDK's mapping (data.message — often undefined for
+  // our { ok, error: { message } } envelope) while the REAL message lives in
+  // e.error.message. Surface it so Worker validations read clearly in the UI.
+  const el = e as ErrorLike & { error?: { message?: string } }
+  const m = (typeof el?.message === 'string' && el.message) || (typeof el?.error?.message === 'string' && el.error.message)
   return typeof m === 'string' && m ? m : 'Error inesperado.'
 }
 
