@@ -277,9 +277,10 @@ export async function createPackage(input: {
     p_provider_code: input.providerCode ?? null,
     p_client_id: input.clientId ?? null,
     p_status: input.status ?? null,
-    // Optional param sent ONLY when set: the deployed create_package may not
-    // have the new signature yet (RPC resolution rejects unknown args).
-    ...(input.rateCardId ? { p_rate_card_id: input.rateCardId } : {}),
+    // ALWAYS sent: with the create_package overloads (19/20 args), omitting it
+    // makes PostgREST resolution ambiguous (PGRST203). The 20-arg call is the
+    // uniquely resolvable one.
+    p_rate_card_id: input.rateCardId ?? null,
   })
   if (error) throw error
   const d = data as { id: string; almacen_id: string; organization_id: string; error?: string | null; message?: string | null } | null
