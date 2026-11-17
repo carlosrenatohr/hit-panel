@@ -112,6 +112,19 @@ function qs(params: object): string {
   return result ? `?${result}` : ''
 }
 
+/** Flexible pricing — one client rate assignment (per-client default per pricing kind). */
+export interface RateAssignment {
+  rateCardId: string
+  pricingKind: 'weight' | 'fixed' | 'volume'
+  /** NULL = applies to any transport mode. */
+  transportMode: 'AIR' | 'MAR' | null
+}
+
+export interface RateAssignmentView extends RateAssignment {
+  rateCardName: string
+  rateCardKind: string
+}
+
 export const customerApi = {
   list: (filters: CustomerFilters) => workerApi<{ rows: Customer[]; count: number }>(`${API_BASE}/api/customer/clients${qs(filters)}`),
   get: (id: string) => workerApi<Customer>(`${API_BASE}/api/customer/clients/${id}`),
@@ -127,4 +140,8 @@ export const customerApi = {
   /** Soft delete (never physical) — hides the client from operational reads. */
   delete: (id: string, reason?: string | null) =>
     workerApi<{ id: string; deleted: true }>(`${API_BASE}/api/customer/clients/${id}`, { method: 'DELETE', body: { reason: reason ?? null } }),
+  /** Flexible pricing: the client's active rate assignments (per pricing kind). */
+  rateAssignments: (id: string) => workerApi<RateAssignmentView[]>(`${API_BASE}/api/customer/clients/${id}/rate-assignments`),
+  replaceRateAssignments: (id: string, assignments: RateAssignment[]) =>
+    workerApi<RateAssignmentView[]>(`${API_BASE}/api/customer/clients/${id}/rate-assignments`, { method: 'PUT', body: { assignments } }),
 }

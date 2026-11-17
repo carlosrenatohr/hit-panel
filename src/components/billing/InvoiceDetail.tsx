@@ -339,7 +339,7 @@ export default function InvoiceDetail({
                             <div class="text-[11px] text-gray-400">
                               {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
                               {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : 'fuera de catálogo'}
-                              {l.quantityLbs != null ? ` · ${l.quantityLbs} lb` : ''}
+                              {l.quantityLbs != null && l.quantityLbs > 0 ? ` · ${l.quantityLbs} lb` : ''}
                             </div>
                           </td>
                           <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
