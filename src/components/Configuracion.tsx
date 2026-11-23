@@ -8,7 +8,7 @@ import type { Customer } from '../lib/customer'
 import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogs, RateCardEntryInput, RateCardInfo, PriceModel } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { fmtMoney } from '../lib/format'
-import { Button, Card, ConfirmDialog, Field, Modal, SectionTitle, Spinner, inputCls } from './ui'
+import { Button, Card, ConfirmDialog, Field, Modal, SectionTitle, Spinner, Toast, Tooltip, inputCls } from './ui'
 
 const BRANDING_BUCKET = 'branding'
 
@@ -656,7 +656,7 @@ const FREIGHT_LABELS: Record<FreightType, string> = { AIR: 'Aéreo', MAR: 'Marí
 const PRICE_MODEL_LABELS: Record<PriceModel, string> = {
   weight: 'Por peso (US$/lb)',
   volume: 'Por volumen (US$/ft³)',
-  fixed: 'Cuota fija (por guía)',
+  fixed: 'Cuota fija (por carga)',
 }
 
 /** Groups the rate list by billing kind; each group owns its default tariff. */
@@ -668,11 +668,12 @@ const KIND_LABEL: Record<PriceModel, string> = {
 }
 const KIND_HINT: Record<PriceModel, string> = {
   weight: 'Se cobra por libra con la tarifa del cliente o la de la agencia.',
-  fixed: 'Monto fijo por guía, sin importar el peso. Aéreo y Marítimo tienen su propio precio.',
-  volume: 'Cobro por pie cúbico — todavía en pruebas.',
+  fixed: 'Monto fijo por carga, sin importar el peso. Aéreo y Marítimo tienen su propio precio.',
+  volume: 'Cobro por pie cúbico. Todavía en pruebas.',
 }
 
-/** One editable card = the two AIR/MAR entries of the current published version. */
+/** One editable card = the two AIR/MAR entries of the current published version.
+ *  Fixed cards have no per-entry name: the table name is the service name. */
 type CardDraft = {
   air: { name: string; price: string; cost: string }
   mar: { name: string; price: string; cost: string }
@@ -683,25 +684,37 @@ function toCardDraft(card: RateCardInfo): CardDraft {
   const a = entry('AIR')
   const m = entry('MAR')
   return {
-    air: { name: a?.name ?? 'Regular', price: a ? String(a.price) : '', cost: a ? String(a.cost) : '' },
-    mar: { name: m?.name ?? 'Regular', price: m ? String(m.price) : '', cost: m ? String(m.cost) : '' },
+    air: { name: a?.name ?? '', price: a ? String(a.price) : '', cost: a ? String(a.cost) : '' },
+    mar: { name: m?.name ?? '', price: m ? String(m.price) : '', cost: m ? String(m.cost) : '' },
   }
 }
 
-/** Both entries must be complete (name + price + cost) — a card is a single AIR/MAR pair. */
-function draftToEntries(d: CardDraft): RateCardEntryInput[] {
+/** Both entries must be complete — a card is a single AIR/MAR pair. Fixed cards
+ *  stamp the table name on the entries so no generic "Regular" row is stored. */
+function draftToEntries(d: CardDraft, tableName: string, isFixed: boolean): RateCardEntryInput[] {
   const out: RateCardEntryInput[] = []
   for (const key of ['air', 'mar'] as const) {
     const f = d[key]
     if (f.price === '') continue
     out.push({
       serviceType: key === 'air' ? 'AIR' : 'MAR',
-      name: f.name.trim() || 'Regular',
+      name: isFixed ? tableName : f.name.trim() || 'Regular',
       price: Number(f.price) || 0,
       cost: f.cost === '' ? 0 : Number(f.cost) || 0,
     })
   }
   return out
+}
+
+type EditDraft = {
+  id: string
+  originalName: string
+  pricingKind: PriceModel
+  isDefault: boolean
+  makeDefault: boolean
+  name: string
+  air: { name: string; price: string; cost: string }
+  mar: { name: string; price: string; cost: string }
 }
 
 function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
@@ -719,17 +732,16 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [newMarPrice, setNewMarPrice] = useState('')
   const [newAirCost, setNewAirCost] = useState('')
   const [newMarCost, setNewMarCost] = useState('')
-  /** Active billing-kind tab — one group of cards visible at a time. */
+  /** Active billing-kind tab: one group of cards visible at a time. */
   const [activeKind, setActiveKind] = useState<PriceModel>('weight')
   /** Small informational modal (e.g. why a zeroed tariff cannot be the default). */
   const [info, setInfo] = useState<{ title: string; message: string } | null>(null)
   /** Flexible pricing pilot: fixed cards + per-kind defaults only when enabled. */
   const [flexible, setFlexible] = useState(false)
-  /** cardId → draft; presence means that card is in edit mode. */
-  const [editing, setEditing] = useState<Record<string, CardDraft>>({})
-  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
-  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'save' | 'rename' | 'default'; id: string; name: string } | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  /** One editing surface per card: name + both prices + default + delete. */
+  const [edit, setEdit] = useState<EditDraft | null>(null)
+  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'save'; id: string; name: string } | null>(null)
+  const [notice, setNotice] = useState<{ title: string; message?: string } | null>(null)
   // The Worker resolves the organization from the session (never the payload).
   const agency = user.agency
 
@@ -744,7 +756,6 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       ])
       setCards(rates.cards)
       setFlexible(features.flexiblePricing)
-      setEditing({})
       if (info) setCurrency(info.currency)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar las tarifas.')
@@ -762,10 +773,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   }, [activeKind, flexible])
 
   const showError = (e: unknown) => setError(e instanceof Error ? e.message : 'Ocurrió un error inesperado.')
-  const showNotice = (msg: string) => {
-    setNotice(msg)
-    window.setTimeout(() => setNotice(null), 4000)
-  }
+  const showNotice = (title: string, message?: string) => setNotice({ title, message })
 
   // Only weight and fixed have UI today; volume stays announced but disabled.
   const kinds = RATE_KINDS.filter((k) => k !== 'volume' && (k !== 'fixed' || flexible))
@@ -774,40 +782,39 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   // The default always leads its group: the owner sees it first without hunting.
   const sortGroup = (list: RateCardInfo[]) =>
     [...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name))
-  /** A tariff with any zero price would bill $0 — never allowed as default. */
+  /** A tariff with any zero price would bill $0: never allowed as default. */
   const cardHasPrices = (card: RateCardInfo) =>
     card.currentVersion.entries.length > 0 && card.currentVersion.entries.every((e) => Number(e.price) > 0)
 
-  function startEdit(card: RateCardInfo) {
-    setEditing((prev) => ({ ...prev, [card.id]: toCardDraft(card) }))
-  }
-
-  function cancelEdit(card: RateCardInfo) {
-    setEditing((prev) => {
-      const next = { ...prev }
-      delete next[card.id]
-      return next
+  function openEdit(card: RateCardInfo) {
+    const draft = toCardDraft(card)
+    setEdit({
+      id: card.id,
+      originalName: card.name,
+      pricingKind: card.pricingKind ?? 'weight',
+      isDefault: !!card.isDefault,
+      makeDefault: false,
+      name: card.name,
+      air: draft.air,
+      mar: draft.mar,
     })
   }
 
-  function updateField(cardId: string, key: 'air' | 'mar', field: 'name' | 'price' | 'cost', value: string) {
-    setEditing((prev) => {
-      const draft = prev[cardId] ?? toCardDraft(cards.find((c) => c.id === cardId)!)
-      const next = { ...prev, [cardId]: { ...draft, [key]: { ...draft[key], [field]: value } } }
-      return next
-    })
+  function updateField(key: 'air' | 'mar', field: 'name' | 'price' | 'cost', value: string) {
+    setEdit((prev) => (prev ? { ...prev, [key]: { ...prev[key], [field]: value } } : prev))
   }
 
   async function createCard() {
     if (!newName.trim() || newModel === 'volume' || (newModel === 'fixed' && !flexible)) return
     const num = (v: string) => (v.trim() === '' ? 0 : Number(v) || 0)
-    const air = { name: 'Regular', price: num(newAirPrice), cost: num(newAirCost) }
-    const mar = { name: 'Regular', price: num(newMarPrice), cost: num(newMarCost) }
+    const entryName = newModel === 'fixed' ? newName.trim() : 'Regular'
+    const air = { name: entryName, price: num(newAirPrice), cost: num(newAirCost) }
+    const mar = { name: entryName, price: num(newMarPrice), cost: num(newMarCost) }
     if (newIsDefault && (air.price <= 0 || mar.price <= 0)) {
       setInfo({
-        title: 'Tarifa en cero',
+        title: 'Falta cargar los precios',
         message:
-          'Para crear la tabla como tarifa por defecto necesitás el precio de Aéreo y Marítimo. También podés crearla vacía, completar los precios y marcarla después.',
+          'Para crear la tabla como tarifa por defecto necesitás el precio de Aéreo y Marítimo, mayor a 0. También podés crearla vacía, completar los precios y marcarla después.',
       })
       return
     }
@@ -841,62 +848,60 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       setNewMarCost('')
       const priced = created.currentVersion.entries.some((e) => Number(e.price) > 0)
       if (!priced) {
-        setEditing((prev) => ({ ...prev, [created.id]: toCardDraft(created) }))
-        showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}. Completá Aéreo y Marítimo y guardá.`)
+        // Empty table: open its editor right away so the next step is obvious.
+        setCards((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]))
+        const draft = toCardDraft(created)
+        setEdit({
+          id: created.id,
+          originalName: created.name,
+          pricingKind: created.pricingKind,
+          isDefault: !!created.isDefault,
+          makeDefault: false,
+          name: created.name,
+          air: draft.air,
+          mar: draft.mar,
+        })
+        showNotice('Tabla creada', `"${created.name}" todavía no tiene precios. Completá Aéreo y Marítimo y guardá.`)
       } else {
-        showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}${created.isDefault ? ' como tarifa por defecto' : ''}.`)
+        const defaultNote = created.isDefault ? ' Ya es la tarifa por defecto de su tipo de cobro.' : ''
+        showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}`, `"${created.name}" ya está disponible.${defaultNote}`)
       }
     } catch (e) {
       showError(e)
     }
   }
 
-  /** Marking the default is audited and moves every package of the kind: ask first. */
-  function requestDefault(card: RateCardInfo) {
-    if (!cardHasPrices(card)) {
+  /** Validate the draft, then ask for confirmation like the rest of the CRUD. */
+  function requestSave() {
+    if (!edit) return
+    const name = edit.name.trim()
+    if (!name) {
+      setInfo({ title: 'Falta el nombre', message: 'Poné un nombre para identificar la tabla dentro de su tipo de cobro.' })
+      return
+    }
+    const airPrice = edit.air.price === '' ? null : Number(edit.air.price)
+    const marPrice = edit.mar.price === '' ? null : Number(edit.mar.price)
+    if (airPrice === null || marPrice === null) {
       setInfo({
-        title: 'No se puede marcar por defecto',
-        message: `"${card.name}" tiene sus precios en cero. Completá Aéreo y Marítimo y guardá antes de marcarla como tarifa por defecto.`,
+        title: 'Faltan precios',
+        message: 'Completá el precio de Aéreo y Marítimo antes de guardar. El costo es opcional.',
       })
       return
     }
-    setConfirm({ kind: 'default', id: card.id, name: card.name })
-  }
-
-  async function makeDefault(id: string) {
-    setError(null)
-    try {
-      const updated = await configApi.setRateCardDefault(id)
-      // One default PER KIND: only the same kind's flag moves.
-      setCards((prev) => prev.map((x) => ((x.pricingKind ?? 'weight') === (updated.pricingKind ?? 'weight') ? { ...x, isDefault: x.id === updated.id } : x)))
-      showNotice(`"${updated.name}" es la tarifa por defecto de ${KIND_LABEL[updated.pricingKind] ?? 'su grupo'}.`)
-    } catch (e) {
-      showError(e)
+    const willBeDefault = edit.isDefault || edit.makeDefault
+    if (willBeDefault && (airPrice <= 0 || marPrice <= 0)) {
+      setInfo({
+        title: 'Tarifa en cero',
+        message:
+          'Una tabla con precios en cero no puede ser la tarifa por defecto: se cobraría $0. Cargá el precio de Aéreo y Marítimo, o desmarcá la opción de predeterminada.',
+      })
+      return
     }
-  }
-
-  function requestRename(id: string, name: string) {
-    setRenaming({ id, name })
-  }
-
-  function doRename() {
-    if (!renaming?.name.trim()) return
-    setConfirm({ kind: 'rename', id: renaming.id, name: renaming.name.trim() })
+    setConfirm({ kind: 'save', id: edit.id, name })
   }
 
   function requestDelete(id: string, name: string) {
     setConfirm({ kind: 'delete', id, name })
-  }
-
-  function requestSave(id: string) {
-    const draft = editing[id]
-    if (!draft) return
-    const entries = draftToEntries(draft)
-    if (entries.length !== 2 || entries.some((e) => !e.name.trim())) {
-      setError('Completá nombre, precio y costo de Aéreo y Marítimo antes de guardar.')
-      return
-    }
-    setConfirm({ kind: 'save', id, name: cards.find((c) => c.id === id)?.name ?? '' })
   }
 
   async function runConfirm() {
@@ -905,32 +910,31 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     setError(null)
     try {
       if (c.kind === 'delete') {
+        setSaving(c.id)
         await configApi.deleteRateCard(c.id)
         setCards((prev) => prev.filter((x) => x.id !== c.id))
-        setEditing((prev) => {
-          const next = { ...prev }
-          delete next[c.id]
-          return next
-        })
-        showNotice('Tabla eliminada.')
-      } else if (c.kind === 'save') {
-        setSaving(c.id)
-        const updated = await configApi.replaceCardEntries(c.id, draftToEntries(editing[c.id]))
-        setCards((prev) => prev.map((x) => (x.id === c.id ? updated : x)))
-        setEditing((prev) => {
-          const next = { ...prev }
-          delete next[c.id]
-          return next
-        })
-        showNotice('Tarifas guardadas.')
-      } else if (c.kind === 'default') {
-        setSaving(c.id)
-        await makeDefault(c.id)
+        if (edit?.id === c.id) setEdit(null)
+        showNotice('Tabla eliminada', `"${c.name}" ya no está disponible para nuevos paquetes.`)
       } else {
-        const updated = await configApi.renameRateCard(c.id, c.name)
-        setCards((prev) => prev.map((x) => (x.id === c.id ? updated : x)))
-        setRenaming(null)
-        showNotice('Tabla renombrada.')
+        if (!edit) return
+        setSaving(c.id)
+        const isFixed = edit.pricingKind === 'fixed'
+        const entries = draftToEntries(edit, edit.name.trim(), isFixed)
+        await configApi.replaceCardEntries(c.id, entries)
+        if (edit.name.trim() !== edit.originalName) {
+          await configApi.renameRateCard(c.id, edit.name.trim())
+        }
+        if (edit.makeDefault) {
+          await configApi.setRateCardDefault(c.id)
+        }
+        // One read keeps both the default flags and the fresh entries consistent.
+        const fresh = await configApi.listRateCards()
+        setCards(fresh.cards)
+        setEdit(null)
+        showNotice(
+          'Cambios guardados',
+          edit.makeDefault ? `"${c.name}" es ahora la tarifa por defecto de su tipo de cobro.` : `Las tarifas de "${c.name}" se actualizaron.`,
+        )
       }
     } catch (e) {
       showError(e)
@@ -946,11 +950,23 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   // carries that group's default so the owner sees it without opening anything.
   const activeCards = sortGroup(cardsOf(kind))
   const activeDefault = activeCards.find((c) => c.isDefault)
+  const entryPriceLabel = (isFixed: boolean) => (isFixed ? `Precio por carga (${currency})` : `Precio por libra (${currency})`)
+  const entryCostLabel = (isFixed: boolean) => (isFixed ? `Costo por carga (${currency})` : `Costo por libra (${currency})`)
+
+  // Why "Crear" is blocked: the reason is shown inline and in the button tooltip.
+  const createBlockedReason = (() => {
+    if (!newName.trim()) return 'Poné un nombre para la tabla.'
+    if (newModel === 'volume') return 'El cobro por volumen todavía está en pruebas.'
+    if (newModel === 'fixed' && !flexible) return 'La cuota fija no está habilitada para esta agencia.'
+    if (newIsDefault && !(Number(newAirPrice) > 0)) return 'Falta el precio de Aéreo, mayor a 0, para marcarla por defecto.'
+    if (newIsDefault && !(Number(newMarPrice) > 0)) return 'Falta el precio de Marítimo, mayor a 0, para marcarla por defecto.'
+    return null
+  })()
 
   return (
     <div class="flex flex-col gap-5">
       {error && <p class="text-sm text-red-600">{error}</p>}
-      {notice && <p class="text-sm text-green-700">{notice}</p>}
+      <Toast open={notice !== null} title={notice?.title ?? ''} message={notice?.message} onClose={() => setNotice(null)} />
 
       {canWrite && (
         <Card class="p-4">
@@ -975,8 +991,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         </Card>
       )}
 
-      {/* Billing-kind tabs — the active one must read as the current workspace. */}
-      <div class="grid gap-2 sm:grid-cols-2" role="tablist" aria-label="Tipo de cobro">
+      {/* Billing-kind tabs: all three stay on one row on desktop. */}
+      <div class="grid gap-2 md:grid-cols-3" role="tablist" aria-label="Tipo de cobro">
         {kinds.map((k) => {
           const groupCards = cardsOf(k)
           const def = groupCards.find((c) => c.isDefault)
@@ -1034,105 +1050,53 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
 
         <div class="grid gap-3 lg:grid-cols-2">
           {activeCards.map((card) => {
-                const isEditing = canWrite && editing[card.id] !== undefined
-                const draft = editing[card.id] ?? toCardDraft(card)
-                return (
-                  <Card key={card.id} class="flex flex-col">
-                    <div class="flex items-start justify-between gap-2 border-b border-gray-100 px-4 py-3">
-                      {renaming && renaming.id === card.id ? (
-                        <div class="flex flex-1 items-center gap-2">
-                          <input class={inputCls} value={renaming.name} onChange={(e) => setRenaming({ id: card.id, name: (e.target as HTMLInputElement).value })} />
-                          <Button onClick={doRename} disabled={!renaming.name.trim()}>
-                            Guardar
-                          </Button>
-                          <Button variant="ghost" onClick={() => setRenaming(null)}>
-                            <X class="h-4 w-4" aria-hidden="true" />
-                          </Button>
+            const isFixed = card.currentVersion.priceModel === 'fixed'
+            const entryOf = (s: 'AIR' | 'MAR') => card.currentVersion.entries.find((e) => e.serviceType === s)
+            return (
+              <Card key={card.id} class="flex flex-col">
+                <div class="flex items-start justify-between gap-2 border-b border-gray-100 px-4 py-3">
+                  <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span class="truncate text-sm font-semibold text-gray-800">{card.name}</span>
+                    {card.isDefault && <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Por defecto</span>}
+                  </div>
+                  {canWrite && (
+                    <Button variant="ghost" onClick={() => openEdit(card)}>
+                      <Pencil class="h-4 w-4" aria-hidden="true" />
+                      Editar
+                    </Button>
+                  )}
+                </div>
+                <div class="grid flex-1 gap-3 p-4 sm:grid-cols-2">
+                  {(['air', 'mar'] as const).map((key) => {
+                    const service = key === 'air' ? 'AIR' : 'MAR'
+                    const entry = entryOf(service)
+                    const label = key === 'air' ? 'Aéreo' : 'Marítimo'
+                    // Fixed services have no per-entry name; a weight card's entry
+                    // name is its tier, shown only when it adds information.
+                    const tier = !isFixed && entry?.name && entry.name !== 'Regular' && entry.name !== card.name ? entry.name : null
+                    return (
+                      <div key={key} class="rounded-lg border border-gray-100 p-3">
+                        <div class="mb-2 flex items-center gap-1.5">
+                          <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{label}</span>
+                          {tier && <span class="truncate text-[11px] text-gray-400">{tier}</span>}
                         </div>
-                      ) : (
-                        <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                          <span class="truncate text-sm font-semibold text-gray-800">{card.name}</span>
-                          {card.isDefault && <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Por defecto</span>}
-                        </div>
-                      )}
-                      <div class="flex shrink-0 items-center gap-1.5">
-                        {canWrite && !renaming && flexible && !card.isDefault && (
-                          <Button variant="ghost" onClick={() => requestDefault(card)} disabled={saving === card.id}>
-                            Marcar por defecto
-                          </Button>
-                        )}
-                        {canWrite && !renaming && (
-                          <>
-                            <IconButtonSmall label="Renombrar" onClick={() => requestRename(card.id, card.name)}>
-                              <Pencil class="h-4 w-4" />
-                            </IconButtonSmall>
-                            <IconButtonSmall label="Eliminar" onClick={() => requestDelete(card.id, card.name)} danger>
-                              <Trash2 class="h-4 w-4" />
-                            </IconButtonSmall>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div class="grid flex-1 gap-3 p-4 sm:grid-cols-2">
-                      {(['air', 'mar'] as const).map((key) => {
-                        const entry = draft[key]
-                        const label = key === 'air' ? 'Aéreo' : 'Marítimo'
-                        const isFixed = card.currentVersion.priceModel === 'fixed'
-                        return (
-                          <div key={key} class="rounded-lg border border-gray-100 p-3">
-                            <div class="mb-2 flex items-center justify-between">
-                              <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{label}</span>
-                              {canWrite && !isEditing && (
-                                <Button variant="ghost" onClick={() => startEdit(card)}>
-                                  <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
-                                  Editar
-                                </Button>
-                              )}
-                            </div>
-                            <div class="grid grid-cols-3 gap-2 text-sm">
-                              <div>
-                                <div class="text-xs text-gray-400">Nombre</div>
-                                {isEditing ? (
-                                  <input class={`${inputCls} w-full min-w-0`} value={entry.name} onChange={(e) => updateField(card.id, key, 'name', (e.target as HTMLInputElement).value)} />
-                                ) : (
-                                  <div class="py-1.5 font-medium text-gray-700">{entry.name}</div>
-                                )}
-                              </div>
-                              <div>
-                                <div class="text-xs text-gray-400">{isFixed ? `Precio por guía (${currency})` : `Precio (${currency})`}</div>
-                                {isEditing ? (
-                                  <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.price} onChange={(e) => updateField(card.id, key, 'price', (e.target as HTMLInputElement).value)} />
-                                ) : (
-                                  <div class="py-1.5 text-gray-700">{fmtMoney(Number(entry.price), currency)}</div>
-                                )}
-                              </div>
-                              <div>
-                                <div class="text-xs text-gray-400">{isFixed ? `Costo por guía (${currency})` : `Costo (${currency})`}</div>
-                                {isEditing ? (
-                                  <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.cost} onChange={(e) => updateField(card.id, key, 'cost', (e.target as HTMLInputElement).value)} />
-                                ) : (
-                                  <div class="py-1.5 text-gray-500">{fmtMoney(Number(entry.cost), currency)}</div>
-                                )}
-                              </div>
-                            </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <div class="text-xs text-gray-400">{entryPriceLabel(isFixed)}</div>
+                            <div class="py-1.5 font-medium text-gray-700">{fmtMoney(Number(entry?.price ?? 0), currency)}</div>
                           </div>
-                        )
-                      })}
-                    </div>
-                    {isEditing && (
-                      <div class="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3">
-                        <Button variant="ghost" onClick={() => cancelEdit(card)}>
-                          Cancelar
-                        </Button>
-                        <Button onClick={() => requestSave(card.id)} disabled={saving === card.id}>
-                          <Save class="h-4 w-4" aria-hidden="true" />
-                          {saving === card.id ? 'Guardando…' : 'Guardar'}
-                        </Button>
+                          <div>
+                            <div class="text-xs text-gray-400">{entryCostLabel(isFixed)}</div>
+                            <div class="py-1.5 text-gray-500">{fmtMoney(Number(entry?.cost ?? 0), currency)}</div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </Card>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              </Card>
+            )
+          })}
         </div>
       </section>
 
@@ -1153,13 +1117,13 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                 <option value="weight">{PRICE_MODEL_LABELS.weight}</option>
                 {flexible && <option value="fixed">{PRICE_MODEL_LABELS.fixed}</option>}
                 <option value="volume" disabled>
-                  {PRICE_MODEL_LABELS.volume} — próximamente
+                  {PRICE_MODEL_LABELS.volume} (próximamente)
                 </option>
               </select>
             </Field>
             {newModel === 'fixed' && (
               <p class="text-xs text-gray-500">
-                Servicio con monto fijo por guía: el cliente paga el precio y el costo interno lo definís vos. El peso no
+                Servicio con monto fijo por carga: el cliente paga el precio y el costo interno lo definís vos. El peso no
                 participa en el cobro.
               </p>
             )}
@@ -1170,7 +1134,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
               ] as const).map((s) => (
                 <div key={s.key} class="rounded-lg border border-gray-100 p-3">
                   <div class="mb-2 text-xs font-semibold text-gray-600">{s.label}</div>
-                  <Field label={newModel === 'fixed' ? `Precio por guía (${currency})` : `Precio (${currency})`}>
+                  <Field label={newModel === 'fixed' ? `Precio por carga (${currency})` : `Precio por libra (${currency})`}>
                     <input
                       type="number"
                       min="0"
@@ -1182,7 +1146,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                     />
                   </Field>
                   <div class="mt-2">
-                    <Field label={newModel === 'fixed' ? `Costo por guía (${currency})` : `Costo (${currency})`}>
+                    <Field label={newModel === 'fixed' ? `Costo por carga (${currency})` : `Costo por libra (${currency})`}>
                       <input
                         type="number"
                         min="0"
@@ -1203,29 +1167,100 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                 Marcar como tarifa por defecto de este tipo de cobro
               </label>
             )}
-            <p class="text-xs text-gray-500">
-              {newIsDefault
-                ? 'Una tarifa por defecto necesita precio de Aéreo y Marítimo.'
-                : 'Podés dejarla vacía y completar los precios al editarla.'}
-            </p>
+            {createBlockedReason ? (
+              <p class="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800" role="status">
+                {createBlockedReason}
+              </p>
+            ) : (
+              <p class="text-xs text-gray-500">
+                {newIsDefault
+                  ? 'La tabla entra en uso de inmediato como tarifa por defecto.'
+                  : 'Podés dejarla vacía y completar los precios al editarla.'}
+              </p>
+            )}
             <div class="mt-2 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Button
-                onClick={createCard}
-                disabled={
-                  !newName.trim() ||
-                  newModel === 'volume' ||
-                  (newModel === 'fixed' && !flexible) ||
-                  (newIsDefault && (!(Number(newAirPrice) > 0) || !(Number(newMarPrice) > 0)))
-                }
-              >
-                <Plus class="h-4 w-4" aria-hidden="true" />
-                Crear
-              </Button>
+              <Tooltip text={createBlockedReason ?? 'Crear la tabla de tarifas'}>
+                <span>
+                  <Button onClick={createCard} disabled={createBlockedReason !== null}>
+                    <Plus class="h-4 w-4" aria-hidden="true" />
+                    Crear
+                  </Button>
+                </span>
+              </Tooltip>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Single editing surface: name, both prices/costs, default and delete. */}
+      {canWrite && (
+        <Modal open={edit !== null} onClose={() => setEdit(null)} title="Editar tabla de tarifas" size="md">
+          {edit && (
+            <div class="flex flex-col gap-4">
+              <Field label="Nombre de la tabla">
+                <input class={inputCls} value={edit.name} onChange={(e) => setEdit({ ...edit, name: (e.target as HTMLInputElement).value })} />
+              </Field>
+              <div class="grid grid-cols-2 gap-3">
+                {(['air', 'mar'] as const).map((key) => {
+                  const f = edit[key]
+                  const label = key === 'air' ? 'Aéreo' : 'Marítimo'
+                  const isFixed = edit.pricingKind === 'fixed'
+                  return (
+                    <div key={key} class="rounded-lg border border-gray-100 p-3">
+                      <div class="mb-2 text-xs font-semibold text-gray-600">{label}</div>
+                      {!isFixed && (
+                        <div class="mb-2">
+                          <Field label="Categoría">
+                            <input class={inputCls} value={f.name} placeholder="Regular" onChange={(e) => updateField(key, 'name', (e.target as HTMLInputElement).value)} />
+                          </Field>
+                        </div>
+                      )}
+                      <Field label={entryPriceLabel(isFixed)}>
+                        <input type="number" min="0" step="0.01" class={inputCls} value={f.price} placeholder="0.00" onInput={(e) => updateField(key, 'price', (e.target as HTMLInputElement).value)} />
+                      </Field>
+                      <div class="mt-2">
+                        <Field label={entryCostLabel(isFixed)}>
+                          <input type="number" min="0" step="0.01" class={inputCls} value={f.cost} placeholder="0.00" onInput={(e) => updateField(key, 'cost', (e.target as HTMLInputElement).value)} />
+                        </Field>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {flexible && !edit.isDefault && (
+                <label class="flex items-start gap-2 text-sm text-gray-700">
+                  <input class="mt-0.5" type="checkbox" checked={edit.makeDefault} onChange={(e) => setEdit({ ...edit, makeDefault: (e.target as HTMLInputElement).checked })} />
+                  <span>
+                    Usar como tarifa por defecto de este tipo de cobro
+                    <span class="block text-xs text-gray-500">Necesita precio de Aéreo y Marítimo mayor a 0.</span>
+                  </span>
+                </label>
+              )}
+              {edit.isDefault && (
+                <p class="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                  Esta es la tarifa por defecto de su tipo de cobro. Sus precios no pueden quedar en cero.
+                </p>
+              )}
+              <div class="mt-1 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                <Button variant="ghost" class="text-red-600" onClick={() => requestDelete(edit.id, edit.name.trim() || edit.originalName)}>
+                  <Trash2 class="h-4 w-4" aria-hidden="true" />
+                  Eliminar tabla
+                </Button>
+                <div class="flex gap-2">
+                  <Button variant="ghost" onClick={() => setEdit(null)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={requestSave} disabled={saving === edit.id}>
+                    <Save class="h-4 w-4" aria-hidden="true" />
+                    Guardar cambios
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 
@@ -1240,26 +1275,14 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         open={confirm !== null}
         onClose={() => setConfirm(null)}
         onConfirm={runConfirm}
-        variant={confirm?.kind === 'default' ? 'warning' : 'danger'}
-        title={
-          confirm?.kind === 'delete'
-            ? 'Eliminar tabla'
-            : confirm?.kind === 'save'
-              ? 'Guardar tarifas'
-              : confirm?.kind === 'default'
-                ? 'Marcar tarifa por defecto'
-                : 'Renombrar tabla'
-        }
+        variant={confirm?.kind === 'delete' ? 'danger' : 'warning'}
+        title={confirm?.kind === 'delete' ? 'Eliminar tabla' : 'Guardar cambios en la tarifa'}
         message={
           confirm?.kind === 'delete'
-            ? `¿Eliminar "${confirm.name}"? Esta acción se registra en el historial de auditoría.`
-            : confirm?.kind === 'save'
-              ? `¿Guardar los cambios en "${confirm.name}"? Esta acción se registra en el historial de auditoría.`
-              : confirm?.kind === 'default'
-                ? `¿Marcar "${confirm.name}" como la tarifa por defecto de su tipo de cobro? Los próximos paquetes y facturas de ese tipo la usarán cuando el cliente no tenga una tarifa especial.`
-                : `¿Renombrar la tabla a "${confirm?.name}"? Esta acción se registra en el historial de auditoría.`
+            ? `¿Eliminar "${confirm.name}"? Los paquetes que ya la usaron conservan su cobro; esta acción se registra en el historial de auditoría.`
+            : `¿Aplicar los cambios de "${confirm?.name}"? Las próximas facturas de su tipo de cobro usarán los precios guardados. Esta acción se registra en el historial de auditoría.`
         }
-        confirmLabel={confirm?.kind === 'delete' ? 'Eliminar' : confirm?.kind === 'default' ? 'Marcar por defecto' : 'Confirmar'}
+        confirmLabel={confirm?.kind === 'delete' ? 'Eliminar' : 'Guardar cambios'}
         loading={saving === confirm?.id}
       />
     </div>

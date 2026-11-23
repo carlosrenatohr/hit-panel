@@ -1,4 +1,4 @@
-import { AlertTriangle, Biohazard, Clock, Loader2, X } from 'lucide-preact'
+import { AlertTriangle, Biohazard, CheckCircle2, Clock, Loader2, X } from 'lucide-preact'
 import type { LucideIcon } from 'lucide-preact'
 import type { ComponentChildren, JSX } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
@@ -352,6 +352,67 @@ export function BottomSheet({
           </button>
         </div>
         {fullscreen ? <div class="flex-1 overflow-y-auto">{children}</div> : children}
+      </div>
+    </div>
+  )
+}
+
+/** Floating, self-dismissing confirmation. The belt-and-suspenders feedback for
+ *  audited actions: prominent on purpose, but never blocks the next click. */
+export function Toast({
+  open,
+  onClose,
+  title,
+  message,
+  tone = 'success',
+  duration = 4500,
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  message?: string
+  tone?: 'success' | 'error'
+  /** Auto-dismiss delay in ms. */
+  duration?: number
+}) {
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(onClose, duration)
+    return () => clearTimeout(timer)
+  }, [open, title, message, duration, onClose])
+
+  if (!open) return null
+  const tones = {
+    success: {
+      box: 'border-emerald-200 bg-white',
+      icon: 'bg-emerald-100 text-emerald-600',
+      title: 'text-emerald-900',
+      body: 'text-emerald-800/80',
+    },
+    error: {
+      box: 'border-red-200 bg-white',
+      icon: 'bg-red-100 text-red-600',
+      title: 'text-red-900',
+      body: 'text-red-800/80',
+    },
+  }[tone]
+  return (
+    <div class="pointer-events-none fixed inset-x-0 top-4 z-[60] flex justify-center px-4 print:hidden">
+      <div
+        role="status"
+        aria-live="polite"
+        class={`toast-in pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-2xl border px-4 py-3 shadow-2xl ${tones.box}`}
+      >
+        <span class={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${tones.icon}`} aria-hidden="true">
+          {tone === 'success' ? <CheckCircle2 class="h-5 w-5" /> : <AlertTriangle class="h-5 w-5" />}
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class={`text-sm font-semibold ${tones.title}`}>{title}</div>
+          {message && <div class={`mt-0.5 text-xs leading-snug ${tones.body}`}>{message}</div>}
+        </div>
+        <button type="button" onClick={onClose} aria-label="Cerrar aviso" class="shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
+          <X class="h-3.5 w-3.5" />
+        </button>
       </div>
     </div>
   )

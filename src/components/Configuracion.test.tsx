@@ -99,23 +99,33 @@ describe('Configuración › Tarifas', () => {
     expect(screen.queryByText('Premium')).toBeNull()
   })
 
-  it('asks for confirmation before marking a default and then puts it first', async () => {
+  it('marks a default from the single edit modal, asks first and puts it on top', async () => {
+    let current = CARDS
+    listRateCards.mockImplementation(async () => ({ organizationId: 'hit', cards: current }))
+    setRateCardDefault.mockImplementation(async (id: string) => {
+      const target = current.find((c) => c.id === id)!
+      current = current.map((c) => ((c.pricingKind ?? 'weight') === (target.pricingKind ?? 'weight') ? { ...c, isDefault: c.id === id } : c))
+      return current.find((c) => c.id === id)
+    })
     await openRates()
 
     const premium = screen.getByText('Premium').closest('.rounded-xl') as HTMLElement
-    fireEvent.click(within(premium).getByRole('button', { name: 'Marcar por defecto' }))
+    fireEvent.click(within(premium).getByRole('button', { name: 'Editar' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Editar tabla de tarifas' })
+    fireEvent.click(within(dialog).getByLabelText(/Usar como tarifa por defecto/))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }))
     expect(setRateCardDefault).not.toHaveBeenCalled()
 
-    const dialog = await screen.findByRole('dialog', { name: 'Marcar tarifa por defecto' })
-    expect(within(dialog).getByText(/¿Marcar "Premium"/)).toBeTruthy()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Marcar por defecto' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Guardar cambios en la tarifa' })
+    expect(within(confirm).getByText(/¿Aplicar los cambios de "Premium"/)).toBeTruthy()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Guardar cambios' }))
 
     await waitFor(() => expect(setRateCardDefault).toHaveBeenCalledWith('w-premium'))
     await waitFor(() => {
       const premiumCard = screen.getByText('Premium').closest('.rounded-xl') as HTMLElement
       expect(within(premiumCard).getByText('Por defecto')).toBeTruthy()
     })
-    // Default leads the group now.
     const names = screen.getAllByText(/^(Premium|Estándar|Vacía)$/).map((el) => el.textContent)
     expect(names[0]).toBe('Premium')
   })
@@ -124,29 +134,38 @@ describe('Configuración › Tarifas', () => {
     await openRates()
 
     const zero = screen.getByText('Vacía').closest('.rounded-xl') as HTMLElement
-    fireEvent.click(within(zero).getByRole('button', { name: 'Marcar por defecto' }))
+    fireEvent.click(within(zero).getByRole('button', { name: 'Editar' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Editar tabla de tarifas' })
+    fireEvent.click(within(dialog).getByLabelText(/Usar como tarifa por defecto/))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'No se puede marcar por defecto' })
-    expect(within(dialog).getByText(/precios en cero/)).toBeTruthy()
+    const info = await screen.findByRole('dialog', { name: 'Tarifa en cero' })
+    expect(within(info).getByText(/no puede ser la tarifa por defecto/)).toBeTruthy()
+    fireEvent.click(within(info).getByRole('button', { name: 'Entendido' }))
     expect(setRateCardDefault).not.toHaveBeenCalled()
+    expect(await screen.findByRole('dialog', { name: 'Editar tabla de tarifas' })).toBeTruthy()
   })
 
-  it('blocks creating a default table without prices and creates it once priced', async () => {
+  it('explains why Crear is disabled until the table has a name and its default prices', async () => {
     await openRates()
 
     fireEvent.click(screen.getByRole('button', { name: /Nueva tabla/ }))
     const dialog = await screen.findByRole('dialog', { name: 'Nueva tabla de tarifas' })
+    expect(within(dialog).getAllByText('Poné un nombre para la tabla.').length).toBeGreaterThan(0)
+
     fireEvent.change(within(dialog).getByLabelText('Nombre'), { target: { value: 'Express' } })
     fireEvent.change(within(dialog).getByLabelText('Tipo de cobro'), { target: { value: 'fixed' } })
     fireEvent.click(within(dialog).getByLabelText(/Marcar como tarifa por defecto/))
 
     const create = within(dialog).getByRole('button', { name: /Crear/ }) as HTMLButtonElement
     expect(create.disabled).toBe(true)
+    expect(within(dialog).getAllByText(/Falta el precio de Aéreo/).length).toBeGreaterThan(0)
 
-    const priceFields = within(dialog).getAllByLabelText('Precio por guía (USD)')
+    const priceFields = within(dialog).getAllByLabelText('Precio por carga (USD)')
     fireEvent.input(priceFields[0], { target: { value: '30' } })
     fireEvent.input(priceFields[1], { target: { value: '22' } })
     expect(create.disabled).toBe(false)
+    expect(within(dialog).queryByText(/Falta el precio/)).toBeNull()
 
     fireEvent.click(create)
     await waitFor(() =>
@@ -156,11 +175,44 @@ describe('Configuración › Tarifas', () => {
           priceModel: 'fixed',
           isDefault: true,
           entries: [
-            { serviceType: 'AIR', name: 'Regular', price: 30, cost: 0 },
-            { serviceType: 'MAR', name: 'Regular', price: 22, cost: 0 },
+            { serviceType: 'AIR', name: 'Express', price: 30, cost: 0 },
+            { serviceType: 'MAR', name: 'Express', price: 22, cost: 0 },
           ],
         }),
       ),
     )
+    // Prominent, self-dismissing confirmation instead of a bare green line.
+    const toast = await screen.findByRole('status')
+    expect(within(toast).getByText(/Tabla creada en Cuota fija/)).toBeTruthy()
+  })
+
+  it('saves name and prices from one modal and confirms the change', async () => {
+    const replaceCardEntries = vi.fn().mockResolvedValue(undefined)
+    const renameRateCard = vi.fn().mockResolvedValue(undefined)
+    const cfg = await import('../lib/config')
+    vi.mocked(cfg.configApi.replaceCardEntries).mockImplementation(replaceCardEntries)
+    vi.mocked(cfg.configApi.renameRateCard).mockImplementation(renameRateCard)
+    await openRates()
+    fireEvent.click(screen.getByRole('tab', { name: /Cuota fija/ }))
+
+    const docs = (await screen.findByText('Documentos')).closest('.rounded-xl') as HTMLElement
+    fireEvent.click(within(docs).getByRole('button', { name: 'Editar' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Editar tabla de tarifas' })
+    // Fixed cards edit only price and cost per carga: no per-entry name field.
+    expect(within(dialog).queryByLabelText('Categoría')).toBeNull()
+    fireEvent.change(within(dialog).getByLabelText('Nombre de la tabla'), { target: { value: 'Documentos Plus' } })
+    fireEvent.input(within(dialog).getAllByLabelText('Precio por carga (USD)')[0], { target: { value: '32' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }))
+
+    const confirm = await screen.findByRole('dialog', { name: 'Guardar cambios en la tarifa' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() => expect(replaceCardEntries).toHaveBeenCalledWith('f-default', [
+      { serviceType: 'AIR', name: 'Documentos Plus', price: 32, cost: 8 },
+      { serviceType: 'MAR', name: 'Documentos Plus', price: 18, cost: 6 },
+    ]))
+    expect(renameRateCard).toHaveBeenCalledWith('f-default', 'Documentos Plus')
+    const toast = await screen.findByRole('status')
+    expect(within(toast).getByText('Cambios guardados')).toBeTruthy()
   })
 })
