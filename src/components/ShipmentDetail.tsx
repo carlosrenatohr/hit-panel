@@ -8,6 +8,7 @@ import {
   daysAgo,
   fmtDate,
   fmtDateTime,
+  fmtMoney,
   isHazmat,
   officeFlag,
   PIPELINE_STAGES,
@@ -72,6 +73,7 @@ export default function ShipmentDetail({
   // Fail closed: mientras /api/config/info no responda, el scraping se asume
   // APAGADO — ni el bloque de Cargotrack ni las etiquetas scrapeadas se muestran.
   const [scrapable, setScrapable] = useState(false)
+  const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD')
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [invoiceInfo, setInvoiceInfo] = useState<{ fiscalYear: number; invoiceNumber: number; status: string } | null>(null)
@@ -80,7 +82,11 @@ export default function ShipmentDetail({
     let alive = true
     configApi
       .info()
-      .then((info) => alive && setScrapable(info.isScrapable))
+      .then((info) => {
+        if (!alive) return
+        setScrapable(info.isScrapable)
+        setCurrency(info.currency)
+      })
       .catch(() => {})
     return () => {
       alive = false
@@ -378,10 +384,13 @@ export default function ShipmentDetail({
               packageIds: [d.pkg.id],
             }}
             onClose={() => setShowInvoice(false)}
-            onCreated={() => {
+            onCreated={(view) => {
               setShowInvoice(false)
-              // An invoice was created/updated for this package — the link icons
-              // and the "facturadas" filter in Paquetería/Reportes depend on it.
+              // Land on the draft invoice so the operator can review it right
+              // away, and reload the package so its "Ver factura" state updates
+              // without a manual refresh.
+              setViewInvoiceId(view.id)
+              void load()
               bumpData('invoices', 'packages')
             }}
           />
@@ -434,6 +443,19 @@ export default function ShipmentDetail({
                     <Plane class="h-4 w-4 text-primary" aria-hidden="true" />
                   )}
                   {(d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'Marítimo' : 'Aéreo'} {officeFlag(d.pkg.origin_office)}
+                </span>
+                {/* Tariff that prices this package — a fixed-fee service must never
+                    look like a plain air/sea package. */}
+                <span
+                  class={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                    d.pkg.pricing_kind === 'fixed' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-gray-50 text-gray-600 ring-gray-200'
+                  }`}
+                  title="Tipo de tarifa con la que se cobra el paquete"
+                >
+                  {d.pkg.pricing_kind === 'fixed' ? 'Cuota fija' : 'Por peso'}
+                  {d.pkg.pricing_kind === 'fixed' && d.pkg.customer_charge != null && user.role !== 'viewer'
+                    ? ` · ${fmtMoney(d.pkg.customer_charge, currency)} por guía`
+                    : ''}
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   <Package class="h-4 w-4 text-gray-400" aria-hidden="true" />

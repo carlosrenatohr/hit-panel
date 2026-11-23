@@ -213,6 +213,24 @@ describe('ShipmentDetail', () => {
     expect(select).toBeTruthy();
   });
 
+  it('muestra el tipo de tarifa de cuota fija con su cobro por guía', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue(
+      detailWith({ pricing_kind: 'fixed', customer_charge: 25, customer_unit: 'package' }),
+    );
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.getByText(/Cuota fija · \$25\.00 por guía/)).toBeTruthy();
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({}));
+  });
+
+  it('muestra "Por peso" en un paquete cobrado por libras', async () => {
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.getAllByText('Por peso').length).toBeGreaterThan(0);
+  });
+
   it('shows "Sin definir" for a manual package with no service type yet', async () => {
     vi.mocked(getPackageDetail).mockResolvedValue(detailWith({ service_type: null, service_type_override: null, effective_service_type: null }));
     render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);

@@ -546,6 +546,23 @@ describe('Shipments', () => {
     expect(vi.mocked(getTagsForPackages)).toHaveBeenCalledWith(['1', '2']);
   });
 
+  it('muestra la columna Tipo de tarifa para paquetes fijos y por peso', async () => {
+    const original = vi.mocked(listPackages).getMockImplementation();
+    vi.mocked(listPackages).mockImplementation(async () => ({
+      rows: [
+        { ...mockPkgs[0], pricing_kind: 'fixed' },
+        { ...mockPkgs[1], pricing_kind: 'weight' },
+      ] as unknown as Pkg[],
+      count: 2,
+    }));
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(screen.getAllByText('Cuota fija').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Por peso').length).toBeGreaterThan(0);
+    vi.mocked(listPackages).mockImplementation(original!);
+  });
+
   it('ya no dibuja el lápiz de estado manual (tabla ni tarjeta móvil)', async () => {
     const original = vi.mocked(listPackages).getMockImplementation();
     vi.mocked(listPackages).mockImplementation(async () => ({
