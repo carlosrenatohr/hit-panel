@@ -62,6 +62,8 @@ export interface Pkg {
   rate_override_at: string | null
   /** Billing tariff kind frozen at creation ('fixed' = flat per guía; 'weight' = per lb). */
   pricing_kind?: 'weight' | 'fixed' | 'volume' | null
+  /** Rate card that priced the package (fixed snapshot or resolved weight card). */
+  rate_card_id?: string | null
   /** Fixed packages: the charge snapshotted at creation. */
   customer_charge?: number | null
   customer_unit?: string | null

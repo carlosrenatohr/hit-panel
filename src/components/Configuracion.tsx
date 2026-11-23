@@ -714,12 +714,21 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [newName, setNewName] = useState('')
   const [newModel, setNewModel] = useState<PriceModel>('weight')
   const [newIsDefault, setNewIsDefault] = useState(false)
+  /** Prices typed at creation (a default must be priced; empty = draft card). */
+  const [newAirPrice, setNewAirPrice] = useState('')
+  const [newMarPrice, setNewMarPrice] = useState('')
+  const [newAirCost, setNewAirCost] = useState('')
+  const [newMarCost, setNewMarCost] = useState('')
+  /** Active billing-kind tab — one group of cards visible at a time. */
+  const [activeKind, setActiveKind] = useState<PriceModel>('weight')
+  /** Small informational modal (e.g. why a zeroed tariff cannot be the default). */
+  const [info, setInfo] = useState<{ title: string; message: string } | null>(null)
   /** Flexible pricing pilot: fixed cards + per-kind defaults only when enabled. */
   const [flexible, setFlexible] = useState(false)
   /** cardId → draft; presence means that card is in edit mode. */
   const [editing, setEditing] = useState<Record<string, CardDraft>>({})
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
-  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'save' | 'rename'; id: string; name: string } | null>(null)
+  const [confirm, setConfirm] = useState<{ kind: 'delete' | 'save' | 'rename' | 'default'; id: string; name: string } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   // The Worker resolves the organization from the session (never the payload).
   const agency = user.agency
@@ -747,11 +756,27 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     void load()
   }, [agency, load])
 
+  // The fixed-fee tab only exists for agencies with the pilot flag on.
+  useEffect(() => {
+    if (activeKind === 'fixed' && !flexible) setActiveKind('weight')
+  }, [activeKind, flexible])
+
   const showError = (e: unknown) => setError(e instanceof Error ? e.message : 'Ocurrió un error inesperado.')
   const showNotice = (msg: string) => {
     setNotice(msg)
     window.setTimeout(() => setNotice(null), 4000)
   }
+
+  // Only weight and fixed have UI today; volume stays announced but disabled.
+  const kinds = RATE_KINDS.filter((k) => k !== 'volume' && (k !== 'fixed' || flexible))
+  const kind = kinds.includes(activeKind) ? activeKind : kinds[0]
+  const cardsOf = (k: PriceModel) => cards.filter((c) => (c.pricingKind ?? 'weight') === k)
+  // The default always leads its group: the owner sees it first without hunting.
+  const sortGroup = (list: RateCardInfo[]) =>
+    [...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name))
+  /** A tariff with any zero price would bill $0 — never allowed as default. */
+  const cardHasPrices = (card: RateCardInfo) =>
+    card.currentVersion.entries.length > 0 && card.currentVersion.entries.every((e) => Number(e.price) > 0)
 
   function startEdit(card: RateCardInfo) {
     setEditing((prev) => ({ ...prev, [card.id]: toCardDraft(card) }))
@@ -775,6 +800,17 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
 
   async function createCard() {
     if (!newName.trim() || newModel === 'volume' || (newModel === 'fixed' && !flexible)) return
+    const num = (v: string) => (v.trim() === '' ? 0 : Number(v) || 0)
+    const air = { name: 'Regular', price: num(newAirPrice), cost: num(newAirCost) }
+    const mar = { name: 'Regular', price: num(newMarPrice), cost: num(newMarCost) }
+    if (newIsDefault && (air.price <= 0 || mar.price <= 0)) {
+      setInfo({
+        title: 'Tarifa en cero',
+        message:
+          'Para crear la tabla como tarifa por defecto necesitás el precio de Aéreo y Marítimo. También podés crearla vacía, completar los precios y marcarla después.',
+      })
+      return
+    }
     setError(null)
     try {
       const created = await configApi.createRateCard({
@@ -782,20 +818,49 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         priceModel: newModel,
         isDefault: newIsDefault,
         entries: [
-          { serviceType: 'AIR', name: 'Regular', price: 0, cost: 0 },
-          { serviceType: 'MAR', name: 'Regular', price: 0, cost: 0 },
+          { serviceType: 'AIR', ...air },
+          { serviceType: 'MAR', ...mar },
         ],
       })
-      setCards((prev) => [...prev, created])
+      if (created.isDefault) {
+        // Making the new card default clears the previous one: re-read the list so
+        // both flags land at once and the new default shows on top of its group.
+        const fresh = await configApi.listRateCards().catch(() => null)
+        setCards(fresh ? fresh.cards : [...cards.map((c) => (c.pricingKind === created.pricingKind ? { ...c, isDefault: false } : c)), created])
+      } else {
+        setCards((prev) => [...prev, created])
+      }
+      setActiveKind(created.pricingKind)
       setCreateOpen(false)
       setNewName('')
-      setNewModel('weight')
+      setNewModel(kind)
       setNewIsDefault(false)
-      setEditing((prev) => ({ ...prev, [created.id]: toCardDraft(created) }))
-      showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}. Completá Aéreo y Marítimo y guardá.`)
+      setNewAirPrice('')
+      setNewMarPrice('')
+      setNewAirCost('')
+      setNewMarCost('')
+      const priced = created.currentVersion.entries.some((e) => Number(e.price) > 0)
+      if (!priced) {
+        setEditing((prev) => ({ ...prev, [created.id]: toCardDraft(created) }))
+        showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}. Completá Aéreo y Marítimo y guardá.`)
+      } else {
+        showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}${created.isDefault ? ' como tarifa por defecto' : ''}.`)
+      }
     } catch (e) {
       showError(e)
     }
+  }
+
+  /** Marking the default is audited and moves every package of the kind: ask first. */
+  function requestDefault(card: RateCardInfo) {
+    if (!cardHasPrices(card)) {
+      setInfo({
+        title: 'No se puede marcar por defecto',
+        message: `"${card.name}" tiene sus precios en cero. Completá Aéreo y Marítimo y guardá antes de marcarla como tarifa por defecto.`,
+      })
+      return
+    }
+    setConfirm({ kind: 'default', id: card.id, name: card.name })
   }
 
   async function makeDefault(id: string) {
@@ -858,6 +923,9 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
           return next
         })
         showNotice('Tarifas guardadas.')
+      } else if (c.kind === 'default') {
+        setSaving(c.id)
+        await makeDefault(c.id)
       } else {
         const updated = await configApi.renameRateCard(c.id, c.name)
         setCards((prev) => prev.map((x) => (x.id === c.id ? updated : x)))
@@ -874,11 +942,10 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
 
   if (loading && cards.length === 0) return <Spinner label="Cargando tarifas…" />
 
-  // One section per billing kind: each group has its own default ($/lb, flat
-  // per guía, volume) and reads as its own column of cards.
-  const groups = RATE_KINDS.map((kind) => ({ kind, cards: cards.filter((c) => (c.pricingKind ?? 'weight') === kind) })).filter(
-    (g) => g.cards.length > 0,
-  )
+  // One tab per billing kind: only the active group is shown, and the tab itself
+  // carries that group's default so the owner sees it without opening anything.
+  const activeCards = sortGroup(cardsOf(kind))
+  const activeDefault = activeCards.find((c) => c.isDefault)
 
   return (
     <div class="flex flex-col gap-5">
@@ -891,11 +958,16 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
             <div>
               <div class="text-sm font-semibold text-gray-800">Tablas de tarifas</div>
               <p class="text-xs text-gray-500">
-                Cada tabla es un plan con dos precios: Aéreo y Marítimo. Las tablas se agrupan por tipo de cobro y cada
-                grupo tiene su propia tarifa por defecto.
+                Cada tabla es un plan con dos precios: Aéreo y Marítimo. Elegí el tipo de cobro para ver y editar sus
+                tarifas; cada tipo tiene su propia tarifa por defecto.
               </p>
             </div>
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button
+              onClick={() => {
+                setNewModel(kind)
+                setCreateOpen(true)
+              }}
+            >
               <Plus class="h-4 w-4" aria-hidden="true" />
               Nueva tabla
             </Button>
@@ -903,22 +975,65 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         </Card>
       )}
 
-      {groups.map((group) => {
-        const defaultCard = group.cards.find((c) => c.isDefault)
-        return (
-          <section key={group.kind} class="flex flex-col gap-2">
-            <div class="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 px-1">
-              <div>
-                <h3 class="text-sm font-semibold text-secondary">{KIND_LABEL[group.kind]}</h3>
-                <p class="text-xs text-gray-500">{KIND_HINT[group.kind]}</p>
-              </div>
-              <span class="text-xs text-gray-400">
-                {defaultCard ? `Por defecto: ${defaultCard.name}` : 'Sin tarifa por defecto en este grupo'}
+      {/* Billing-kind tabs — the active one must read as the current workspace. */}
+      <div class="grid gap-2 sm:grid-cols-2" role="tablist" aria-label="Tipo de cobro">
+        {kinds.map((k) => {
+          const groupCards = cardsOf(k)
+          const def = groupCards.find((c) => c.isDefault)
+          const active = k === kind
+          return (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveKind(k)}
+              class={`flex flex-col items-start gap-0.5 rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                active
+                  ? 'border-primary bg-primary text-white shadow-sm'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-primary/40 hover:bg-primary/5'
+              }`}
+            >
+              <span class="flex w-full items-center justify-between gap-2">
+                <span class="text-sm font-semibold">{KIND_LABEL[k]}</span>
+                <span class={`rounded-full px-2 py-0.5 text-[11px] font-medium ${active ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                  {groupCards.length} {groupCards.length === 1 ? 'tabla' : 'tablas'}
+                </span>
               </span>
-            </div>
+              <span class={`text-[11px] ${active ? 'text-white/80' : 'text-gray-500'}`}>{KIND_HINT[k]}</span>
+              <span class={`text-[11px] font-medium ${active ? 'text-white' : def ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {def ? `Por defecto: ${def.name}` : 'Sin tarifa por defecto'}
+              </span>
+            </button>
+          )
+        })}
+        <div class="flex flex-col items-start gap-0.5 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-left opacity-70">
+          <span class="text-sm font-semibold text-gray-500">{KIND_LABEL.volume}</span>
+          <span class="text-[11px] text-gray-400">{KIND_HINT.volume}</span>
+        </div>
+      </div>
 
-            <div class="grid gap-3 lg:grid-cols-2">
-              {group.cards.map((card) => {
+      <section key={kind} class="flex flex-col gap-2" role="tabpanel" aria-label={KIND_LABEL[kind]}>
+        <div class="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 px-1">
+          <div>
+            <h3 class="text-base font-semibold text-secondary">{KIND_LABEL[kind]}</h3>
+            <p class="text-xs text-gray-500">{KIND_HINT[kind]}</p>
+          </div>
+          <span class={`text-xs font-medium ${activeDefault ? 'text-emerald-700' : 'text-amber-700'}`}>
+            {activeDefault ? `Por defecto: ${activeDefault.name}` : 'Sin tarifa por defecto en este grupo'}
+          </span>
+        </div>
+
+        {activeCards.length === 0 && (
+          <Card>
+            <p class="p-4 text-sm text-gray-500">
+              No hay tablas de {KIND_LABEL[kind].toLowerCase()} todavía. Creá una con “Nueva tabla”.
+            </p>
+          </Card>
+        )}
+
+        <div class="grid gap-3 lg:grid-cols-2">
+          {activeCards.map((card) => {
                 const isEditing = canWrite && editing[card.id] !== undefined
                 const draft = editing[card.id] ?? toCardDraft(card)
                 return (
@@ -942,7 +1057,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                       )}
                       <div class="flex shrink-0 items-center gap-1.5">
                         {canWrite && !renaming && flexible && !card.isDefault && (
-                          <Button variant="ghost" onClick={() => void makeDefault(card.id)} disabled={saving === card.id}>
+                          <Button variant="ghost" onClick={() => requestDefault(card)} disabled={saving === card.id}>
                             Marcar por defecto
                           </Button>
                         )}
@@ -1018,10 +1133,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                   </Card>
                 )
               })}
-            </div>
-          </section>
-        )
-      })}
+        </div>
+      </section>
 
       {cards.length === 0 && (
         <Card>
@@ -1050,18 +1163,64 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                 participa en el cobro.
               </p>
             )}
+            <div class="grid grid-cols-2 gap-3">
+              {([
+                { key: 'air', label: 'Aéreo', price: newAirPrice, setPrice: setNewAirPrice, cost: newAirCost, setCost: setNewAirCost },
+                { key: 'mar', label: 'Marítimo', price: newMarPrice, setPrice: setNewMarPrice, cost: newMarCost, setCost: setNewMarCost },
+              ] as const).map((s) => (
+                <div key={s.key} class="rounded-lg border border-gray-100 p-3">
+                  <div class="mb-2 text-xs font-semibold text-gray-600">{s.label}</div>
+                  <Field label={newModel === 'fixed' ? `Precio por guía (${currency})` : `Precio (${currency})`}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      class={inputCls}
+                      value={s.price}
+                      placeholder="0.00"
+                      onInput={(e) => s.setPrice((e.target as HTMLInputElement).value)}
+                    />
+                  </Field>
+                  <div class="mt-2">
+                    <Field label={newModel === 'fixed' ? `Costo por guía (${currency})` : `Costo (${currency})`}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        class={inputCls}
+                        value={s.cost}
+                        placeholder="0.00"
+                        onInput={(e) => s.setCost((e.target as HTMLInputElement).value)}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              ))}
+            </div>
             {flexible && (
               <label class="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={newIsDefault} onChange={(e) => setNewIsDefault((e.target as HTMLInputElement).checked)} />
                 Marcar como tarifa por defecto de este tipo de cobro
               </label>
             )}
-            <p class="text-xs text-gray-500">Se creará con Aéreo y Marítimo vacíos; completalos al editar y guardá.</p>
+            <p class="text-xs text-gray-500">
+              {newIsDefault
+                ? 'Una tarifa por defecto necesita precio de Aéreo y Marítimo.'
+                : 'Podés dejarla vacía y completar los precios al editarla.'}
+            </p>
             <div class="mt-2 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={createCard} disabled={!newName.trim() || newModel === 'volume' || (newModel === 'fixed' && !flexible)}>
+              <Button
+                onClick={createCard}
+                disabled={
+                  !newName.trim() ||
+                  newModel === 'volume' ||
+                  (newModel === 'fixed' && !flexible) ||
+                  (newIsDefault && (!(Number(newAirPrice) > 0) || !(Number(newMarPrice) > 0)))
+                }
+              >
                 <Plus class="h-4 w-4" aria-hidden="true" />
                 Crear
               </Button>
@@ -1070,19 +1229,37 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         </Modal>
       )}
 
+      <Modal open={info !== null} onClose={() => setInfo(null)} title={info?.title ?? ''} size="sm">
+        <p class="text-sm text-gray-600">{info?.message}</p>
+        <div class="mt-5 flex justify-end">
+          <Button onClick={() => setInfo(null)}>Entendido</Button>
+        </div>
+      </Modal>
+
       <ConfirmDialog
         open={confirm !== null}
         onClose={() => setConfirm(null)}
         onConfirm={runConfirm}
-        title={confirm?.kind === 'delete' ? 'Eliminar tabla' : confirm?.kind === 'save' ? 'Guardar tarifas' : 'Renombrar tabla'}
+        variant={confirm?.kind === 'default' ? 'warning' : 'danger'}
+        title={
+          confirm?.kind === 'delete'
+            ? 'Eliminar tabla'
+            : confirm?.kind === 'save'
+              ? 'Guardar tarifas'
+              : confirm?.kind === 'default'
+                ? 'Marcar tarifa por defecto'
+                : 'Renombrar tabla'
+        }
         message={
           confirm?.kind === 'delete'
             ? `¿Eliminar "${confirm.name}"? Esta acción se registra en el historial de auditoría.`
             : confirm?.kind === 'save'
               ? `¿Guardar los cambios en "${confirm.name}"? Esta acción se registra en el historial de auditoría.`
-              : `¿Renombrar la tabla a "${confirm?.name}"? Esta acción se registra en el historial de auditoría.`
+              : confirm?.kind === 'default'
+                ? `¿Marcar "${confirm.name}" como la tarifa por defecto de su tipo de cobro? Los próximos paquetes y facturas de ese tipo la usarán cuando el cliente no tenga una tarifa especial.`
+                : `¿Renombrar la tabla a "${confirm?.name}"? Esta acción se registra en el historial de auditoría.`
         }
-        confirmLabel={confirm?.kind === 'delete' ? 'Eliminar' : 'Confirmar'}
+        confirmLabel={confirm?.kind === 'delete' ? 'Eliminar' : confirm?.kind === 'default' ? 'Marcar por defecto' : 'Confirmar'}
         loading={saving === confirm?.id}
       />
     </div>

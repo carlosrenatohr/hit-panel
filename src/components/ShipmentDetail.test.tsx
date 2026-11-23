@@ -79,6 +79,7 @@ vi.mock('../lib/insforge', () => ({
 vi.mock('../lib/config', () => ({
   configApi: {
     info: vi.fn().mockResolvedValue({ slug: 'hit', name: 'HIT Cargo', ruc: null, address: null, phone: null, currency: 'USD', isScrapable: true }),
+    features: vi.fn(),
     branding: vi.fn().mockResolvedValue({ agencies: [] }),
     paymentCatalogs: vi.fn().mockResolvedValue({ methods: [], banks: [] }),
     proxyPhotoUrl: vi.fn().mockResolvedValue(null),
@@ -106,11 +107,15 @@ vi.mock('./billing/InvoiceForm', () => ({
   ),
 }));
 
+const pricingPreview = vi.hoisted(() => vi.fn())
+vi.mock('../lib/billing', () => ({ billingApi: { pricingPreview, getInvoice: vi.fn() } }))
+
 const adminUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
 
 describe('ShipmentDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(configApi.features).mockResolvedValue({ flexiblePricing: false });
   });
 
   it('renders package detail with guia', async () => {
@@ -229,6 +234,24 @@ describe('ShipmentDetail', () => {
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
 
     expect(screen.getAllByText('Por peso').length).toBeGreaterThan(0);
+  });
+
+  it('muestra el resumen de cobro con la tarifa por peso vigente', async () => {
+    vi.mocked(configApi.features).mockResolvedValue({ flexiblePricing: true });
+    pricingPreview.mockResolvedValue({
+      cardName: 'Estándar', pricingKind: 'weight', customerCharge: 36.4, customerRate: 7,
+      customerUnit: 'lb', currency: 'USD', quantity: 5.2, providerCost: 23.4, grossProfit: 13,
+    });
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
+
+    expect(await screen.findByText('Resumen de cobro')).toBeTruthy();
+    expect(screen.getByText('Por peso · Estándar · $36.40')).toBeTruthy();
+    expect(screen.getByText('Costo interno')).toBeTruthy();
+    expect(screen.getByText('Utilidad')).toBeTruthy();
+    expect(pricingPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ pricingKind: 'weight', weightLb: 5.2, clientId: null }),
+    );
   });
 
   it('shows "Sin definir" for a manual package with no service type yet', async () => {

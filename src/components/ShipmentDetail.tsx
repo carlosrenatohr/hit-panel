@@ -2,6 +2,7 @@ import { Anchor, Check, CheckCircle2, Copy, ExternalLink, FileText, Package, Pla
 import { useEffect, useRef, useState } from 'preact/hooks'
 import InvoiceForm from './billing/InvoiceForm'
 import InvoiceDetail from './billing/InvoiceDetail'
+import ChargeSummary from './billing/ChargeSummary'
 import { billingApi } from '../lib/billing'
 import {
   cleanName,
@@ -77,6 +78,19 @@ export default function ShipmentDetail({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [invoiceInfo, setInvoiceInfo] = useState<{ fiscalYear: number; invoiceNumber: number; status: string } | null>(null)
+  /** Flexible pricing: the package's current tariff + charge (same resolver as creation). */
+  const [flexible, setFlexible] = useState(false)
+  const [pricing, setPricing] = useState<{
+    pricingKind: 'weight' | 'fixed'
+    cardName: string
+    customerCharge: number
+    customerRate?: number
+    quantity: number
+    currency: 'USD' | 'NIO'
+    providerCost?: number
+    grossProfit?: number
+  } | null>(null)
+  const [pricingLoading, setPricingLoading] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -88,10 +102,61 @@ export default function ShipmentDetail({
         setCurrency(info.currency)
       })
       .catch(() => {})
+    configApi
+      .features?.()
+      .then((f) => alive && setFlexible(!!f.flexiblePricing))
+      .catch(() => {})
     return () => {
       alive = false
     }
   }, [])
+
+  // Current tariff for this package: the Worker resolves it with the same order
+  // as creation (explicit card → client assignment → org default), so the detail
+  // shows the card and charge the invoice will use. Costs stay finance-only.
+  useEffect(() => {
+    if (!d || !flexible) {
+      setPricing(null)
+      return
+    }
+    const isFixed = d.pkg.pricing_kind === 'fixed'
+    const weight = d.pkg.effective_weight_lb
+    if (!isFixed && !(weight != null && weight > 0)) {
+      setPricing(null)
+      return
+    }
+    let alive = true
+    setPricingLoading(true)
+    void (async () => {
+      try {
+        const p = await billingApi.pricingPreview({
+          serviceType: (d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'maritimo' : 'aereo',
+          pricingKind: isFixed ? 'fixed' : 'weight',
+          clientId: d.pkg.client_id ?? null,
+          rateCardId: isFixed ? d.pkg.rate_card_id ?? null : null,
+          weightLb: isFixed ? null : weight,
+        })
+        if (!alive) return
+        setPricing({
+          pricingKind: p.pricingKind,
+          cardName: p.cardName,
+          customerCharge: p.customerCharge,
+          customerRate: p.customerRate,
+          quantity: p.quantity,
+          currency: p.currency,
+          providerCost: p.providerCost,
+          grossProfit: p.grossProfit,
+        })
+      } catch {
+        if (alive) setPricing(null)
+      } finally {
+        if (alive) setPricingLoading(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [d, flexible])
 
   const weightLb = Number(weightInput.replace(',', '.'))
   const weightValid = weightInput.trim() !== '' && Number.isFinite(weightLb) && weightLb > 0
@@ -449,17 +514,24 @@ export default function ShipmentDetail({
                   {(d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'Marítimo' : 'Aéreo'} {officeFlag(d.pkg.origin_office)}
                 </span>
                 {/* Tariff that prices this package — a fixed-fee service must never
-                    look like a plain air/sea package. */}
+                    look like a plain air/sea package. Weight gets a bright badge
+                    too, plus the card name and charge the invoice will use. */}
                 <span
                   class={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
-                    d.pkg.pricing_kind === 'fixed' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-gray-50 text-gray-600 ring-gray-200'
+                    d.pkg.pricing_kind === 'fixed'
+                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                      : 'bg-sky-50 text-sky-700 ring-sky-200'
                   }`}
                   title="Tipo de tarifa con la que se cobra el paquete"
                 >
-                  {d.pkg.pricing_kind === 'fixed' ? 'Cuota fija' : 'Por peso'}
-                  {d.pkg.pricing_kind === 'fixed' && d.pkg.customer_charge != null && user.role !== 'viewer'
-                    ? ` · ${fmtMoney(d.pkg.customer_charge, currency)} por guía`
-                    : ''}
+                  {(() => {
+                    const fixed = d.pkg.pricing_kind === 'fixed'
+                    const charge = pricing?.customerCharge ?? d.pkg.customer_charge ?? null
+                    const parts = [fixed ? 'Cuota fija' : 'Por peso']
+                    if (pricing?.cardName) parts.push(pricing.cardName)
+                    if (charge != null && user.role !== 'viewer') parts.push(`${fmtMoney(charge, pricing?.currency ?? currency)}${fixed ? ' por guía' : ''}`)
+                    return parts.join(' · ')
+                  })()}
                 </span>
                 <span class="flex items-center gap-1.5 text-gray-600">
                   <Package class="h-4 w-4 text-gray-400" aria-hidden="true" />
@@ -717,6 +789,29 @@ export default function ShipmentDetail({
 
                 </div>
               </section>
+            )}
+
+            {/* Current charge summary — same component as creation/invoicing, right
+                below the actions and above the internal details. */}
+            {flexible && user.role !== 'viewer' && (pricingLoading || pricing || d.pkg.customer_charge != null) && (
+              <ChargeSummary
+                loading={pricingLoading}
+                cardName={pricing?.cardName ?? (d.pkg.pricing_kind === 'fixed' ? 'Cuota fija' : null)}
+                quantityLabel={
+                  d.pkg.pricing_kind === 'fixed'
+                    ? '1 guía'
+                    : pricing
+                      ? `${pricing.quantity} lb × ${fmtMoney(pricing.customerRate ?? 0, pricing.currency)}`
+                      : null
+                }
+                customerCharge={pricing?.customerCharge ?? d.pkg.customer_charge ?? null}
+                currency={pricing?.currency ?? currency}
+                unitLabel={d.pkg.pricing_kind === 'fixed' ? 'por guía' : 'total'}
+                providerCost={canBill ? pricing?.providerCost : undefined}
+                profit={canBill ? pricing?.grossProfit : undefined}
+                canSeeCosts={canBill}
+                note="Cálculo con la tarifa vigente. La factura guarda el cobro al crearla."
+              />
             )}
 
             {/* Internal details (secondary, collapsed by default) */}
