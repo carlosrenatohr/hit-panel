@@ -78,7 +78,7 @@ export default function BillingReports() {
           {prefs.visible('kpis') && (
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
               <Kpi label="Ingresos" value={fmtUsd(rep.revenue)} />
-              <Kpi label="Ganancia" value={fmtUsd(rep.profit)} accent="text-green-700" />
+              <Kpi label="Utilidad" value={fmtUsd(rep.profit)} accent="text-green-700" />
               <Kpi label="Margen" value={rep.revenue > 0 ? `${Math.round((rep.profit / rep.revenue) * 100)}%` : '—'} accent="text-green-700" />
               <Kpi label="Por cobrar" value={fmtUsd(rep.receivables)} accent="text-yellow-700" />
               <Kpi label="Facturas" value={String(rep.invoices)} />
@@ -97,7 +97,7 @@ export default function BillingReports() {
                       labels: MONTHS,
                       datasets: [
                         { label: 'Ingresos', data: rep.byMonth.map((m) => m.revenue), backgroundColor: BRAND_HEX.primary },
-                        { label: 'Ganancia', data: rep.byMonth.map((m) => m.profit), backgroundColor: BRAND_HEX.accentBlue },
+                        { label: 'Utilidad', data: rep.byMonth.map((m) => m.profit), backgroundColor: BRAND_HEX.accentBlue },
                       ],
                     },
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
@@ -130,7 +130,7 @@ export default function BillingReports() {
 
               {prefs.visible('flete-ganancia') && (
                 <Card>
-                  <SectionTitle>Ganancia por tipo de flete</SectionTitle>
+                  <SectionTitle>Utilidad por tipo de flete</SectionTitle>
                   <div class="p-4">
                     <ChartCanvas
                       height={240}

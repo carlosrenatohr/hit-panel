@@ -29,7 +29,7 @@ export const BILLING_SECTION_DEFS: SectionDef[] = [
   { key: 'kpis', label: 'Indicadores' },
   { key: 'mes', label: 'Ingresos y ganancia por mes' },
   { key: 'flete-ingresos', label: 'Ingresos por tipo de flete' },
-  { key: 'flete-ganancia', label: 'Ganancia por tipo de flete' },
+  { key: 'flete-ganancia', label: 'Utilidad por tipo de flete' },
   { key: 'calendario', label: 'Calendario de facturación' },
 ]
 

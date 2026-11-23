@@ -80,7 +80,7 @@ export default function InvoicePrint({
           <tr class="border-y border-gray-300 text-[10px] uppercase tracking-widest text-gray-500">
             <th class="py-2 text-left font-semibold">Guía / Concepto</th>
             <th class="py-2 text-left font-semibold">Flete</th>
-            <th class="py-2 text-right font-semibold">Libras</th>
+            <th class="py-2 text-right font-semibold">Cantidad</th>
             <th class="py-2 text-right font-semibold">P. unit.</th>
             <th class="py-2 text-right font-semibold">Total</th>
           </tr>
@@ -113,7 +113,7 @@ export default function InvoicePrint({
                   )}
                 </td>
                 <td class="py-2">{l.freightType ? FREIGHT_LABEL[l.freightType] : '-'}</td>
-                <td class="py-2 text-right">{l.quantityLbs ?? '-'}</td>
+                <td class="py-2 text-right">{l.pricingSource === 'package_snapshot' ? '1 unidad' : l.quantityLbs != null ? `${l.quantityLbs} lb` : '-'}</td>
                 <td class="py-2 text-right">{fmtMoney(l.unitPrice, currency)}</td>
                 <td class="py-2 text-right font-medium">{fmtMoney(l.total, currency)}</td>
               </tr>

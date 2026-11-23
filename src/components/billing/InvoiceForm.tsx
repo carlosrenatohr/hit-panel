@@ -6,6 +6,7 @@ import { customerApi, type Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
 import { Button, Card, Field, inputCls, SectionTitle, Spinner, Tooltip } from '../ui'
 import ClientSearch from '../ui/ClientSearch'
+import ChargeSummary from './ChargeSummary'
 
 interface DraftLine {
   freightType: FreightType
@@ -19,12 +20,29 @@ interface DraftLine {
   tracking: string | null
   /** Package billed by this line (drives the guided flow + server link sync). */
   packageId: string | null
-  /** Fixed package: the panel displays the stored charge; the Worker stays authoritative. */
+  /** Billing kind of the line: fixed lines never re-quote by weight. */
+  pricingKind: 'weight' | 'fixed'
+  /** Fixed package: the stored charge the Worker bills (never recomputed here). */
   fixedCharge?: number | null
+  /** Fixed package: its utilidad, when the API exposes it (finance roles only). */
+  fixedProfit?: number | null
 }
 
 /** Prefill lines may carry display-only guia/tracking/packageId beyond the create shape. */
-interface PrefillLine { freightType: FreightType; tier: PriceTier; quantityLbs: number; description?: string | null; rateTableId?: string | null; guia?: string | null; tracking?: string | null; packageId?: string | null }
+interface PrefillLine {
+  freightType: FreightType
+  tier: PriceTier
+  quantityLbs: number
+  description?: string | null
+  rateTableId?: string | null
+  guia?: string | null
+  tracking?: string | null
+  packageId?: string | null
+  /** Fixed service: the package's stored charge + utilidad. */
+  pricingKind?: 'weight' | 'fixed'
+  customerCharge?: number | null
+  customerProfit?: number | null
+}
 interface InvoicePrefill extends Omit<Partial<CreateInvoiceInput>, 'lines'> { clientId?: string | null; lines?: PrefillLine[] }
 
 interface DraftOther {
@@ -69,8 +87,24 @@ export default function InvoiceForm({
   const [observations, setObservations] = useState('')
   const [currency, setCurrency] = useState<'USD' | 'NIO'>('USD')
   const [lines, setLines] = useState<DraftLine[]>(
-    prefill?.lines?.map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: String(l.quantityLbs), description: l.description ?? '', rateTableId: l.rateTableId ?? null, guia: l.guia ?? null, tracking: l.tracking ?? null, packageId: l.packageId ?? null })) ?? [
-      { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null, packageId: null },
+    prefill?.lines?.map((l) => {
+      const isFixed = l.pricingKind === 'fixed' || l.customerCharge != null
+      return {
+        freightType: l.freightType,
+        tier: isFixed ? 'FIXED' : l.tier,
+        // One guía = one unit for fixed services; weight lines bill pounds.
+        quantityLbs: isFixed ? '1' : String(l.quantityLbs),
+        description: l.description ?? '',
+        rateTableId: l.rateTableId ?? null,
+        guia: l.guia ?? null,
+        tracking: l.tracking ?? null,
+        packageId: l.packageId ?? null,
+        pricingKind: isFixed ? 'fixed' : 'weight',
+        fixedCharge: isFixed ? l.customerCharge ?? null : null,
+        fixedProfit: isFixed ? l.customerProfit ?? null : null,
+      }
+    }) ?? [
+      { freightType: 'AIR', tier: 'REGULAR', quantityLbs: '', description: '', rateTableId: null, guia: null, tracking: null, packageId: null, pricingKind: 'weight' },
     ],
   )
   const [others, setOthers] = useState<DraftOther[]>([])
@@ -116,10 +150,14 @@ export default function InvoiceForm({
                   tracking = inv.packages[0].tracking ?? null
                 }
               }
+              // A line priced from the package snapshot is a fixed service: keep
+              // its stored charge/profit and its single unit so a save never
+              // drops it (quantity_lbs is 0 for fixed lines by design).
+              const isFixed = l.pricingSource === 'package_snapshot'
               return {
                 freightType: (l.freightType ?? 'AIR') as FreightType,
-                tier: (l.priceTier ?? 'REGULAR') as PriceTier,
-                quantityLbs: String(l.quantityLbs ?? ''),
+                tier: isFixed ? 'FIXED' : ((l.priceTier ?? 'REGULAR') as PriceTier),
+                quantityLbs: isFixed ? '1' : String(l.quantityLbs ?? ''),
                 description: l.description ?? '',
                 // Keep the card that priced the line; the client's current
                 // default only fills lines without one (hydrated above).
@@ -127,6 +165,9 @@ export default function InvoiceForm({
                 guia,
                 tracking,
                 packageId: l.packageId ?? null,
+                pricingKind: isFixed ? ('fixed' as const) : ('weight' as const),
+                fixedCharge: isFixed ? l.total : null,
+                fixedProfit: isFixed ? l.profit : null,
               }
             }),
           )
@@ -243,11 +284,18 @@ export default function InvoiceForm({
     return tiers[0] ?? 'REGULAR'
   }
 
-  function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; profit: number } {
-    // Fixed package: display the stored charge (cost-free preview — the Worker
-    // holds the authoritative snapshot; staff never sees provider cost here).
-    if (l.fixedCharge != null) {
-      return { unitPrice: l.fixedCharge, total: l.fixedCharge, profit: l.fixedCharge }
+  function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; cost: number; profit: number | null } {
+    // Fixed package: the package's stored charge is the amount; its cost/utilidad
+    // come from the API (never estimated in the browser).
+    if (l.pricingKind === 'fixed') {
+      const charge = l.fixedCharge ?? null
+      const profit = l.fixedProfit ?? null
+      return {
+        unitPrice: charge,
+        total: charge ?? 0,
+        cost: charge != null && profit != null ? round2(charge - profit) : 0,
+        profit,
+      }
     }
     const lbs = Number(l.quantityLbs) || 0
     // Mirror the Worker's resolution: explicit table, then the client's default
@@ -259,17 +307,17 @@ export default function InvoiceForm({
     const card = explicit ?? (clientDefault && hasFreight(clientDefault) ? clientDefault : rateCards.find(hasFreight))
     if (card) {
       const entry = card.currentVersion.entries.find((e) => e.serviceType === l.freightType)
-      if (!entry) return { unitPrice: null, total: 0, profit: 0 }
+      if (!entry) return { unitPrice: null, total: 0, cost: 0, profit: null }
       const total = round2(lbs * entry.price)
-      const profit = round2(total - lbs * entry.cost)
-      return { unitPrice: entry.price, total, profit }
+      const cost = round2(lbs * entry.cost)
+      return { unitPrice: entry.price, total, cost, profit: round2(total - cost) }
     }
     const entry = catalog.find((c) => c.freightType === l.freightType)
     const price = entry?.tiers[l.tier]
-    if (price == null) return { unitPrice: null, total: 0, profit: 0 }
+    if (price == null) return { unitPrice: null, total: 0, cost: 0, profit: null }
     const total = round2(lbs * price)
-    const profit = round2(total - lbs * (entry?.cost ?? 0))
-    return { unitPrice: price, total, profit }
+    const cost = round2(lbs * (entry?.cost ?? 0))
+    return { unitPrice: price, total, cost, profit: round2(total - cost) }
   }
 
   function otherAmount(o: DraftOther): number {
@@ -280,13 +328,22 @@ export default function InvoiceForm({
   const totals = useMemo(() => {
     let total = 0
     let profit = 0
+    let cost = 0
+    // A single unknown fixed utilidad must not be shown as 0 — the footer says "—".
+    let profitComplete = true
     for (const l of lines) {
       const a = lineAmounts(l)
       total += a.total
-      profit += a.profit
+      cost += a.cost
+      if (a.profit == null) profitComplete = false
+      else profit += a.profit
     }
-    for (const o of others) total += otherAmount(o)
-    return { total: round2(total), profit: round2(profit) }
+    for (const o of others) {
+      const amount = otherAmount(o)
+      total += amount
+      profit += amount
+    }
+    return { total: round2(total), cost: round2(cost), profit: round2(profit), profitComplete }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, others, rateCards, catalog, activeConcepts])
 
@@ -296,7 +353,7 @@ export default function InvoiceForm({
 
   function addFreightLine() {
     const tableId = clientDefaultFor('AIR')
-    setLines((ls) => [...ls, { freightType: 'AIR', tier: tierFor('AIR', tableId), quantityLbs: '', description: '', rateTableId: tableId, guia: null, tracking: null, packageId: null }])
+    setLines((ls) => [...ls, { freightType: 'AIR', tier: tierFor('AIR', tableId), quantityLbs: '', description: '', rateTableId: tableId, guia: null, tracking: null, packageId: null, pricingKind: 'weight' }])
   }
 
   /** Guided flow: select/deselect a package → one freight line per selected package. */
@@ -314,14 +371,16 @@ export default function InvoiceForm({
         {
           freightType,
           tier: isFixed ? 'FIXED' as PriceTier : tierFor(freightType, tableId),
-          // Fixed: one guía = one charge — the stored snapshot is the only input.
+          // Fixed: one guía = one unit — the stored snapshot is the only input.
           quantityLbs: isFixed ? '1' : String(pkg.weightLb ?? ''),
           description: '',
           rateTableId: isFixed ? null : tableId,
           guia: pkg.guia,
           tracking: pkg.tracking,
           packageId: pkg.packageId,
+          pricingKind: isFixed ? 'fixed' : 'weight',
           fixedCharge: isFixed ? pkg.customerCharge : null,
+          fixedProfit: isFixed ? pkg.grossProfit ?? null : null,
         },
       ]
     })
@@ -339,9 +398,18 @@ export default function InvoiceForm({
     if (guidedCreate && !clientId) return setErr('Selecciona un cliente para cargar sus guías.')
     if (guidedCreate && selectedIds.length === 0) return setErr('Selecciona al menos una guía del cliente.')
     const cleanLines = lines
-      .map((l) => ({ freightType: l.freightType, tier: l.tier, quantityLbs: Number(l.quantityLbs), description: l.description || null, rateTableId: l.rateTableId, packageId: l.packageId ?? null }))
-      .filter((l) => l.quantityLbs > 0)
-    if (cleanLines.length === 0) return setErr('Agrega al menos una línea con peso.')
+      .filter((l) => l.pricingKind === 'fixed' || Number(l.quantityLbs) > 0)
+      .map((l) => ({
+        freightType: l.freightType,
+        // Fixed lines keep the sentinel tier: the Worker prices them from the
+        // package snapshot and never re-quotes by weight.
+        tier: l.pricingKind === 'fixed' ? 'FIXED' : l.tier,
+        quantityLbs: l.pricingKind === 'fixed' ? 1 : Number(l.quantityLbs),
+        description: l.description || null,
+        rateTableId: l.rateTableId,
+        packageId: l.packageId ?? null,
+      }))
+    if (cleanLines.length === 0) return setErr('Agregá al menos una línea con cantidad.')
     const cleanOthers = others
       .map((o) => ({ conceptId: o.conceptId || null, description: o.extra || null, amount: otherAmount(o) }))
       .filter((o) => o.amount > 0)
@@ -467,7 +535,11 @@ export default function InvoiceForm({
             <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Líneas de flete</div>
             {lines.map((l, i) => {
               const a = lineAmounts(l)
-              const tiers = tiersFor(l.freightType, l.rateTableId)
+              const isFixed = l.pricingKind === 'fixed'
+              // The tier ("categoría") only matters for legacy rate tables: a rate
+              // card already fixes one price per service, so the selector was noise
+              // (and English) on every card-priced line.
+              const tiers = isFixed || l.rateTableId || rateCards.length > 0 ? [] : tiersFor(l.freightType, l.rateTableId)
               const tables = tablesFor(l.freightType)
               return (
                 <div key={i} class="rounded-lg border border-gray-100 p-2">
@@ -475,37 +547,67 @@ export default function InvoiceForm({
                     <div class="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]">
                       {l.guia && <span class="font-semibold text-gray-700">Guía {l.guia}</span>}
                       {l.tracking && <span class="font-mono text-gray-500">Tracking {l.tracking}</span>}
+                      {isFixed && (
+                        <span class="rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">Cuota fija</span>
+                      )}
                     </div>
                   )}
                   <div class="grid grid-cols-12 items-end gap-2">
                     <label class="col-span-3 text-[11px] text-gray-500">
                       Flete
-                      <select class={`${inputCls} mt-1 w-full`} value={l.freightType} onChange={(e) => {
-                        const f = (e.target as HTMLSelectElement).value as FreightType
-                        const tableId = clientDefaultFor(f)
-                        setLine(i, { freightType: f, rateTableId: tableId, tier: tiersFor(f, tableId)[0] ?? 'REGULAR' })
-                      }}>
-                        {FREIGHTS.map((f) => <option key={f} value={f}>{FREIGHT_LABEL[f]}</option>)}
-                      </select>
+                      {isFixed ? (
+                        <div class="mt-1 rounded-lg bg-gray-50 px-2 py-2 text-sm text-gray-700">{FREIGHT_LABEL[l.freightType]}</div>
+                      ) : (
+                        <select class={`${inputCls} mt-1 w-full`} value={l.freightType} onChange={(e) => {
+                          const f = (e.target as HTMLSelectElement).value as FreightType
+                          const tableId = clientDefaultFor(f)
+                          setLine(i, { freightType: f, rateTableId: tableId, tier: tiersFor(f, tableId)[0] ?? 'REGULAR' })
+                        }}>
+                          {FREIGHTS.map((f) => <option key={f} value={f}>{FREIGHT_LABEL[f]}</option>)}
+                        </select>
+                      )}
                     </label>
                     <label class="col-span-4 text-[11px] text-gray-500">
                       Tarifa
-                      <select class={`${inputCls} mt-1 w-full`} value={l.rateTableId ?? ''} onChange={(e) => {
-                        const id = (e.target as HTMLSelectElement).value || null
-                        const card = id ? rateCards.find((c) => c.id === id) : null
-                        setLine(i, { rateTableId: id, tier: card?.currentVersion.entries.find((en) => en.serviceType === l.freightType)?.name ?? 'REGULAR' })
-                      }}>
-                        <option value="">(tarifa del cliente)</option>
-                        {tables.map((t) => <option key={t.id} value={t.id}>{tableLabel(t)}</option>)}
-                      </select>
+                      {isFixed ? (
+                        <div class="mt-1 rounded-lg bg-gray-50 px-2 py-2 text-sm text-gray-700" title="La cuota fija del paquete se definió al crearlo">
+                          Definida en el paquete
+                        </div>
+                      ) : (
+                        <select class={`${inputCls} mt-1 w-full`} value={l.rateTableId ?? ''} onChange={(e) => {
+                          const id = (e.target as HTMLSelectElement).value || null
+                          const card = id ? rateCards.find((c) => c.id === id) : null
+                          setLine(i, { rateTableId: id, tier: card?.currentVersion.entries.find((en) => en.serviceType === l.freightType)?.name ?? 'REGULAR' })
+                        }}>
+                          <option value="">(tarifa del cliente)</option>
+                          {tables.map((t) => <option key={t.id} value={t.id}>{tableLabel(t)}</option>)}
+                        </select>
+                      )}
                     </label>
                     <label class="col-span-2 text-[11px] text-gray-500">
-                      Libras
-                      <input type="number" min="0" step="0.01" class={`${inputCls} mt-1 w-full`} value={l.quantityLbs} onInput={(e) => setLine(i, { quantityLbs: (e.target as HTMLInputElement).value })} />
+                      {isFixed ? 'Unidades' : 'Libras'}
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        class={`${inputCls} mt-1 w-full disabled:bg-gray-50 disabled:text-gray-500`}
+                        value={isFixed ? '1' : l.quantityLbs}
+                        disabled={isFixed}
+                        title={isFixed ? 'Una guía = una unidad en cuota fija' : undefined}
+                        onInput={(e) => setLine(i, { quantityLbs: (e.target as HTMLInputElement).value })}
+                      />
                     </label>
                     <div class="col-span-2 pb-2 text-right text-sm">
-                      <div class="font-semibold text-secondary">{a.unitPrice == null ? 'N/A' : fmtMoney(a.total, currency)}</div>
-                      <div class="text-[11px] text-gray-400">{a.unitPrice == null ? 'tarifa no aplica' : `${fmtMoney(a.unitPrice, currency)}/lb`}</div>
+                      <div class="font-semibold text-secondary">
+                        {isFixed ? (a.total > 0 ? fmtMoney(a.total, currency) : '…') : a.unitPrice == null ? 'N/A' : fmtMoney(a.total, currency)}
+                      </div>
+                      <div class="text-[11px] text-gray-400">
+                        {isFixed
+                          ? 'por unidad'
+                          : a.unitPrice == null
+                            ? 'tarifa no aplica'
+                            : `${fmtMoney(a.unitPrice, currency)}/lb`}
+                      </div>
                     </div>
                     <button class="col-span-1 pb-2 text-gray-300 hover:text-red-500" aria-label={`Quitar línea ${i + 1}`} title={`Quitar línea ${i + 1}`} onClick={() => {
                           setLines((ls) => ls.filter((_, idx) => idx !== i))
@@ -516,7 +618,7 @@ export default function InvoiceForm({
                   </div>
                   {tiers.length > 0 && (
                     <div class="mt-2 flex items-center gap-2">
-                      <span class="text-[11px] text-gray-400">Tier:</span>
+                      <span class="text-[11px] text-gray-400">Categoría de precio:</span>
                       <select class={`${inputCls} w-auto text-xs`} value={tiers.includes(l.tier) ? l.tier : tiers[0]} onChange={(e) => setLine(i, { tier: (e.target as HTMLSelectElement).value })}>
                         {tiers.map((t) => <option key={t} value={t}>{TIER_LABEL[t] ?? t}</option>)}
                       </select>
@@ -570,14 +672,17 @@ export default function InvoiceForm({
             <textarea class={`${inputCls} min-h-[60px]`} value={observations} onInput={(e) => setObservations((e.target as HTMLTextAreaElement).value)} />
           </Field>
 
-          <div class="flex items-center justify-between border-t border-gray-100 pt-3">
-            <div class="text-sm">
-              <span class="text-gray-500">Total </span>
-              <span class="text-lg font-bold text-secondary">{fmtMoney(totals.total, currency)}</span>
-              <span class="ml-3 text-gray-500">Ganancia </span>
-              <span class="font-semibold text-green-700">{fmtMoney(totals.profit, currency)}</span>
-            </div>
-            <div class="flex gap-2">
+          <div class="space-y-2 border-t border-gray-100 pt-3">
+            <ChargeSummary
+              title="Resumen de cobro"
+              customerCharge={totals.total}
+              currency={currency}
+              providerCost={totals.cost}
+              profit={totals.profitComplete ? totals.profit : null}
+              canSeeCosts
+              note="El sistema recalcula y guarda los montos al crear o guardar la factura."
+            />
+            <div class="flex items-center justify-end gap-2">
               <Button variant="ghost" onClick={onClose}>Cancelar</Button>
               <Button onClick={submit} disabled={saving}>{saving ? <Spinner /> : isEdit ? 'Guardar cambios' : 'Crear factura'}</Button>
             </div>
