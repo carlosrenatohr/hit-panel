@@ -227,8 +227,8 @@ function qs(params: Record<string, unknown>): string {
 export const billingApi = {
   health: () => workerApi<{ module: string; user: { role: string; name: string | null } }>(`${API_BASE}/api/billing/health`),
   catalog: () => workerApi<CatalogEntry[]>(`${API_BASE}/api/billing/catalog`),
-  /** Flexible pricing: fixed-service preview for the create-package form. */
-  pricingPreview: (input: { serviceType: string; clientId?: string | null; rateCardId?: string | null }) =>
+  /** Flexible pricing: charge preview for the create-package form (weight and fixed). */
+  pricingPreview: (input: { serviceType: string; pricingKind?: 'weight' | 'fixed'; clientId?: string | null; rateCardId?: string | null; weightLb?: number | null }) =>
     workerApi<{
       cardName: string
       pricingKind: 'fixed' | 'weight'
@@ -236,9 +236,17 @@ export const billingApi = {
       customerUnit: string
       currency: 'USD' | 'NIO'
       quantity: number
+      /** Weight pricing: price per lb (fixed cards carry the flat charge instead). */
+      customerRate?: number
       providerCost?: number
       grossProfit?: number
-    }>(`${API_BASE}/api/billing/pricing-preview${qs({ serviceType: input.serviceType, clientId: input.clientId ?? undefined, rateCardId: input.rateCardId ?? undefined })}`),
+    }>(`${API_BASE}/api/billing/pricing-preview${qs({
+      serviceType: input.serviceType,
+      pricingKind: input.pricingKind ?? undefined,
+      clientId: input.clientId ?? undefined,
+      rateCardId: input.rateCardId ?? undefined,
+      weightLb: input.weightLb ?? undefined,
+    })}`),
   quote: (freightType: FreightType, tier: PriceTier, lbs: number) =>
     workerApi<Quote>(`${API_BASE}/api/billing/quote${qs({ freightType, tier, lbs })}`),
   listInvoices: (f: InvoiceFilters) => workerApi<{ rows: InvoiceListRow[]; count: number }>(`${API_BASE}/api/billing/invoices${qs({ ...f })}`),

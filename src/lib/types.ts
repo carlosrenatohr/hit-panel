@@ -60,6 +60,11 @@ export interface Pkg {
   rate_override_id: string | null
   rate_override_by: string | null
   rate_override_at: string | null
+  /** Billing tariff kind frozen at creation ('fixed' = flat per guía; 'weight' = per lb). */
+  pricing_kind?: 'weight' | 'fixed' | 'volume' | null
+  /** Fixed packages: the charge snapshotted at creation. */
+  customer_charge?: number | null
+  customer_unit?: string | null
   provider_id: string
   providers?: Provider
 }

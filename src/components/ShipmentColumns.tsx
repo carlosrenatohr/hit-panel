@@ -60,6 +60,12 @@ export const COLUMN_DEFS: ColumnDef[] = [
     ),
   },
   {
+    key: 'tarifa',
+    label: 'Tipo de tarifa',
+    // Fixed packages bill a flat per-guía amount; everything else is weight billing.
+    render: (p) => <span class="text-gray-600">{p.pricing_kind === 'fixed' ? 'Cuota fija' : 'Por peso'}</span>,
+  },
+  {
     key: 'carga',
     label: 'Carga',
     render: (p) => {

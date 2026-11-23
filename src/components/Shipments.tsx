@@ -25,6 +25,7 @@ import { fmtMoney } from '../lib/format'
 import LifecycleOverview, { PickupQuickAction, StatusSelector, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import FilterSheet from './shipments/FilterSheet'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
+import ChargeSummary from './billing/ChargeSummary'
 import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Spinner, StaleBadge, StatusPill } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
 
@@ -163,7 +164,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     client: null as { id: string; name: string } | null,
     // The state the package is born with (manual override; scraped flow has none).
     status: 'en_almacen' as ShipmentStatus,
-    // Flexible pricing: picked fixed-service card ('' = weight billing, as today).
+    // Flexible pricing: billing type first (weight vs fixed fee). Fixed fees need
+    // an explicit card; weight resolves the client/org weight tariff server-side.
+    pricingKind: 'weight' as 'weight' | 'fixed',
     rateCardId: '',
   })
 
@@ -171,7 +174,16 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   // flag (production agencies) everything below stays hidden and inert.
   const [flexible, setFlexible] = useState(false)
   const [fixedCards, setFixedCards] = useState<Array<{ id: string; name: string }>>([])
-  const [preview, setPreview] = useState<{ customerCharge: number; currency: 'USD' | 'NIO'; providerCost?: number; grossProfit?: number; cardName: string } | null>(null)
+  const [preview, setPreview] = useState<{
+    pricingKind: 'fixed' | 'weight'
+    cardName: string
+    customerCharge: number
+    customerRate?: number
+    currency: 'USD' | 'NIO'
+    quantity: number
+    providerCost?: number
+    grossProfit?: number
+  } | null>(null)
   const canSeeCosts = user.role === 'admin' || user.role === 'billing'
 
   useEffect(() => {
@@ -190,30 +202,51 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   }, [])
 
   // Financial summary preview — resolved by the Worker with the same order as
-  // create_package (the panel never computes money).
+  // create_package (the panel never computes money). Works for BOTH billing
+  // types: weight (price per lb × weight) and fixed (flat per guía).
   useEffect(() => {
-    if (!flexible || !createForm.rateCardId || !createForm.serviceType) {
-      setPreview(null)
-      return
-    }
+    setPreview(null)
+    if (!flexible || !createForm.serviceType) return
+    const isFixed = createForm.pricingKind === 'fixed'
+    if (isFixed && fixedCards.length === 0) return
+    const weightLb = Number(createForm.weightLb)
+    if (!isFixed && (!createForm.weightLb.trim() || !Number.isFinite(weightLb) || weightLb <= 0)) return
     let cancelled = false
-    void (async () => {
-      const { billingApi } = await import('../lib/billing')
-      try {
-        const p = await billingApi.pricingPreview({
-          serviceType: createForm.serviceType,
-          clientId: createForm.client?.id || null,
-          rateCardId: createForm.rateCardId,
-        })
-        if (!cancelled) setPreview({ customerCharge: p.customerCharge, currency: p.currency, providerCost: p.providerCost, grossProfit: p.grossProfit, cardName: p.cardName })
-      } catch {
-        if (!cancelled) setPreview(null)
-      }
-    })()
+    // Weight previews follow the typed weight — debounce so a keystroke never
+    // fires a request per character.
+    const timer = setTimeout(() => {
+      void (async () => {
+        const { billingApi } = await import('../lib/billing')
+        try {
+          const p = await billingApi.pricingPreview({
+            serviceType: createForm.serviceType,
+            pricingKind: createForm.pricingKind,
+            clientId: createForm.client?.id || null,
+            rateCardId: isFixed ? createForm.rateCardId || null : null,
+            weightLb: isFixed ? null : weightLb,
+          })
+          if (!cancelled) {
+            setPreview({
+              pricingKind: p.pricingKind,
+              cardName: p.cardName,
+              customerCharge: p.customerCharge,
+              customerRate: p.customerRate,
+              currency: p.currency,
+              quantity: p.quantity,
+              providerCost: p.providerCost,
+              grossProfit: p.grossProfit,
+            })
+          }
+        } catch {
+          if (!cancelled) setPreview(null)
+        }
+      })()
+    }, isFixed ? 0 : 350)
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
-  }, [flexible, createForm.rateCardId, createForm.serviceType, createForm.client?.id])
+  }, [flexible, createForm.pricingKind, createForm.serviceType, createForm.rateCardId, createForm.client?.id, createForm.weightLb, fixedCards.length])
 
   // Bulk invoicing selection (persists across pagination/filter changes).
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -476,7 +509,17 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       return
     }
     const weightLb = Number(createForm.weightLb)
-    const isFixedCreate = flexible && !!createForm.rateCardId
+    const isFixedCreate = flexible && createForm.pricingKind === 'fixed'
+    if (isFixedCreate) {
+      if (fixedCards.length === 0) {
+        setCreateError('No hay tarifas de cuota fija configuradas. Creá una en Configuración › Tarifas.')
+        return
+      }
+      if (!createForm.rateCardId) {
+        setCreateError('Elegí la tarifa de cuota fija del paquete.')
+        return
+      }
+    }
     // Fixed services bill a flat per-guía amount: weight is optional context,
     // not a billing input (the owner-defined price is the ONLY money input).
     if (!isFixedCreate && (!createForm.weightLb.trim() || !Number.isFinite(weightLb) || weightLb <= 0)) {
@@ -508,13 +551,13 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         providerCode: createForm.providerCode || null,
         clientId,
         status: createForm.status,
-        rateCardId: createForm.rateCardId || null,
+        rateCardId: createForm.pricingKind === 'fixed' ? createForm.rateCardId || null : null,
       })
       // ADR-013: create_package es idempotente por tenant y nunca avisa ni
       // bloquea cross-tenant → el éxito SIEMPRE cierra el modal (el camino de
       // `warning` se eliminó cuando el Worker dejó de devolverlo).
       setShowCreate(false)
-      setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', weightLb: '', pieces: '1', receivedAt: ymd(new Date()), providerCode: '', client: null, status: 'en_almacen', rateCardId: '' })
+      setCreateForm({ almacenId: '', trackingNumber: '', serviceType: '', weightLb: '', pieces: '1', receivedAt: ymd(new Date()), providerCode: '', client: null, status: 'en_almacen', pricingKind: 'weight', rateCardId: '' })
       resetAfterCreate(createdNewClient)
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Error al crear el paquete.')
@@ -553,6 +596,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       providerCode: (providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '',
       client: null,
       status: 'en_almacen',
+      pricingKind: 'weight',
       rateCardId: '',
     })
     setShowCreate(true)
@@ -952,8 +996,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
       {/* ── Create Package Modal ── */}
       {showCreate && (
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div class="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+        <div class="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4" onClick={() => { setShowCreate(false); setCreateError(null) }}>
+          <div class="mx-auto my-6 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 class="text-lg font-semibold text-secondary mb-4">Crear paquete manual</h2>
 
             {createError && (
@@ -1022,6 +1066,29 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                 </Field>
               )}
 
+              {flexible && (
+                <Field label="Tipo de tarifa">
+                  <select
+                    class={inputCls}
+                    value={createForm.pricingKind}
+                    onChange={(e) => {
+                      const kind = (e.target as HTMLSelectElement).value as 'weight' | 'fixed'
+                      setCreateForm({
+                        ...createForm,
+                        pricingKind: kind,
+                        // One fixed card → preselect it so the summary resolves at once.
+                        rateCardId: kind === 'fixed' && fixedCards.length === 1 ? fixedCards[0].id : '',
+                      })
+                    }}
+                  >
+                    <option value="weight">Por peso</option>
+                    <option value="fixed" disabled={fixedCards.length === 0}>
+                      {fixedCards.length === 0 ? 'Cuota fija (sin tarifas configuradas)' : 'Cuota fija'}
+                    </option>
+                  </select>
+                </Field>
+              )}
+
               <Field label="Tipo de servicio (obligatorio)">
                 <select
                   class={inputCls}
@@ -1034,54 +1101,42 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                 </select>
               </Field>
 
-              {flexible && createForm.serviceType && fixedCards.length > 0 && (
-                <>
-                  <Field label="Servicio (tarifa)">
-                    <select
-                      class={inputCls}
-                      value={createForm.rateCardId}
-                      onChange={(e) => setCreateForm({ ...createForm, rateCardId: (e.target as HTMLSelectElement).value })}
-                    >
-                      <option value="">Por peso (tarifas estándar)</option>
-                      {fixedCards.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} (cuota fija)
-                        </option>
-                      ))}
-                    </select>
-                    <p class="mt-1 text-xs text-gray-500">
-                      Cuota fija: un monto por guía/envío, sin importar peso. Lo define el dueño en Configuración.
-                    </p>
-                  </Field>
-                  {createForm.rateCardId && (
-                    <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
-                      <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Resumen de cobro</div>
-                      <div class="flex items-center justify-between">
-                        <span class="text-gray-600">Servicio</span>
-                        <span class="font-medium text-gray-800">{preview?.cardName ?? '—'}</span>
-                      </div>
-                      <div class="flex items-center justify-between">
-                        <span class="text-gray-600">Cargo al cliente</span>
-                        <span class="font-semibold text-secondary">
-                          {preview ? `${fmtMoney(preview.customerCharge, preview.currency)} por guía` : '…'}
-                        </span>
-                      </div>
-                      {canSeeCosts && preview?.providerCost != null && (
-                        <div class="flex items-center justify-between">
-                          <span class="text-gray-600">Costo interno</span>
-                          <span class="text-gray-700">{fmtMoney(preview.providerCost, preview.currency)}</span>
-                        </div>
-                      )}
-                      {canSeeCosts && preview?.grossProfit != null && (
-                        <div class="flex items-center justify-between">
-                          <span class="text-gray-600">Margen bruto</span>
-                          <span class="text-gray-700">{fmtMoney(preview.grossProfit, preview.currency)}</span>
-                        </div>
-                      )}
-                      <p class="mt-1 text-xs text-gray-400">El Worker recalcula y guarda el cobro real al crear el paquete.</p>
-                    </div>
-                  )}
-                </>
+              {flexible && createForm.pricingKind === 'fixed' && fixedCards.length > 0 && (
+                <Field label="Tarifa de cuota fija">
+                  <select
+                    class={inputCls}
+                    value={createForm.rateCardId}
+                    onChange={(e) => setCreateForm({ ...createForm, rateCardId: (e.target as HTMLSelectElement).value })}
+                  >
+                    <option value="">Seleccionar…</option>
+                    {fixedCards.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p class="mt-1 text-xs text-gray-500">
+                    Cuota fija: un monto por guía, sin importar el peso. Se define en Configuración › Tarifas.
+                  </p>
+                </Field>
+              )}
+
+              {flexible && preview && (
+                <ChargeSummary
+                  cardName={preview.cardName}
+                  quantityLabel={
+                    preview.pricingKind === 'fixed'
+                      ? '1 guía'
+                      : `${preview.quantity} lb × ${fmtMoney(preview.customerRate ?? 0, preview.currency)}`
+                  }
+                  customerCharge={preview.customerCharge}
+                  currency={preview.currency}
+                  unitLabel={preview.pricingKind === 'fixed' ? 'por guía' : 'total'}
+                  providerCost={preview.providerCost}
+                  profit={preview.grossProfit}
+                  canSeeCosts={canSeeCosts}
+                  note="El sistema recalcula y guarda el cobro real al crear el paquete."
+                />
               )}
 
               <Field label="Estado inicial (manual)">
@@ -1102,7 +1157,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
               </Field>
 
               <div class="grid grid-cols-2 gap-3">
-                <Field label={flexible && createForm.rateCardId ? 'Peso (lb, opcional)' : 'Peso (lb)'}>
+                <Field label={flexible && createForm.pricingKind === 'fixed' ? 'Peso (lb, opcional)' : 'Peso (lb)'}>
                   <input
                     type="number"
                     step="0.1"
@@ -1137,7 +1192,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
             <div class="mt-5 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null) }}>Cancelar</Button>
-              <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId || !createForm.client || !createForm.serviceType || providers.length === 0}>
+              <Button variant="primary" onClick={handleCreatePackage} disabled={createLoading || !createForm.almacenId || !createForm.client || !createForm.serviceType || providers.length === 0 || (flexible && createForm.pricingKind === 'fixed' && !createForm.rateCardId)}>
                 {createLoading ? 'Creando…' : 'Crear'}
               </Button>
             </div>
@@ -1180,7 +1235,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                       <td class="px-3 py-2 font-mono text-xs">{l.guia}</td>
                       <td class="px-3 py-2 font-mono text-xs">{l.tracking ?? '—'}</td>
                       <td class="px-3 py-2">{l.serviceType ?? '—'}</td>
-                      <td class="px-3 py-2">{l.pricingKind === 'fixed' ? <span class="text-emerald-600">Cuota fija (1 envío)</span> : l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
+                      <td class="px-3 py-2">{l.pricingKind === 'fixed' ? <span class="text-emerald-600">Cuota fija (1 unidad)</span> : l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
                       <td class="px-3 py-2 text-right font-medium">${l.total.toFixed(2)}</td>
                     </tr>
                   ))}
