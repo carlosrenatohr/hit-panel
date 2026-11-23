@@ -551,7 +551,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
           {auditLoading ? (
             <div class="p-6"><Spinner label="Cargando bitácora…" /></div>
           ) : auditRows.length === 0 ? (
-            <div class="p-6 text-sm text-gray-400">Sin eventos todavía — se registran al crear, editar, deshabilitar o archivar clientes.</div>
+            <div class="p-6 text-sm text-gray-400">Sin eventos todavía. Se registran al crear, editar, deshabilitar o archivar clientes.</div>
           ) : (
             <div class="max-h-[70vh] overflow-y-auto px-3">
               <CustomerTimeline events={auditRows} />

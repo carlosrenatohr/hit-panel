@@ -407,7 +407,7 @@ export default function ShipmentDetail({
               ? 'Ver o editar la factura de este paquete'
               : invoiceable
                 ? 'Generar factura para este paquete'
-                : `No se puede facturar — estado actual: ${statusLabels[d.pkg.effective_status] ?? d.pkg.effective_status}. Solo "En destino" o "Entregado".`
+                : `No se puede facturar. Estado actual: ${statusLabels[d.pkg.effective_status] ?? d.pkg.effective_status}. Solo "En destino" o "Entregado".`
             return (
               <button
                 type="button"
@@ -626,7 +626,7 @@ export default function ShipmentDetail({
                 <p class="mt-3 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800">
                   Estado fijado manualmente: <b>{statusLabel(d.pkg.manual_status)}</b> por {d.pkg.manual_status_by ?? '—'} ·{' '}
                   {fmtDateTime(d.pkg.manual_status_at)}
-                  {d.pkg.manual_status_note ? ` — ${d.pkg.manual_status_note}` : ''}
+                  {d.pkg.manual_status_note ? ` · ${d.pkg.manual_status_note}` : ''}
                 </p>
               )}
             </section>

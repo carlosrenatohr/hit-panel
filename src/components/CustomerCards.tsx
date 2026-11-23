@@ -121,7 +121,7 @@ export function CardPickerModal({ onClose, hidden, onApply }: { onClose: () => v
 
           <div class="mb-2 flex items-center justify-between rounded-lg bg-primary/5 px-2 py-1.5">
             <span class="text-xs font-medium text-primary">Visibles: {visibleCount}/{MAX_VISIBLE_CARDS}</span>
-            {atMax && <span class="text-xs text-gray-500">Límite alcanzado — ocultá una para mostrar otra.</span>}
+            {atMax && <span class="text-xs text-gray-500">Límite alcanzado. Ocultá una para mostrar otra.</span>}
           </div>
 
           <div class="scroll-thin max-h-72 overflow-y-auto">

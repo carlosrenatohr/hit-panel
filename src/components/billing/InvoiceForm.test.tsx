@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/preact'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact'
 import type { InvoiceView, UnbilledPackage } from '../../lib/billing'
 import InvoiceForm from './InvoiceForm'
 
@@ -372,5 +372,31 @@ describe('InvoiceForm package-detail prefill (client rate)', () => {
     expect(payload.clientName).toBe('Original Express')
     expect(payload.lines[0]).toMatchObject({ packageId: 'pkg-1', quantityLbs: 5, freightType: 'AIR' })
     expect(onCreated).toHaveBeenCalledWith(createdView)
+  })
+})
+
+describe('InvoiceForm mixed billing kinds', () => {
+  it('stops a weight + fixed invoice with a blocking alert and no request', async () => {
+    render(
+      <InvoiceForm
+        prefill={{
+          clientId: 'c-orig',
+          clientName: 'ORIGINAL EXPRESS',
+          packageIds: ['pkg-1', 'pkg-2'],
+          lines: [
+            { freightType: 'AIR', tier: 'REGULAR', quantityLbs: 5, packageId: 'pkg-1', guia: 'G-1', tracking: null },
+            { freightType: 'AIR', tier: 'FIXED', quantityLbs: 1, packageId: 'pkg-2', guia: 'G-2', tracking: null, pricingKind: 'fixed', customerCharge: 25 },
+          ],
+        }}
+        onClose={() => {}}
+        onCreated={() => {}}
+      />,
+    )
+
+    fireEvent.click(await screen.findByText('Crear factura'))
+    const alert = await screen.findByRole('dialog', { name: 'No se pueden mezclar tipos de tarifa' })
+    expect(within(alert).getByText(/paquetes por peso y paquetes de cuota fija/)).toBeTruthy()
+    expect(within(alert).getByText('⛔')).toBeTruthy()
+    expect(createInvoice).not.toHaveBeenCalled()
   })
 })

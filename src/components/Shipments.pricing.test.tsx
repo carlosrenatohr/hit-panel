@@ -238,3 +238,51 @@ describe('Shipments create modal — tariff preselection and confirmation', () =
     await waitFor(() => expect(createPackage).toHaveBeenCalled());
   });
 });
+
+describe('Shipments bulk invoicing', () => {
+  const rows = [
+    { id: 'p1', almacen_id: 'G-1', referencia_name: 'Ana Perez', effective_status: 'entregado', invoice_packages: [], client_id: 'c1' },
+    { id: 'p2', almacen_id: 'G-2', referencia_name: 'Ana Perez', effective_status: 'entregado', invoice_packages: [], client_id: 'c1' },
+  ]
+
+  async function selectBoth() {
+    const { listPackages } = await import('../lib/insforge')
+    vi.mocked(listPackages).mockResolvedValue({ rows: rows as never, count: 2 })
+    render(<Shipments user={adminUser} onOpen={() => {}} />)
+    await screen.findAllByText('G-1')
+    const checks = await screen.findAllByRole('button', { name: 'Seleccionar' })
+    fireEvent.click(checks[0])
+    fireEvent.click(checks[1])
+    fireEvent.click(await screen.findByRole('button', { name: 'Facturar seleccionados' }))
+  }
+
+  it('reviews the selection in the shared modal', async () => {
+    const { billingApi } = await import('../lib/billing')
+    vi.mocked(billingApi.bulkPreview).mockResolvedValue({
+      clientName: 'Ana Perez',
+      total: 60,
+      lines: [
+        { packageId: 'p1', guia: 'G-1', tracking: null, serviceType: 'aereo', weightLb: 3, pricingKind: 'weight', total: 35 },
+        { packageId: 'p2', guia: 'G-2', tracking: null, serviceType: 'aereo', weightLb: 5, pricingKind: 'fixed', total: 25 },
+      ],
+    } as never)
+    await selectBoth()
+
+    const dialog = await screen.findByRole('dialog', { name: 'Vista previa: factura por paquetes' })
+    expect(within(dialog).getByText('Total: $60.00')).toBeTruthy()
+    expect(within(dialog).getByText('Cuota fija (1 unidad)')).toBeTruthy()
+  })
+
+  it('blocks a mixed weight + fixed selection with a prominent alert', async () => {
+    const { billingApi } = await import('../lib/billing')
+    vi.mocked(billingApi.bulkPreview).mockRejectedValue(
+      new Error('No se pueden mezclar paquetes por peso con paquetes de cuota fija en la misma factura. Generá una factura por tipo de servicio.'),
+    )
+    await selectBoth()
+
+    const alert = await screen.findByRole('dialog', { name: 'No se puede facturar esta selección' })
+    expect(within(alert).getByText(/No se pueden mezclar paquetes por peso/)).toBeTruthy()
+    expect(within(alert).getByText('⛔')).toBeTruthy()
+    expect(vi.mocked(billingApi.bulkCreate)).not.toHaveBeenCalled()
+  })
+})
