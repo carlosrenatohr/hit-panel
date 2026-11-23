@@ -341,6 +341,7 @@ describe('Shipments', () => {
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25009999' } });
     await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
 
     await waitFor(() => {
       expect(vi.mocked(createPackage)).toHaveBeenCalledWith(expect.objectContaining({ providerCode: 'global_connection' }));
@@ -363,6 +364,7 @@ describe('Shipments', () => {
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25008888' } });
     await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
 
     await waitFor(() => {
       expect(vi.mocked(createPackage)).toHaveBeenCalledWith(expect.objectContaining({ providerCode: 'global_connection' }));
@@ -382,6 +384,7 @@ describe('Shipments', () => {
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25006666' } });
     await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
 
     await waitFor(() => expect(screen.getByText(/no está habilitado para tu agencia/)).toBeTruthy());
     expect(screen.getByText('Crear paquete manual')).toBeTruthy();
@@ -439,6 +442,7 @@ describe('Shipments', () => {
     // not fall a day behind by parsing as UTC midnight.
     fireEvent.change(screen.getByLabelText('Fecha de recepción (opcional)'), { target: { value: '2026-09-23' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
 
     await waitFor(() => expect(vi.mocked(customerApi.create)).toHaveBeenCalledWith({ name: 'Ana P' }));
     await waitFor(() =>
@@ -459,6 +463,7 @@ describe('Shipments', () => {
     fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25003333' } });
     await pickNewClientAndService();
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
 
     await waitFor(() => expect(vi.mocked(createPackage)).toHaveBeenCalled());
 
@@ -494,6 +499,7 @@ describe('Shipments', () => {
     fireEvent.change(screen.getByDisplayValue('Seleccionar…'), { target: { value: 'maritimo' } });
     fireEvent.input(screen.getByPlaceholderText('0.0'), { target: { value: '3.1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
 
     await waitFor(() =>
       expect(vi.mocked(createPackage)).toHaveBeenCalledWith(expect.objectContaining({ clientId: 'c1', serviceType: 'maritimo' })),

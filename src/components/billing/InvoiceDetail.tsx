@@ -1,4 +1,4 @@
-import { Ban, Check, Link2, Lock, Package, Printer, ShieldAlert, Trash2, X } from 'lucide-preact'
+import { AlertTriangle, Ban, Check, Link2, Lock, Package, Printer, ShieldAlert, Trash2, X } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import {
   billingApi,
@@ -11,7 +11,7 @@ import {
 import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal, waPhone, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { customerApi } from '../../lib/customer'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
-import { Button, Card, Field, inputCls, Spinner, Tooltip } from '../ui'
+import { Button, Card, Field, inputCls, Modal, Spinner, Tooltip } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
 
@@ -32,6 +32,9 @@ function StatusPill({ s }: { s: string }) {
 const METHOD_LABEL: Record<string, string> = { BANK_TRANSFER: 'Transferencia', CASH: 'Efectivo', CREDIT_BALANCE: 'Saldo a favor' }
 const FALLBACK_METHODS = ['Transferencia', 'Efectivo', 'Saldo a favor']
 const FALLBACK_BANKS = ['BAC', 'LAFISE', 'BANPRO']
+
+/** Money rounding for the payment preview (the Worker re-computes server-side). */
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
 export default function InvoiceDetail({
   id,
@@ -59,6 +62,8 @@ export default function InvoiceDetail({
   const [fx, setFx] = useState('')
   const [guia, setGuia] = useState('')
   const [copied, setCopied] = useState(false)
+  /** Payment review modal: nothing is posted until the operator confirms. */
+  const [payConfirmOpen, setPayConfirmOpen] = useState(false)
   const [brand, setBrand] = useState<InvoiceBrand | null>(null)
   const [catalogs, setCatalogs] = useState<PaymentCatalogs | null>(null)
   const [profile, setProfile] = useState<AgencyProfile | null>(null)
@@ -168,30 +173,91 @@ export default function InvoiceDetail({
     }
   }
 
+  // ── Payment balance math ────────────────────────────────────────────────────
+  // The panel prefills what is still owed and never lets the operator type more
+  // than that; the Worker enforces the same rule server-side.
+  const outstanding = inv?.outstanding ?? 0
+  const agencyFx = profile?.exchangeRateNioPerUsd ?? null
+  const nioRate = cur === 'NIO' ? Number(fx) || agencyFx || 0 : 1
+  const paymentUsd = amount.trim() === '' ? 0 : cur === 'NIO' ? (nioRate > 0 ? round2(Number(amount) / nioRate) : 0) : round2(Number(amount))
+  const missingRate = cur === 'NIO' && !(nioRate > 0)
+  const exceedsBalance = paymentUsd > outstanding + 0.01
+  const remainingAfter = round2(Math.max(0, outstanding - paymentUsd))
+
+  // Autofill the remaining balance: USD as-is, NIO converted with the agency rate.
+  useEffect(() => {
+    if (!inv) return
+    if (cur === 'USD') setAmount(inv.outstanding > 0 ? String(inv.outstanding) : '')
+    else {
+      const rate = Number(fx) || profile?.exchangeRateNioPerUsd || 0
+      setAmount(rate > 0 && inv.outstanding > 0 ? String(round2(inv.outstanding * rate)) : '')
+    }
+    // Only re-run for a newly loaded/updated invoice — typing must not overwrite.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inv?.id, inv?.outstanding])
+
+  function switchCurrency(next: Currency) {
+    setCur(next)
+    const rate = Number(fx) || agencyFx || 0
+    if (next === 'NIO' && !fx && agencyFx) setFx(String(agencyFx))
+    if (next === 'USD') setAmount(outstanding > 0 ? String(outstanding) : '')
+    else setAmount(rate > 0 && outstanding > 0 ? String(round2(outstanding * rate)) : '')
+  }
+
+  function changeFx(value: string) {
+    setFx(value)
+    const rate = Number(value) || 0
+    if (cur === 'NIO') setAmount(rate > 0 && outstanding > 0 ? String(round2(outstanding * rate)) : '')
+  }
+
+  /** Open the review modal — invalid amounts never reach it. */
+  function requestPayment() {
+    const amt = Number(amount)
+    if (!(amt > 0)) return setErr('Monto inválido.')
+    if (!pm) return setErr('Selecciona un método de pago.')
+    if (missingRate) return setErr('Ingresá la tasa de cambio (córdobas por dólar).')
+    if (exceedsBalance) return setErr('El monto supera el saldo pendiente de la factura.')
+    setPayConfirmOpen(true)
+  }
+
   function addPayment() {
     const amt = Number(amount)
     if (!(amt > 0)) return setErr('Monto inválido.')
     if (!pm) return setErr('Selecciona un método de pago.')
+    if (missingRate) return setErr('Ingresá la tasa de cambio (córdobas por dólar).')
+    if (exceedsBalance) return setErr('El monto supera el saldo pendiente de la factura.')
     const input: ApplyPaymentInput = {
       method: pm,
       bank: bank || null,
       currency: cur,
       amount: amt,
-      fxRate: cur === 'NIO' && fx ? Number(fx) : null,
+      fxRate: cur === 'NIO' ? nioRate || null : null,
       reference: reference.trim() || null,
       comments: comments.trim() || null,
     }
-    void run(() => billingApi.applyPayment(id, input)).then(() => {
-      setAmount('')
-      setFx('')
-      setReference('')
-      setComments('')
-    })
+    void (async () => {
+      setBusy(true)
+      setErr(null)
+      try {
+        setInv(await billingApi.applyPayment(id, input))
+        onChanged?.()
+        setAmount('')
+        setFx('')
+        setReference('')
+        setComments('')
+      } catch (e) {
+        // Surface the (server) reason in the drawer and let the operator retry.
+        setErr(e instanceof Error ? e.message : 'No se pudo registrar el pago.')
+      } finally {
+        setBusy(false)
+        setPayConfirmOpen(false)
+      }
+    })()
   }
 
   return (
     <div class="fixed inset-0 z-40 flex justify-end bg-black/40 print:static print:bg-transparent" onClick={onClose}>
-      <div class="flex h-full w-full max-w-lg flex-col bg-neutral-bg shadow-xl print:hidden" onClick={(e) => e.stopPropagation()}>
+      <div class="flex h-full w-full max-w-2xl flex-col bg-neutral-bg shadow-xl print:hidden" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div class="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-3">
           <div class="flex items-center gap-3">
@@ -373,7 +439,7 @@ export default function InvoiceDetail({
                     </div>
                   ))}
                 </div>
-                {canWrite && inv.status !== 'VOID' && (
+                {canWrite && inv.status !== 'VOID' && inv.status !== 'PAID' && (
                   <div class="space-y-2 border-t border-gray-100 bg-gray-50/60 p-3">
                     {!inv.closedAt && (
                       <div class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-600">
@@ -390,7 +456,7 @@ export default function InvoiceDetail({
                             </select>
                           </Field>
                           <Field label="Moneda">
-                            <select class={inputCls} value={cur} onChange={(e) => setCur((e.target as HTMLSelectElement).value as Currency)}>
+                            <select class={inputCls} value={cur} onChange={(e) => switchCurrency((e.target as HTMLSelectElement).value as Currency)}>
                               <option value="USD">USD</option>
                               <option value="NIO">NIO (córdobas)</option>
                             </select>
@@ -405,18 +471,43 @@ export default function InvoiceDetail({
                             <input class={inputCls} value={reference} placeholder="N.º de transferencia" onInput={(e) => setReference((e.target as HTMLInputElement).value)} />
                           </Field>
                           <Field label={cur === 'NIO' ? 'Monto (NIO)' : 'Monto (USD)'}>
-                            <input type="number" min="0" step="0.01" class={inputCls} value={amount} onInput={(e) => setAmount((e.target as HTMLInputElement).value)} />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              class={inputCls}
+                              value={amount}
+                              aria-invalid={exceedsBalance || missingRate}
+                              onInput={(e) => setAmount((e.target as HTMLInputElement).value)}
+                            />
                           </Field>
                           {cur === 'NIO' && (
                             <Field label="Tasa (NIO por USD)">
-                              <input type="number" min="0" step="0.01" class={inputCls} value={fx} onInput={(e) => setFx((e.target as HTMLInputElement).value)} placeholder="36.5" />
+                              <input type="number" min="0" step="0.01" class={inputCls} value={fx} onInput={(e) => changeFx((e.target as HTMLInputElement).value)} placeholder="36.5" />
                             </Field>
+                          )}
+                          {exceedsBalance && (
+                            <p class="col-span-2 text-[11px] font-medium text-red-600" role="alert">
+                              El monto supera el saldo pendiente ({fmtMoney(outstanding, profile?.currency)}). Ajustá el pago para no
+                              cobrar de más.
+                            </p>
+                          )}
+                          {!exceedsBalance && missingRate && (
+                            <p class="col-span-2 text-[11px] font-medium text-red-600" role="alert">
+                              Ingresá la tasa de cambio (córdobas por dólar) para poder convertir el pago.
+                            </p>
+                          )}
+                          {!exceedsBalance && !missingRate && outstanding > 0 && (
+                            <p class="col-span-2 text-[11px] text-gray-500">
+                              Saldo pendiente: {fmtMoney(outstanding, profile?.currency)}. El monto se precarga con el restante; podés
+                              registrar un pago parcial.
+                            </p>
                           )}
                           <Field label="Comentarios (opcional)">
                             <input class={inputCls} value={comments} placeholder="Nota sobre el pago" onInput={(e) => setComments((e.target as HTMLInputElement).value)} />
                           </Field>
                         </div>
-                        <Button onClick={addPayment} disabled={busy || !pm}>Registrar pago</Button>
+                        <Button onClick={requestPayment} disabled={busy || !pm || exceedsBalance || missingRate}>Revisar y registrar pago</Button>
                       </>
                     )}
                   </div>
@@ -513,6 +604,97 @@ export default function InvoiceDetail({
           )}
         </div>
       </div>
+
+      {/* Payment review — the post only fires after this confirmation. */}
+      <Modal open={payConfirmOpen && inv !== null} onClose={() => (!busy ? setPayConfirmOpen(false) : undefined)} title="Confirmar registro de pago" size="md">
+        {inv && (
+          <div class="space-y-3">
+            <p class="text-sm text-gray-600">
+              Revisá el pago antes de registrarlo. La acción queda en el historial de la factura y no se puede deshacer.
+            </p>
+            <dl class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-50 p-3 text-sm">
+              <div>
+                <dt class="text-xs text-gray-400">Factura</dt>
+                <dd class="font-medium text-gray-800">#{inv.invoiceNumber}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-gray-400">Cliente</dt>
+                <dd class="text-gray-700">{inv.clientName ?? '—'}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-gray-400">Total</dt>
+                <dd class="text-gray-700">{fmtMoney(inv.total, profile?.currency)}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-gray-400">Pagado</dt>
+                <dd class="text-gray-700">{fmtMoney(inv.paidUsd, profile?.currency)}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-gray-400">Saldo pendiente</dt>
+                <dd class="font-medium text-gray-800">{fmtMoney(outstanding, profile?.currency)}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-gray-400">Método</dt>
+                <dd class="text-gray-700">{METHOD_LABEL[pm] ?? pm}{bank ? ` · ${bank}` : ''}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-gray-400">Monto a registrar</dt>
+                <dd class="font-semibold text-secondary">{cur === 'NIO' ? `${Number(amount).toFixed(2)} NIO` : fmtMoney(Number(amount), profile?.currency)}</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-gray-400">{cur === 'NIO' ? 'Equivalente en USD' : 'Saldo después del pago'}</dt>
+                <dd class="text-gray-700">{cur === 'NIO' ? fmtMoney(paymentUsd, profile?.currency) : fmtMoney(remainingAfter, profile?.currency)}</dd>
+              </div>
+              {cur === 'NIO' && (
+                <>
+                  <div>
+                    <dt class="text-xs text-gray-400">Tasa aplicada</dt>
+                    <dd class="text-gray-700">{nioRate.toFixed(2)} NIO/USD</dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs text-gray-400">Saldo después del pago</dt>
+                    <dd class="text-gray-700">{fmtMoney(remainingAfter, profile?.currency)}</dd>
+                  </div>
+                </>
+              )}
+              {reference && (
+                <div class="col-span-2">
+                  <dt class="text-xs text-gray-400">Referencia</dt>
+                  <dd class="text-gray-700">{reference}</dd>
+                </div>
+              )}
+              {comments && (
+                <div class="col-span-2">
+                  <dt class="text-xs text-gray-400">Comentarios</dt>
+                  <dd class="text-gray-700">{comments}</dd>
+                </div>
+              )}
+            </dl>
+            {remainingAfter > 0 ? (
+              <div class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+                <AlertTriangle class="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>
+                  Es un pago parcial: la factura quedará con un saldo de {fmtMoney(remainingAfter, profile?.currency)}. Cuando se
+                  complete, pasará a pagada automáticamente.
+                </span>
+              </div>
+            ) : (
+              <div class="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700" role="status">
+                <Check class="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>Con este pago la factura queda pagada en su totalidad.</span>
+              </div>
+            )}
+            <div class="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" onClick={() => setPayConfirmOpen(false)} disabled={busy}>
+                Volver
+              </Button>
+              <Button onClick={addPayment} disabled={busy}>
+                {busy ? 'Registrando…' : 'Registrar pago'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Print-only rendering (isolated by .invoice-print in global.css). */}
       {inv && (
