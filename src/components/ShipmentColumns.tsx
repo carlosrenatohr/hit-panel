@@ -11,8 +11,8 @@ import {
   SERVICE_EMOJI,
 } from '../lib/format'
 import type { Pkg, ShipmentStatus, Tag } from '../lib/types'
-import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot } from './ui'
-import { GripVertical, Lock, Search, SlidersHorizontal, X } from 'lucide-preact'
+import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot, Tooltip } from './ui'
+import { GripVertical, Lock, Package, Receipt, Search, SlidersHorizontal, Weight, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
 export interface ColCtx {
@@ -27,6 +27,26 @@ export interface ColumnDef {
   label: string
   /** `ctx` es opcional para que las previews del picker rendericen sin etiquetas. */
   render: (p: Pkg, ctx?: ColCtx) => JSX.Element | string
+}
+
+const PRICING_KIND_META = {
+  weight: { Icon: Weight, label: 'Tarifa por peso', tone: 'text-sky-600' },
+  fixed: { Icon: Receipt, label: 'Cuota fija por carga', tone: 'text-orange-500' },
+  volume: { Icon: Package, label: 'Tarifa por volumen', tone: 'text-emerald-600' },
+} as const
+
+/** Billing kind at a glance: a colored icon + a one-line tooltip. The detail
+ *  view carries the card name and the money. */
+export function PricingKindIcon({ kind }: { kind: 'weight' | 'fixed' | 'volume' | null | undefined }) {
+  const meta = PRICING_KIND_META[kind ?? 'weight'] ?? PRICING_KIND_META.weight
+  const Icon = meta.Icon
+  return (
+    <Tooltip text={meta.label}>
+      <span class={`inline-flex items-center ${meta.tone}`} aria-label={meta.label} role="img">
+        <Icon class="h-4 w-4" aria-hidden="true" />
+      </span>
+    </Tooltip>
+  )
 }
 
 export const COLUMN_DEFS: ColumnDef[] = [
@@ -62,8 +82,8 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'tarifa',
     label: 'Tipo de tarifa',
-    // Fixed packages bill a flat per-guía amount; everything else is weight billing.
-    render: (p) => <span class="text-gray-600">{p.pricing_kind === 'fixed' ? 'Cuota fija' : 'Por peso'}</span>,
+    // Icon-only: the card name added nothing the detail does not already show.
+    render: (p) => <PricingKindIcon kind={p.pricing_kind ?? 'weight'} />,
   },
   {
     key: 'carga',

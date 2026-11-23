@@ -433,9 +433,16 @@ export default function InvoiceDetail({
                         {p.reference && <span class="text-gray-400"> · Ref: {p.reference}</span>}
                         {p.comments && <span class="text-gray-400"> · {p.comments}</span>}
                         {p.quarantined && <span class="ml-1 rounded bg-yellow-50 px-1 text-[10px] text-yellow-700">revisar</span>}
-                        <div class="text-[11px] text-gray-400">{fmtDate(p.paidAt)}{p.currency ? ` · ${p.currency}` : ''}</div>
+                        <div class="text-[11px] text-gray-400">{fmtDate(p.paidAt)}</div>
                       </div>
-                      <div class="text-right">{p.amountUsd != null ? fmtMoney(p.amountUsd, profile?.currency) : '—'}</div>
+                      <div class="text-right">
+                        <div>{p.amountUsd != null ? fmtMoney(p.amountUsd, profile?.currency) : '—'}</div>
+                        {/* Córdobas stay visible next to the USD equivalent: the
+                            deposit was made in NIO and accounting needs both. */}
+                        {p.currency === 'NIO' && p.amount != null && (
+                          <div class="text-[11px] font-normal text-gray-500">({fmtMoney(p.amount, 'NIO')} en córdobas)</div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -499,8 +506,9 @@ export default function InvoiceDetail({
                           )}
                           {!exceedsBalance && !missingRate && outstanding > 0 && (
                             <p class="col-span-2 text-[11px] text-gray-500">
-                              Saldo pendiente: {fmtMoney(outstanding, profile?.currency)}. El monto se precarga con el restante; podés
-                              registrar un pago parcial.
+                              Saldo pendiente: {fmtMoney(outstanding, profile?.currency)}
+                              {agencyFx ? ` (${fmtMoney(round2(outstanding * agencyFx), 'NIO')} a ${agencyFx.toFixed(2)} NIO/USD)` : ''}. El monto
+                              se precarga con el restante; podés registrar un pago parcial.
                             </p>
                           )}
                           <Field label="Comentarios (opcional)">

@@ -109,4 +109,25 @@ describe('InvoiceDetail › pagos', () => {
       ),
     )
   })
+
+  it('shows the outstanding balance in córdobas with the agency rate', async () => {
+    await renderInvoice()
+    expect(await screen.findByText(/C\$328\.50 a 36\.50 NIO\/USD/)).toBeTruthy()
+  })
+
+  it('keeps the córdoba deposit in the payment history next to its USD value', async () => {
+    await renderInvoice(
+      invoice({
+        payments: [
+          {
+            method: 'Efectivo', bank: null, currency: 'NIO', amount: 328.5, amountUsd: 9,
+            fxRate: 36.5, paidAt: '2026-11-20T10:00:00Z', raw: null, quarantined: false,
+            reference: null, comments: null,
+          },
+        ],
+      }),
+    )
+    expect(screen.getAllByText('$9.00').length).toBeGreaterThan(0)
+    expect(screen.getByText('(C$328.50 en córdobas)')).toBeTruthy()
+  })
 })

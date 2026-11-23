@@ -552,7 +552,7 @@ describe('Shipments', () => {
     expect(vi.mocked(getTagsForPackages)).toHaveBeenCalledWith(['1', '2']);
   });
 
-  it('muestra la columna Tipo de tarifa para paquetes fijos y por peso', async () => {
+  it('muestra el tipo de tarifa como icono para paquetes fijos y por peso', async () => {
     const original = vi.mocked(listPackages).getMockImplementation();
     vi.mocked(listPackages).mockImplementation(async () => ({
       rows: [
@@ -564,8 +564,8 @@ describe('Shipments', () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
 
-    expect(screen.getAllByText('Cuota fija').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Por peso').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Cuota fija por carga').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Tarifa por peso').length).toBeGreaterThan(0);
     vi.mocked(listPackages).mockImplementation(original!);
   });
 
@@ -580,6 +580,29 @@ describe('Shipments', () => {
 
     expect(screen.queryByLabelText('Estado manual')).toBeNull();
     expect(screen.queryAllByTitle(/Estado manual/)).toHaveLength(0);
+    vi.mocked(listPackages).mockImplementation(original!);
+  });
+
+
+  it('shows the billing kind as an icon and marks a paid invoice green', async () => {
+    const original = vi.mocked(listPackages).getMockImplementation();
+    vi.mocked(listPackages).mockResolvedValue({
+      rows: [
+        { ...mockPkgs[0], id: 'p-fixed', almacen_id: 'G-FIX', referencia_name: 'Ana', effective_status: 'entregado', client_id: 'c1', pricing_kind: 'fixed', invoice_packages: [{ invoice_id: 'i1', active: true, invoices: { status: 'PAID' } }] },
+        { ...mockPkgs[0], id: 'p-weight', almacen_id: 'G-W', referencia_name: 'Luis', effective_status: 'entregado', client_id: 'c2', pricing_kind: 'weight', invoice_packages: [] },
+      ],
+      count: 2,
+    } as never);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    await screen.findAllByText('G-FIX');
+    expect(screen.getAllByLabelText('Cuota fija por carga').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Tarifa por peso').length).toBeGreaterThan(0);
+
+    const paid = screen.getAllByLabelText('Factura pagada');
+    expect(paid.length).toBeGreaterThan(0);
+    expect(paid[0].className).toContain('text-emerald-600');
+
     vi.mocked(listPackages).mockImplementation(original!);
   });
 

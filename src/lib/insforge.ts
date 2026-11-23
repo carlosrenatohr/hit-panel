@@ -10,7 +10,7 @@ export const insforge = createClient({ baseUrl, anonKey })
 
 // Lightweight column set for the list view (skip heavy/internal-only fields).
 const LIST_COLS =
-  'id,almacen_id,organization_id,tracking_number,status,manual_status,effective_status,service_type,service_type_override,effective_service_type,weight_lb,weight_override_lb,effective_weight_lb,pieces,origin_office,dest_office,referencia_name,client_id,billing_clients(name),photo_ref,received_at,last_event_at,scraped_at,provider_id,pricing_kind,customer_charge,customer_unit,rate_card_id,providers(code,name,base_url),invoice_packages(invoice_id,active)'
+  'id,almacen_id,organization_id,tracking_number,status,manual_status,effective_status,service_type,service_type_override,effective_service_type,weight_lb,weight_override_lb,effective_weight_lb,pieces,origin_office,dest_office,referencia_name,client_id,billing_clients(name),photo_ref,received_at,last_event_at,scraped_at,provider_id,pricing_kind,customer_charge,customer_unit,rate_card_id,providers(code,name,base_url),invoice_packages(invoice_id,active,invoices(status))'
 
 // ── Auth ────────────────────────────────────────────────────────────────────────
 export async function signIn(email: string, password: string): Promise<void> {
@@ -192,7 +192,7 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
 export async function getPackageDetail(guia: string, organizationId?: string): Promise<PackageDetail | null> {
   let q = insforge.database
     .from('packages')
-    .select('*, providers(code,name,base_url), invoice_packages(invoice_id,active), billing_clients(name)')
+    .select('*, providers(code,name,base_url), invoice_packages(invoice_id,active,invoices(status)), billing_clients(name)')
     .eq('almacen_id', guia)
     .is('deleted_at', null)
     // A guide can exist in both provider ledgers. Match the Worker lookup and use the newest row.
