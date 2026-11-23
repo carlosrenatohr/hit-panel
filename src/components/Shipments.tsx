@@ -26,7 +26,7 @@ import LifecycleOverview, { PickupQuickAction, StatusSelector, TransportTabs, ty
 import FilterSheet from './shipments/FilterSheet'
 import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
 import ChargeSummary from './billing/ChargeSummary'
-import { Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill } from './ui'
+import { AlertDialog, Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
 
 const PAGE_SIZE = 25
@@ -36,6 +36,8 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 
 // Translate common worker error messages to user-friendly Spanish.
 function translateBulkError(msg: string): string {
+  if (/mezclar paquetes/i.test(msg))
+    return 'No se pueden mezclar paquetes por peso con paquetes de cuota fija en la misma factura. Generá una factura por tipo de servicio.'
   if (/already invoiced/i.test(msg)) return 'Uno o más paquetes ya tienen una factura activa. Si la factura fue anulada, espera unos segundos e intenta de nuevo.'
   if (/different clients/i.test(msg)) return 'Los paquetes seleccionados pertenecen a diferentes clientes. Selecciona paquetes de un solo cliente.'
   if (/not invoiceable/i.test(msg)) return 'Uno o más paquetes no están en estado facturable. Solo se pueden facturar paquetes en destino o entregados.'
@@ -379,7 +381,13 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       reload()
     } catch (e) {
       const raw = e instanceof Error ? e.message : 'No se pudo crear la factura.'
-      setCreateErr(translateBulkError(raw))
+      if (/mezclar paquetes/i.test(raw)) {
+        // A rule, not a retryable glitch: close the review and stop the flow.
+        setBulkPreview(null)
+        setBulkProblems([translateBulkError(raw)])
+      } else {
+        setCreateErr(translateBulkError(raw))
+      }
     } finally {
       setBulkBusy(false)
     }
@@ -549,7 +557,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       return false
     }
     if (!createForm.client) {
-      setCreateError('El cliente es obligatorio — elegí uno existente o escribí un nombre nuevo.')
+      setCreateError('El cliente es obligatorio. Elegí uno existente o escribí un nombre nuevo.')
       return false
     }
     const weightLb = Number(createForm.weightLb)
@@ -1181,7 +1189,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                     {fixedCards.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
-                        {c.isDefault ? ' — por defecto' : ''}
+                        {c.isDefault ? ' (por defecto)' : ''}
                       </option>
                     ))}
                   </select>
@@ -1227,7 +1235,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                   ))}
                 </select>
                 <p class="mt-1 text-xs text-gray-500">
-                  El estado con el que nace el paquete. Podés cambiarlo después desde el detalle del paquete.
+                  Estado con el que se registra el paquete. Podés cambiarlo después desde el detalle del paquete.
                 </p>
               </Field>
 
@@ -1364,19 +1372,28 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         />
       )}
 
-      {/* ── Bulk preview modal ── */}
-      {bulkPreview && (
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div class="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
-            <h2 class="text-lg font-semibold text-secondary mb-4">Vista previa — Factura por paquetes</h2>
-            {createErr && <div class="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">{createErr}</div>}
-            <div class="mb-4 text-sm text-gray-600">
-              <span class="font-medium">{bulkPreview.clientName}</span> · {bulkPreview.lines.length} paquetes
-            </div>
-            <div class="scroll-thin max-h-64 overflow-y-auto">
+      {/* ── Bulk preview: same Modal + summary language as the single flow ── */}
+      <Modal
+        open={bulkPreview !== null}
+        onClose={clearSelection}
+        title="Vista previa: factura por paquetes"
+        size="lg"
+      >
+        {bulkPreview && (
+          <div class="flex flex-col gap-3">
+            {createErr && (
+              <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+                {createErr}
+              </div>
+            )}
+            <p class="text-sm text-gray-600">
+              <span class="font-medium text-gray-800">{bulkPreview.clientName}</span> · {bulkPreview.lines.length} paquete
+              {bulkPreview.lines.length === 1 ? '' : 's'}
+            </p>
+            <div class="scroll-thin max-h-64 overflow-y-auto rounded-lg border border-gray-100">
               <table class="w-full text-left text-sm">
                 <thead>
-                  <tr class="border-b border-gray-100 text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <tr class="border-b border-gray-100 bg-gray-50/60 text-xs font-medium uppercase tracking-wide text-gray-500">
                     <th class="px-3 py-2">Guía</th>
                     <th class="px-3 py-2">Tracking</th>
                     <th class="px-3 py-2">Servicio</th>
@@ -1397,7 +1414,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                 </tbody>
               </table>
             </div>
-            <div class="mt-4 flex items-center justify-between border-t border-gray-100 pt-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3">
               <div class="text-lg font-bold text-secondary">Total: ${bulkPreview.total.toFixed(2)}</div>
               <div class="flex gap-2">
                 <Button variant="ghost" onClick={clearSelection}>Cancelar</Button>
@@ -1407,29 +1424,24 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
-      {/* ── Bulk error banner ── */}
-      {bulkProblems.length > 0 && !bulkPreview && (
-        <div class="fixed bottom-20 left-1/2 z-40 -translate-x-1/2 max-w-md rounded-xl bg-white border border-red-200 px-5 py-4 text-sm shadow-2xl">
-          <div class="flex items-start gap-3">
-            <div class="text-red-500 text-lg mt-0.5">⚠️</div>
-            <div class="flex-1">
-              <div class="font-semibold text-gray-900 mb-2">No se puede facturar esta selección</div>
-              <ul class="space-y-1.5 text-gray-600">
-                {bulkProblems.map((p, i) => (
-                  <li key={i} class="flex items-start gap-2">
-                    <span class="text-red-400 mt-0.5">•</span>
-                    <span>{p}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <button onClick={() => setBulkProblems([])} class="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
-          </div>
-        </div>
-      )}
+      {/* Blocking reasons: loud enough that nobody keeps clicking. */}
+      <AlertDialog
+        open={bulkProblems.length > 0 && !bulkPreview}
+        onClose={() => setBulkProblems([])}
+        title="No se puede facturar esta selección"
+      >
+        <ul class="space-y-1.5">
+          {bulkProblems.map((p, i) => (
+            <li key={i} class="flex items-start gap-2">
+              <span class="mt-0.5 text-red-400" aria-hidden="true">•</span>
+              <span>{p}</span>
+            </li>
+          ))}
+        </ul>
+      </AlertDialog>
 
       {/* ── Bulk selection floating bar ── */}
       {selected.size > 0 && !bulkPreview && (

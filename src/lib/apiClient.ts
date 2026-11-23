@@ -27,7 +27,7 @@ interface ErrorLike {
 function http(): HttpLike {
   const client = insforge as unknown as { getHttpClient?: () => HttpLike }
   const h = client.getHttpClient?.()
-  if (!h) throw new Error('SDK de InsForge sin getHttpClient — actualizá @insforge/sdk.')
+  if (!h) throw new Error('SDK de InsForge sin getHttpClient. Actualizá @insforge/sdk.')
   return h
 }
 

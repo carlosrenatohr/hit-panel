@@ -4,7 +4,7 @@ import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightTyp
 import { configApi, type ChargeConcept, type RateCardInfo } from '../../lib/config'
 import { customerApi, type Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
-import { Button, Card, Field, inputCls, SectionTitle, Spinner, Tooltip } from '../ui'
+import { AlertDialog, Button, Card, Field, inputCls, SectionTitle, Spinner, Tooltip } from '../ui'
 import ClientSearch from '../ui/ClientSearch'
 import ChargeSummary from './ChargeSummary'
 
@@ -110,6 +110,8 @@ export default function InvoiceForm({
   const [others, setOthers] = useState<DraftOther[]>([])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  /** Rules that stop the flow (mixed billing kinds): loud, blocking alert. */
+  const [blocking, setBlocking] = useState<{ title: string; message: string } | null>(null)
   const [loadingInvoice, setLoadingInvoice] = useState(isEdit)
 
   useEffect(() => {
@@ -393,6 +395,17 @@ export default function InvoiceForm({
 
   async function submit() {
     setErr(null)
+    // One invoice bills one pricing kind: catch it before the request so the
+    // operator sees why, instead of a server round-trip.
+    const kinds = new Set(lines.map((l) => l.pricingKind))
+    if (kinds.size > 1) {
+      setBlocking({
+        title: 'No se pueden mezclar tipos de tarifa',
+        message:
+          'Esta factura tiene paquetes por peso y paquetes de cuota fija. Generá una factura por tipo de servicio: así el cobro de cada guía queda claro y el cierre no se traba.',
+      })
+      return
+    }
     if (!clientName.trim()) return setErr('El cliente es obligatorio.')
     const guidedCreate = !isEdit && !prefill?.packageIds?.length
     if (guidedCreate && !clientId) return setErr('Selecciona un cliente para cargar sus guías.')
@@ -446,7 +459,12 @@ export default function InvoiceForm({
       }
       onCreated(view)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'No se pudo guardar la factura.')
+      const msg = e instanceof Error ? e.message : 'No se pudo guardar la factura.'
+      if (/mezclar paquetes/i.test(msg)) {
+        setBlocking({ title: 'No se pueden mezclar tipos de tarifa', message: msg })
+      } else {
+        setErr(msg)
+      }
     } finally {
       setSaving(false)
     }
@@ -691,6 +709,10 @@ export default function InvoiceForm({
         </div>
         )}
       </Card>
+
+      <AlertDialog open={blocking !== null} onClose={() => setBlocking(null)} title={blocking?.title ?? ''}>
+        {blocking?.message}
+      </AlertDialog>
     </div>
   )
 }

@@ -418,6 +418,45 @@ export function Toast({
   )
 }
 
+/** Blocking alert for rules that must stop the flow (e.g. mixing billing kinds).
+ *  Deliberately louder than an inline banner: emoji, tinted icon and one action. */
+export function AlertDialog({
+  open,
+  onClose,
+  title,
+  children,
+  tone = 'danger',
+  label = 'Entendido',
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  children: ComponentChildren
+  tone?: 'danger' | 'warning' | 'info' | 'success'
+  label?: string
+}) {
+  if (!open) return null
+  const tones = {
+    danger: { emoji: '⛔', circle: 'bg-red-50 text-red-600 ring-red-100', title: 'text-red-900', body: 'text-red-800/90' },
+    warning: { emoji: '⚠️', circle: 'bg-amber-50 text-amber-600 ring-amber-100', title: 'text-amber-900', body: 'text-amber-800/90' },
+    info: { emoji: 'ℹ️', circle: 'bg-sky-50 text-sky-600 ring-sky-100', title: 'text-sky-900', body: 'text-sky-800/90' },
+    success: { emoji: '✅', circle: 'bg-emerald-50 text-emerald-600 ring-emerald-100', title: 'text-emerald-900', body: 'text-emerald-800/90' },
+  }[tone]
+  return (
+    <Modal open={open} onClose={onClose} title={title} size="sm">
+      <div class={`flex items-start gap-3 rounded-xl ring-1 ring-inset p-3 ${tones.circle}`}>
+        <span class="text-2xl leading-none" aria-hidden="true">
+          {tones.emoji}
+        </span>
+        <div class={`min-w-0 flex-1 text-sm leading-snug ${tones.body}`}>{children}</div>
+      </div>
+      <div class="mt-5 flex justify-end">
+        <Button onClick={onClose}>{label}</Button>
+      </div>
+    </Modal>
+  )
+}
+
 /** Confirmation overlay for destructive/audited actions (replaces window.confirm). */
 export function ConfirmDialog({
   open,

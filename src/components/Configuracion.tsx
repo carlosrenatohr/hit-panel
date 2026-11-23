@@ -604,7 +604,7 @@ function BrandingTab({ user, canWrite }: { user: SessionUser; canWrite: boolean 
                   {a.slug} {a.logoUrl ? '· logo personalizado' : '· sin logo personalizado'}
                 </div>
                 <div class="mt-1 text-[11px] text-gray-400">
-                  Formatos: PNG, JPG o WebP — se optimizan a WebP ≤512px. Solo formatos de imagen son elegibles para renderizar.
+                  Formatos: PNG, JPG o WebP. Se optimizan a WebP ≤512px; solo imágenes son elegibles para renderizar.
                 </div>
               </div>
 
