@@ -170,6 +170,9 @@ export interface UnbilledPackage {
   pricingKind?: string | null
   customerCharge?: number | null
   customerUnit?: string | null
+  /** Fixed services: provider cost + utilidad (finance roles only). */
+  providerCost?: number | null
+  grossProfit?: number | null
   eligible: boolean
   reason: string | null
 }

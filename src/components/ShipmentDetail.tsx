@@ -374,11 +374,15 @@ export default function ShipmentDetail({
               lines: [
                 {
                   freightType: (d.pkg.effective_service_type ?? d.pkg.service_type) === 'maritimo' ? 'MAR' : 'AIR',
-                  tier: 'REGULAR',
-                  quantityLbs: d.pkg.effective_weight_lb ?? 0,
+                  tier: d.pkg.pricing_kind === 'fixed' ? 'FIXED' : 'REGULAR',
+                  quantityLbs: d.pkg.pricing_kind === 'fixed' ? 1 : d.pkg.effective_weight_lb ?? 0,
                   guia: d.pkg.almacen_id,
                   tracking: d.pkg.tracking_number ?? null,
                   packageId: d.pkg.id,
+                  // Fixed services bill the stored snapshot (one guía = one unit),
+                  // never a re-quote by weight.
+                  pricingKind: d.pkg.pricing_kind === 'fixed' ? 'fixed' as const : 'weight' as const,
+                  customerCharge: d.pkg.pricing_kind === 'fixed' ? d.pkg.customer_charge ?? null : null,
                 },
               ],
               packageIds: [d.pkg.id],

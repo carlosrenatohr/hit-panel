@@ -7,6 +7,7 @@ const UNBILLED = vi.hoisted((): UnbilledPackage[] => [
   { packageId: 'p1', guia: 'SG-1', tracking: 'TRK1', status: 'entregado', serviceType: 'aereo', freightType: 'AIR', weightLb: 3, eligible: true, reason: null },
   { packageId: 'p2', guia: 'SG-2', tracking: null, status: 'entregado', serviceType: 'aereo', freightType: 'AIR', weightLb: null, eligible: false, reason: 'Sin peso' },
   { packageId: 'p3', guia: 'SG-3', tracking: 'TRK3', status: 'entregado', serviceType: 'maritimo', freightType: 'MAR', weightLb: 2, eligible: true, reason: null },
+  { packageId: 'p4', guia: 'SG-4', tracking: null, status: 'entregado', serviceType: 'aereo', freightType: 'AIR', weightLb: null, pricingKind: 'fixed', customerCharge: 25, customerUnit: 'package', providerCost: 8, grossProfit: 17, eligible: true, reason: null },
 ])
 
 const createdView = vi.hoisted((): InvoiceView => ({
@@ -211,7 +212,7 @@ describe('InvoiceForm guided flow', () => {
     expect(payload.lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't1' })
   })
 
-  it('guided line starts on the card tier (no blank select) and submits it', async () => {
+  it('guided line starts on the card price without a redundant tier selector and submits it', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(window, 'alert').mockImplementation(() => {})
     renderForm()
@@ -220,8 +221,9 @@ describe('InvoiceForm guided flow', () => {
     fireEvent.click(await screen.findByText('SG-1'))
     const tariff = screen.getByLabelText(/Tarifa/) as HTMLSelectElement
     expect(tariff.value).toBe('t-vip')
-    const tier = screen.getByDisplayValue('VIP') as HTMLSelectElement
-    expect(tier.value).toBe('VIP')
+    // The rate card fixes one price per service: the old English "Tier" select is gone.
+    expect(screen.queryByDisplayValue('VIP')).toBeNull()
+    expect(screen.queryByText(/^Tier:/)).toBeNull()
     expect(screen.getAllByText('$16.50').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByText('Crear factura'))
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
@@ -254,6 +256,60 @@ describe('InvoiceForm guided flow', () => {
     await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
     const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ rateTableId: string | null }> }
     expect(body.lines.map((l) => l.rateTableId)).toEqual(['t1', 't-orig'])
+  })
+
+  it('prices a fixed package by unit and keeps it on submit', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderForm()
+    fireEvent.click(screen.getByText('select-client'))
+    await waitFor(() => expect(screen.getByText('SG-4')).toBeTruthy())
+    fireEvent.click(screen.getByText('SG-4'))
+
+    // Fixed: quantity is one unit (not pounds) and the amount is the stored charge.
+    const qty = (await screen.findByLabelText('Unidades')) as HTMLInputElement
+    expect(qty.value).toBe('1')
+    expect(qty.disabled).toBe(true)
+    expect(screen.queryByText('Libras')).toBeNull()
+    expect(screen.getByText('por unidad')).toBeTruthy()
+    expect(screen.getAllByText('$25.00').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByText('Crear factura'))
+    await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
+    const payload = createInvoice.mock.calls[0][0]
+    expect(payload.lines[0]).toMatchObject({ packageId: 'p4', quantityLbs: 1, tier: 'FIXED' })
+  })
+
+  it('edit mode keeps a fixed-fee draft line (never zero) and saves it', async () => {
+    const editView: InvoiceView = {
+      ...createdView,
+      id: 'inv3',
+      clientId: 'c1',
+      status: 'DRAFT',
+      total: 25,
+      profit: 17,
+      lines: [
+        { lineNo: 1, description: 'aereo (cuota fija)', freightType: 'AIR', lineType: 'freight', quantityLbs: 0, unitPrice: 25, total: 25, freightCost: 8, profit: 17, priceTier: null, priceOffCatalog: false, rateCardId: null, pricingSource: 'package_snapshot', packageId: 'p4', packageGuia: 'SG-4', packageTracking: null },
+      ],
+      packages: [{ packageId: 'p4', source: 'manual', matchedOc: 'SG-4', guia: 'SG-4', tracking: null, active: true }],
+    }
+    getInvoice.mockResolvedValue(editView)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    render(<InvoiceForm invoiceId="inv3" onClose={() => {}} onCreated={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Editar factura')).toBeTruthy())
+
+    // The fixed line renders its charge (not $0.00) and its real utilidad.
+    const qty = (await screen.findByLabelText('Unidades')) as HTMLInputElement
+    expect(qty.disabled).toBe(true)
+    expect(screen.getAllByText('$25.00').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Utilidad').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByText('Guardar cambios'))
+    await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
+    const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ packageId: string | null; quantityLbs: number; tier: string }> }
+    expect(body.lines).toHaveLength(1)
+    expect(body.lines[0]).toMatchObject({ packageId: 'p4', quantityLbs: 1, tier: 'FIXED' })
   })
 
   it('edit mode keeps linked guides selected and lets the user add more', async () => {

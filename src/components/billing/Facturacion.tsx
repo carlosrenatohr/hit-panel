@@ -269,7 +269,7 @@ export default function Facturacion({ role }: { role: Role }) {
             <div class="flex flex-wrap gap-4 text-sm">
               <span><span class="text-gray-400">Facturas </span><b>{close.invoices}</b></span>
               <span><span class="text-gray-400">Ingresos </span><b>{fmtUsd(close.revenue)}</b></span>
-              <span><span class="text-gray-400">Ganancia </span><b class="text-green-700">{fmtUsd(close.profit)}</b></span>
+              <span><span class="text-gray-400">Utilidad </span><b class="text-green-700">{fmtUsd(close.profit)}</b></span>
               <span><span class="text-gray-400">Por cobrar </span><b class="text-yellow-700">{fmtUsd(close.receivables)}</b></span>
               <span class="text-gray-400">✈️ {fmtUsd(close.byFreight.AIR.revenue)} · 🚢 {fmtUsd(close.byFreight.MAR.revenue)}</span>
             </div>
@@ -284,7 +284,7 @@ export default function Facturacion({ role }: { role: Role }) {
             <span class="font-medium text-gray-600">Resumen del periodo</span>
             <span><span class="text-gray-400">Facturas </span><b>{summary.invoices}</b></span>
             <span><span class="text-gray-400">Ingresos </span><b>{fmtUsd(summary.revenue)}</b></span>
-            <span><span class="text-gray-400">Ganancia </span><b class="text-green-700">{fmtUsd(summary.profit)}</b></span>
+            <span><span class="text-gray-400">Utilidad </span><b class="text-green-700">{fmtUsd(summary.profit)}</b></span>
             <span><span class="text-gray-400">Por cobrar </span><b class="text-yellow-700">{fmtUsd(summary.receivables)}</b></span>
             <span class="text-gray-400">✈️ {fmtUsd(summary.byFreight.AIR.revenue)} · 🚢 {fmtUsd(summary.byFreight.MAR.revenue)}</span>
           </div>

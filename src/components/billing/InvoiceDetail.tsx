@@ -267,7 +267,7 @@ export default function InvoiceDetail({
                 {inv.status === 'PAID' && inv.paidAt && <div class="text-[11px] text-gray-400">Pagada el {fmtDate(inv.paidAt)}</div>}
                 <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
                   <div><span class="text-gray-400">Total</span><div class="text-lg font-bold text-secondary">{fmtMoney(inv.total, profile?.currency)}</div>{inv && profile && altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd) && <div class="text-[11px] text-gray-400">{altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd)}</div>}</div>
-                  <div><span class="text-gray-400">Ganancia</span><div class="font-semibold text-green-700">{fmtMoney(inv.profit, profile?.currency)}{inv.margin != null && <span class="ml-1 text-xs text-gray-400">({Math.round(inv.margin * 100)}%)</span>}</div></div>
+                  <div><span class="text-gray-400">Utilidad</span><div class="font-semibold text-green-700">{fmtMoney(inv.profit, profile?.currency)}{inv.margin != null && <span class="ml-1 text-xs text-gray-400">({Math.round(inv.margin * 100)}%)</span>}</div></div>
                   <div><span class="text-gray-400">Pagado</span><div class="font-medium">{fmtMoney(inv.paidUsd, profile?.currency)}</div></div>
                   <div><span class="text-gray-400">Saldo</span><div class="font-medium">{fmtMoney(inv.outstanding, profile?.currency)}</div></div>
                 </div>
@@ -339,7 +339,11 @@ export default function InvoiceDetail({
                             <div class="text-[11px] text-gray-400">
                               {l.freightType ? `${FREIGHT_LABEL[l.freightType]} · ` : ''}
                               {l.priceTier ? (TIER_LABEL[l.priceTier] ?? l.priceTier) : l.lineType === 'other' ? 'cargo adicional' : l.pricingSource === 'package_snapshot' ? 'cuota fija' : 'fuera de catálogo'}
-                              {l.quantityLbs != null && l.quantityLbs > 0 ? ` · ${l.quantityLbs} lb` : ''}
+                              {l.pricingSource === 'package_snapshot'
+                                ? ' · 1 unidad'
+                                : l.quantityLbs != null && l.quantityLbs > 0
+                                  ? ` · ${l.quantityLbs} lb`
+                                  : ''}
                             </div>
                           </td>
                           <td class="px-4 py-2 text-right font-medium">{fmtMoney(l.total, profile?.currency)}</td>
@@ -482,22 +486,28 @@ export default function InvoiceDetail({
               {inv.observations && <div class="rounded-lg bg-white p-3 text-sm text-gray-600 ring-1 ring-gray-100">{inv.observations}</div>}
 
               {canWrite && inv.status !== 'VOID' && !inv.closedAt && (
-                <div class="flex gap-2">
-                  <Button disabled={busy} onClick={() => {
-                    if (confirm('Al cerrar la factura, sus líneas, montos y paquetes quedarán bloqueados. Después solo podrán registrarse pagos o anularse la factura. ¿La factura está lista para cerrarse?'))
-                      void run(() => billingApi.closeInvoice(id))
-                  }}>
-                    <Lock class="h-4 w-4" /> Cerrar factura
-                  </Button>
-                  <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? Se liberarán los paquetes enlazados y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
-                    <Ban class="h-4 w-4" /> Anular factura
-                  </Button>
+                <div class="flex flex-wrap gap-2">
+                  <Tooltip text="Cerrar bloquea líneas, montos y paquetes: la factura deja de editarse y habilita registrar pagos. Solo podrá anularse.">
+                    <Button disabled={busy} onClick={() => {
+                      if (confirm('Al cerrar la factura, sus líneas, montos y paquetes quedarán bloqueados. Después solo podrán registrarse pagos o anularse la factura. ¿La factura está lista para cerrarse?'))
+                        void run(() => billingApi.closeInvoice(id))
+                    }}>
+                      <Lock class="h-4 w-4" /> Cerrar factura
+                    </Button>
+                  </Tooltip>
+                  <Tooltip text="Anular marca la factura como inválida y libera sus paquetes para volver a facturarlos. No se puede deshacer.">
+                    <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? Se liberarán los paquetes enlazados y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
+                      <Ban class="h-4 w-4" /> Anular factura
+                    </Button>
+                  </Tooltip>
                 </div>
               )}
               {canWrite && inv.status !== 'VOID' && inv.closedAt && (
-                <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura cerrada? Se liberarán los paquetes enlazados, los pagos registrados se conservarán y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
-                  <Ban class="h-4 w-4" /> Anular factura
-                </Button>
+                <Tooltip text="Anular una factura cerrada conserva los pagos registrados, libera los paquetes y deja el documento como inválido. No se puede deshacer.">
+                  <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura cerrada? Se liberarán los paquetes enlazados, los pagos registrados se conservarán y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
+                    <Ban class="h-4 w-4" /> Anular factura
+                  </Button>
+                </Tooltip>
               )}
             </>
           )}

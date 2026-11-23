@@ -656,7 +656,20 @@ const FREIGHT_LABELS: Record<FreightType, string> = { AIR: 'Aéreo', MAR: 'Marí
 const PRICE_MODEL_LABELS: Record<PriceModel, string> = {
   weight: 'Por peso (US$/lb)',
   volume: 'Por volumen (US$/ft³)',
-  fixed: 'Cuota fija (por envío)',
+  fixed: 'Cuota fija (por guía)',
+}
+
+/** Groups the rate list by billing kind; each group owns its default tariff. */
+const RATE_KINDS: PriceModel[] = ['weight', 'fixed', 'volume']
+const KIND_LABEL: Record<PriceModel, string> = {
+  weight: 'Por peso',
+  fixed: 'Cuota fija',
+  volume: 'Por volumen',
+}
+const KIND_HINT: Record<PriceModel, string> = {
+  weight: 'Se cobra por libra con la tarifa del cliente o la de la agencia.',
+  fixed: 'Monto fijo por guía, sin importar el peso. Aéreo y Marítimo tienen su propio precio.',
+  volume: 'Cobro por pie cúbico — todavía en pruebas.',
 }
 
 /** One editable card = the two AIR/MAR entries of the current published version. */
@@ -701,7 +714,6 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [newName, setNewName] = useState('')
   const [newModel, setNewModel] = useState<PriceModel>('weight')
   const [newIsDefault, setNewIsDefault] = useState(false)
-  const [modelNotice, setModelNotice] = useState<string | null>(null)
   /** Flexible pricing pilot: fixed cards + per-kind defaults only when enabled. */
   const [flexible, setFlexible] = useState(false)
   /** cardId → draft; presence means that card is in edit mode. */
@@ -762,7 +774,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   }
 
   async function createCard() {
-    if (!newName.trim() || (newModel !== 'weight' && !(newModel === 'fixed' && flexible))) return
+    if (!newName.trim() || newModel === 'volume' || (newModel === 'fixed' && !flexible)) return
     setError(null)
     try {
       const created = await configApi.createRateCard({
@@ -779,9 +791,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       setNewName('')
       setNewModel('weight')
       setNewIsDefault(false)
-      setModelNotice(null)
       setEditing((prev) => ({ ...prev, [created.id]: toCardDraft(created) }))
-      showNotice('Tabla creada. Completa Aéreo y Marítimo y guarda.')
+      showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}. Completá Aéreo y Marítimo y guardá.`)
     } catch (e) {
       showError(e)
     }
@@ -791,8 +802,9 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     setError(null)
     try {
       const updated = await configApi.setRateCardDefault(id)
-      setCards((prev) => prev.map((x) => (x.pricingKind === updated.pricingKind ? { ...x, isDefault: x.id === updated.id } : x)))
-      showNotice(`"${updated.name}" es la tabla por defecto para ${updated.pricingKind === 'fixed' ? 'servicio fijo' : 'peso'}.`)
+      // One default PER KIND: only the same kind's flag moves.
+      setCards((prev) => prev.map((x) => ((x.pricingKind ?? 'weight') === (updated.pricingKind ?? 'weight') ? { ...x, isDefault: x.id === updated.id } : x)))
+      showNotice(`"${updated.name}" es la tarifa por defecto de ${KIND_LABEL[updated.pricingKind] ?? 'su grupo'}.`)
     } catch (e) {
       showError(e)
     }
@@ -816,7 +828,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     if (!draft) return
     const entries = draftToEntries(draft)
     if (entries.length !== 2 || entries.some((e) => !e.name.trim())) {
-      setError('Completa nombre, precio y costo de Aéreo y Marítimo antes de guardar.')
+      setError('Completá nombre, precio y costo de Aéreo y Marítimo antes de guardar.')
       return
     }
     setConfirm({ kind: 'save', id, name: cards.find((c) => c.id === id)?.name ?? '' })
@@ -862,18 +874,25 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
 
   if (loading && cards.length === 0) return <Spinner label="Cargando tarifas…" />
 
+  // One section per billing kind: each group has its own default ($/lb, flat
+  // per guía, volume) and reads as its own column of cards.
+  const groups = RATE_KINDS.map((kind) => ({ kind, cards: cards.filter((c) => (c.pricingKind ?? 'weight') === kind) })).filter(
+    (g) => g.cards.length > 0,
+  )
+
   return (
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-5">
       {error && <p class="text-sm text-red-600">{error}</p>}
       {notice && <p class="text-sm text-green-700">{notice}</p>}
 
       {canWrite && (
         <Card class="p-4">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div class="text-sm font-semibold text-gray-800">Tablas de tarifas</div>
               <p class="text-xs text-gray-500">
-                Cada tabla es un plan con dos precios: Aéreo y Marítimo. Para otro par de precios, crea otra tabla.
+                Cada tabla es un plan con dos precios: Aéreo y Marítimo. Las tablas se agrupan por tipo de cobro y cada
+                grupo tiene su propia tarifa por defecto.
               </p>
             </div>
             <Button onClick={() => setCreateOpen(true)}>
@@ -884,111 +903,129 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         </Card>
       )}
 
-      {cards.map((card) => {
-        const isEditing = canWrite && editing[card.id] !== undefined
-        const draft = editing[card.id] ?? toCardDraft(card)
+      {groups.map((group) => {
+        const defaultCard = group.cards.find((c) => c.isDefault)
         return (
-          <Card key={card.id}>
-            <div class="mb-3 flex items-center justify-between gap-2">
-              {renaming && renaming.id === card.id ? (
-                <div class="flex items-center gap-2">
-                  <input class={inputCls} value={renaming.name} onChange={(e) => setRenaming({ id: card.id, name: (e.target as HTMLInputElement).value })} />
-                  <Button onClick={doRename} disabled={!renaming.name.trim()}>
-                    Guardar
-                  </Button>
-                  <Button variant="ghost" onClick={() => setRenaming(null)}>
-                    <X class="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </div>
-              ) : (
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-semibold text-gray-800">{card.name}</span>
-                  <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{PRICE_MODEL_LABELS[card.currentVersion.priceModel]}</span>
-                  {card.isDefault && <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Por defecto</span>}
-                </div>
-              )}
-              <div class="flex items-center gap-2">
-                {canWrite && !renaming && flexible && !card.isDefault && (
-                  <Button variant="ghost" onClick={() => void makeDefault(card.id)} disabled={saving === card.id}>
-                    Hacer default
-                  </Button>
-                )}
-                {canWrite && !renaming && (
-                  <>
-                    <IconButtonSmall label="Renombrar" onClick={() => requestRename(card.id, card.name)}>
-                      <Pencil class="h-4 w-4" />
-                    </IconButtonSmall>
-                    <IconButtonSmall label="Eliminar" onClick={() => requestDelete(card.id, card.name)} danger>
-                      <Trash2 class="h-4 w-4" />
-                    </IconButtonSmall>
-                  </>
-                )}
+          <section key={group.kind} class="flex flex-col gap-2">
+            <div class="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 px-1">
+              <div>
+                <h3 class="text-sm font-semibold text-secondary">{KIND_LABEL[group.kind]}</h3>
+                <p class="text-xs text-gray-500">{KIND_HINT[group.kind]}</p>
               </div>
+              <span class="text-xs text-gray-400">
+                {defaultCard ? `Por defecto: ${defaultCard.name}` : 'Sin tarifa por defecto en este grupo'}
+              </span>
             </div>
-            <div class="grid gap-4 lg:grid-cols-2">
-              {(['air', 'mar'] as const).map((key) => {
-                const entry = draft[key]
-                const label = key === 'air' ? 'Aéreo' : 'Marítimo'
-                const isFixed = card.currentVersion.priceModel === 'fixed'
+
+            <div class="grid gap-3 lg:grid-cols-2">
+              {group.cards.map((card) => {
+                const isEditing = canWrite && editing[card.id] !== undefined
+                const draft = editing[card.id] ?? toCardDraft(card)
                 return (
-                  <div key={key} class="rounded-lg border border-gray-100 p-3">
-                    <div class="mb-2 flex items-center justify-between">
-                      <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{label}</span>
-                      {canWrite && !isEditing && (
-                        <Button variant="ghost" onClick={() => startEdit(card)}>
-                          <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
-                          Editar
-                        </Button>
+                  <Card key={card.id} class="flex flex-col">
+                    <div class="flex items-start justify-between gap-2 border-b border-gray-100 px-4 py-3">
+                      {renaming && renaming.id === card.id ? (
+                        <div class="flex flex-1 items-center gap-2">
+                          <input class={inputCls} value={renaming.name} onChange={(e) => setRenaming({ id: card.id, name: (e.target as HTMLInputElement).value })} />
+                          <Button onClick={doRename} disabled={!renaming.name.trim()}>
+                            Guardar
+                          </Button>
+                          <Button variant="ghost" onClick={() => setRenaming(null)}>
+                            <X class="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span class="truncate text-sm font-semibold text-gray-800">{card.name}</span>
+                          {card.isDefault && <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Por defecto</span>}
+                        </div>
                       )}
-                    </div>
-                    <div class="grid grid-cols-3 gap-3 text-sm">
-                      <div>
-                        <div class="text-xs text-gray-400">Nombre</div>
-                        {isEditing ? (
-                          <input class={`${inputCls} w-full min-w-0`} value={entry.name} onChange={(e) => updateField(card.id, key, 'name', (e.target as HTMLInputElement).value)} />
-                        ) : (
-                          <div class="py-1.5 font-medium text-gray-700">{entry.name}</div>
+                      <div class="flex shrink-0 items-center gap-1.5">
+                        {canWrite && !renaming && flexible && !card.isDefault && (
+                          <Button variant="ghost" onClick={() => void makeDefault(card.id)} disabled={saving === card.id}>
+                            Marcar por defecto
+                          </Button>
                         )}
-                      </div>
-                      <div>
-                        <div class="text-xs text-gray-400">{isFixed ? `Precio por envío (${currency})` : `Precio (${currency})`}</div>
-                        {isEditing ? (
-                          <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.price} onChange={(e) => updateField(card.id, key, 'price', (e.target as HTMLInputElement).value)} />
-                        ) : (
-                          <div class="py-1.5 text-gray-700">{fmtMoney(Number(entry.price), currency)}</div>
-                        )}
-                      </div>
-                      <div>
-                        <div class="text-xs text-gray-400">{isFixed ? `Costo por envío (${currency})` : `Costo (${currency})`}</div>
-                        {isEditing ? (
-                          <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.cost} onChange={(e) => updateField(card.id, key, 'cost', (e.target as HTMLInputElement).value)} />
-                        ) : (
-                          <div class="py-1.5 text-gray-500">{fmtMoney(Number(entry.cost), currency)}</div>
+                        {canWrite && !renaming && (
+                          <>
+                            <IconButtonSmall label="Renombrar" onClick={() => requestRename(card.id, card.name)}>
+                              <Pencil class="h-4 w-4" />
+                            </IconButtonSmall>
+                            <IconButtonSmall label="Eliminar" onClick={() => requestDelete(card.id, card.name)} danger>
+                              <Trash2 class="h-4 w-4" />
+                            </IconButtonSmall>
+                          </>
                         )}
                       </div>
                     </div>
-                  </div>
+                    <div class="grid flex-1 gap-3 p-4 sm:grid-cols-2">
+                      {(['air', 'mar'] as const).map((key) => {
+                        const entry = draft[key]
+                        const label = key === 'air' ? 'Aéreo' : 'Marítimo'
+                        const isFixed = card.currentVersion.priceModel === 'fixed'
+                        return (
+                          <div key={key} class="rounded-lg border border-gray-100 p-3">
+                            <div class="mb-2 flex items-center justify-between">
+                              <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{label}</span>
+                              {canWrite && !isEditing && (
+                                <Button variant="ghost" onClick={() => startEdit(card)}>
+                                  <Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+                                  Editar
+                                </Button>
+                              )}
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-sm">
+                              <div>
+                                <div class="text-xs text-gray-400">Nombre</div>
+                                {isEditing ? (
+                                  <input class={`${inputCls} w-full min-w-0`} value={entry.name} onChange={(e) => updateField(card.id, key, 'name', (e.target as HTMLInputElement).value)} />
+                                ) : (
+                                  <div class="py-1.5 font-medium text-gray-700">{entry.name}</div>
+                                )}
+                              </div>
+                              <div>
+                                <div class="text-xs text-gray-400">{isFixed ? `Precio por guía (${currency})` : `Precio (${currency})`}</div>
+                                {isEditing ? (
+                                  <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.price} onChange={(e) => updateField(card.id, key, 'price', (e.target as HTMLInputElement).value)} />
+                                ) : (
+                                  <div class="py-1.5 text-gray-700">{fmtMoney(Number(entry.price), currency)}</div>
+                                )}
+                              </div>
+                              <div>
+                                <div class="text-xs text-gray-400">{isFixed ? `Costo por guía (${currency})` : `Costo (${currency})`}</div>
+                                {isEditing ? (
+                                  <input type="number" min="0" step="0.01" class={`${inputCls} w-full min-w-0`} value={entry.cost} onChange={(e) => updateField(card.id, key, 'cost', (e.target as HTMLInputElement).value)} />
+                                ) : (
+                                  <div class="py-1.5 text-gray-500">{fmtMoney(Number(entry.cost), currency)}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {isEditing && (
+                      <div class="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3">
+                        <Button variant="ghost" onClick={() => cancelEdit(card)}>
+                          Cancelar
+                        </Button>
+                        <Button onClick={() => requestSave(card.id)} disabled={saving === card.id}>
+                          <Save class="h-4 w-4" aria-hidden="true" />
+                          {saving === card.id ? 'Guardando…' : 'Guardar'}
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
                 )
               })}
             </div>
-            {isEditing && (
-              <div class="mt-2 flex items-center justify-end gap-2">
-                <Button variant="ghost" onClick={() => cancelEdit(card)}>
-                  Cancelar
-                </Button>
-                <Button onClick={() => requestSave(card.id)} disabled={saving === card.id}>
-                  <Save class="h-4 w-4" aria-hidden="true" />
-                  {saving === card.id ? 'Guardando…' : 'Guardar'}
-                </Button>
-              </div>
-            )}
-          </Card>
+          </section>
         )
       })}
 
       {cards.length === 0 && (
         <Card>
-          <p class="text-sm text-gray-500">No hay tablas de tarifas para esta organización.</p>
+          <p class="p-4 text-sm text-gray-500">No hay tablas de tarifas para esta organización.</p>
         </Card>
       )}
 
@@ -998,41 +1035,33 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
             <Field label="Nombre">
               <input class={inputCls} value={newName} placeholder="Ej. Estándar" autoFocus onChange={(e) => setNewName((e.target as HTMLInputElement).value)} />
             </Field>
-            <Field label="Modelo de cobro">
-              <select
-                class={inputCls}
-                value={newModel}
-                onChange={(e) => {
-                  const m = (e.target as HTMLSelectElement).value as PriceModel
-                  setNewModel(m)
-                  setModelNotice(m === 'volume' ? 'En construcción — por ahora solo se soporta cobro por peso y cuota fija.' : null)
-                }}
-              >
+            <Field label="Tipo de cobro">
+              <select class={inputCls} value={newModel} onChange={(e) => setNewModel((e.target as HTMLSelectElement).value as PriceModel)}>
                 <option value="weight">{PRICE_MODEL_LABELS.weight}</option>
                 {flexible && <option value="fixed">{PRICE_MODEL_LABELS.fixed}</option>}
-                <option value="volume">{PRICE_MODEL_LABELS.volume}</option>
+                <option value="volume" disabled>
+                  {PRICE_MODEL_LABELS.volume} — próximamente
+                </option>
               </select>
             </Field>
-            {modelNotice && <p class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{modelNotice}</p>}
             {newModel === 'fixed' && (
               <p class="text-xs text-gray-500">
-                Servicio con monto fijo por envío/guía: el cliente paga el precio y el costo interno lo defines tú. El peso no participa en el cobro.
+                Servicio con monto fijo por guía: el cliente paga el precio y el costo interno lo definís vos. El peso no
+                participa en el cobro.
               </p>
             )}
             {flexible && (
               <label class="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={newIsDefault} onChange={(e) => setNewIsDefault((e.target as HTMLInputElement).checked)} />
-                Marcar como tabla por defecto para este tipo de cobro
+                Marcar como tarifa por defecto de este tipo de cobro
               </label>
             )}
-            {newModel === 'weight' && (
-              <p class="text-xs text-gray-500">Se creará con Aéreo y Marítimo vacíos; completalos al editar y guarda.</p>
-            )}
+            <p class="text-xs text-gray-500">Se creará con Aéreo y Marítimo vacíos; completalos al editar y guardá.</p>
             <div class="mt-2 flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={createCard} disabled={!newName.trim() || (newModel !== 'weight' && !(newModel === 'fixed' && flexible))}>
+              <Button onClick={createCard} disabled={!newName.trim() || newModel === 'volume' || (newModel === 'fixed' && !flexible)}>
                 <Plus class="h-4 w-4" aria-hidden="true" />
                 Crear
               </Button>
