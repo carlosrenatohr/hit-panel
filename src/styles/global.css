@@ -29,6 +29,13 @@ h1, h2, h3, h4, h5, h6 {
 .scroll-thin::-webkit-scrollbar { height: 8px; width: 8px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
 
+/* Toast entrance (components/ui.tsx). Utility-only animation so no inline styles. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-in { animation: toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+
 /* Print / "export to PDF" (native browser print → Save as PDF keeps table text crisp and
    selectable — sharper for accounting records than a rasterized screenshot-to-PDF). */
 @media print {
