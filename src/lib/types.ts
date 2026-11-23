@@ -46,7 +46,7 @@ export interface Pkg {
   declared_value: number | null
   photo_ref: string | null
   /** To-many embed: when present, the package has at least one linked invoice. */
-  invoice_packages?: { invoice_id: string; active: boolean }[] | null
+  invoice_packages?: { invoice_id: string; active: boolean; invoices?: { status: string } | null }[] | null
   /** Billing client ID (nullable: unassigned). */
   client_id: string | null
   /** Embedded client name (from billing_clients join). */

@@ -24,9 +24,9 @@ import { DateRangePicker } from './DateRangePicker'
 import { fmtMoney } from '../lib/format'
 import LifecycleOverview, { PickupQuickAction, StatusSelector, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import FilterSheet from './shipments/FilterSheet'
-import { COLUMN_DEFS, ColumnPicker, useColumnPrefs } from './ShipmentColumns'
+import { COLUMN_DEFS, ColumnPicker, PricingKindIcon, useColumnPrefs } from './ShipmentColumns'
 import ChargeSummary from './billing/ChargeSummary'
-import { AlertDialog, Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill } from './ui'
+import { AlertDialog, Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill, Tooltip } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
 
 const PAGE_SIZE = 25
@@ -923,11 +923,19 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                       <span class="min-w-0 truncate">{cleanName(p.referencia_name)}</span>
                       {isHazmat(p.referencia_name) && <HazmatBadge />}
                       {p.photo_ref && <span title="Tiene foto">🖼️</span>}
-                      {p.invoice_packages?.some((ip) => ip.active) ? (
-                        <span title="Tiene factura" class="text-primary/70">
-                          <FileText class="h-3.5 w-3.5" />
-                        </span>
-                      ) : null}
+                      {(() => {
+                        const link = p.invoice_packages?.find((ip) => ip.active)
+                        if (!link) return null
+                        const paid = link.invoices?.status === 'PAID'
+                        return (
+                          <Tooltip text={paid ? 'Factura pagada en su totalidad' : 'Tiene una factura vinculada'}>
+                            <span class={paid ? 'text-emerald-600' : 'text-primary/70'} role="img" aria-label={paid ? 'Factura pagada' : 'Tiene factura'}>
+                              <FileText class="h-3.5 w-3.5" aria-hidden="true" />
+                            </span>
+                          </Tooltip>
+                        )
+                      })()}
+                      <PricingKindIcon kind={p.pricing_kind ?? 'weight'} />
                     </span>
                     <span class="mt-1 flex items-center gap-2 text-xs text-gray-500">
                       <span class="min-w-0 truncate">
@@ -996,20 +1004,26 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                           {selected.has(p.id) ? <SquareCheck class="h-4 w-4" /> : <Square class="h-4 w-4" />}
                         </button>
                         {p.almacen_id}
-                        {p.invoice_packages?.some((ip) => ip.active) && (
-                          <button
-                            type="button"
-                            title="Ver factura"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              const activeLink = p.invoice_packages?.find((ip) => ip.active)
-                              setInvoiceId(activeLink?.invoice_id ?? null)
-                            }}
-                            class="text-primary/70 hover:text-primary"
-                          >
-                            <FileText class="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                        {(() => {
+                          const link = p.invoice_packages?.find((ip) => ip.active)
+                          if (!link) return null
+                          const paid = link.invoices?.status === 'PAID'
+                          return (
+                            <Tooltip text={paid ? 'Factura pagada en su totalidad' : 'Ver la factura vinculada'}>
+                              <button
+                                type="button"
+                                aria-label={paid ? 'Factura pagada' : 'Ver factura'}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setInvoiceId(link.invoice_id)
+                                }}
+                                class={paid ? 'text-emerald-600 hover:text-emerald-700' : 'text-primary/70 hover:text-primary'}
+                              >
+                                <FileText class="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            </Tooltip>
+                          )
+                        })()}
                       </span>
                     </td>
                     {visibleCols.map((c) => (
