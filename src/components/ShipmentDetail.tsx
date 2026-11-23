@@ -526,10 +526,15 @@ export default function ShipmentDetail({
                 >
                   {(() => {
                     const fixed = d.pkg.pricing_kind === 'fixed'
-                    const charge = pricing?.customerCharge ?? d.pkg.customer_charge ?? null
+                    // Weight shows the unit price that prices the package (per lb),
+                    // not the total; the total lives in the charge summary below.
+                    const rate = pricing?.customerRate ?? (fixed ? d.pkg.customer_charge ?? null : d.pkg.customer_rate ?? null)
+                    const unit = d.pkg.customer_unit ?? 'lb'
                     const parts = [fixed ? 'Cuota fija' : 'Por peso']
                     if (pricing?.cardName) parts.push(pricing.cardName)
-                    if (charge != null && user.role !== 'viewer') parts.push(`${fmtMoney(charge, pricing?.currency ?? currency)}${fixed ? ' por guía' : ''}`)
+                    if (rate != null && user.role !== 'viewer') {
+                      parts.push(fixed ? `${fmtMoney(rate, pricing?.currency ?? currency)} por carga` : `${fmtMoney(rate, pricing?.currency ?? currency)}/${unit}`)
+                    }
                     return parts.join(' · ')
                   })()}
                 </span>
