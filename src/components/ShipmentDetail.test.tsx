@@ -218,14 +218,14 @@ describe('ShipmentDetail', () => {
     expect(select).toBeTruthy();
   });
 
-  it('muestra el tipo de tarifa de cuota fija con su cobro por guía', async () => {
+  it('muestra el tipo de tarifa de cuota fija con su cobro por carga', async () => {
     vi.mocked(getPackageDetail).mockResolvedValue(
       detailWith({ pricing_kind: 'fixed', customer_charge: 25, customer_unit: 'package' }),
     );
     render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
 
-    expect(screen.getByText(/Cuota fija · \$25\.00 por guía/)).toBeTruthy();
+    expect(screen.getByText(/Cuota fija · \$25\.00 por carga/)).toBeTruthy();
     vi.mocked(getPackageDetail).mockResolvedValue(detailWith({}));
   });
 
@@ -246,7 +246,7 @@ describe('ShipmentDetail', () => {
     await waitFor(() => expect(screen.getAllByText('910500').length).toBeGreaterThan(0));
 
     expect(await screen.findByText('Resumen de cobro')).toBeTruthy();
-    expect(screen.getByText('Por peso · Estándar · $36.40')).toBeTruthy();
+    expect(screen.getByText('Por peso · Estándar · $7.00/lb')).toBeTruthy();
     expect(screen.getByText('Costo interno')).toBeTruthy();
     expect(screen.getByText('Utilidad')).toBeTruthy();
     expect(pricingPreview).toHaveBeenCalledWith(

@@ -220,7 +220,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       const [assignments, customer] = await Promise.all([loadAssignments, loadCustomer])
       if (!alive) return
       const fixed = assignments.find((a) => a.pricingKind === 'fixed')?.rateCardId ?? null
-      const weight = assignments.find((a) => a.pricingKind === 'weight')?.rateCardId ?? customer?.defaultRateCardId ?? null
+      // Weight: the client profile default is what the invoice quote uses, so it
+      // leads over a legacy per-kind assignment (fixed still uses assignments).
+      const weight = customer?.defaultRateCardId ?? assignments.find((a) => a.pricingKind === 'weight')?.rateCardId ?? null
       setClientRates({ weight, fixed })
       if (fixed) {
         setCreateForm((f) => (f.pricingKind === 'fixed' ? { ...f, rateCardId: fixed } : f))
