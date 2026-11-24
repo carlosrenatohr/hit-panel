@@ -55,7 +55,9 @@ export function StatusFilterChips({
       {options.map((o) => {
         const active = selected.includes(o.value)
         const Icon = o.icon
-        const count = counts?.[o.value]
+        // With a counts map, every chip shows a number (0 included) so the row
+        // reads consistently instead of some chips having a trailing digit.
+        const count = counts ? (counts[o.value] ?? 0) : undefined
         return (
           <button
             key={o.value}
