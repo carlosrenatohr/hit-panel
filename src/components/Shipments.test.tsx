@@ -752,11 +752,25 @@ describe('Shipments', () => {
     await waitFor(() => expect(lastCall()).toMatchObject({ sortCol: 'received_at', ascending: false }));
     expect(screen.getByRole('columnheader', { name: /Recibido Miami/ }).getAttribute('aria-sort')).toBe('descending');
 
-    // Money column: sortable like any other (server-side numeric order).
-    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Cargo' }));
+    // Money column: sortable like any other (server-side numeric order). Labelled
+    // «Monto» because «Carga» already names the weight/pieces column.
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Monto' }));
     await waitFor(() => expect(lastCall()).toMatchObject({ sortCol: 'customer_charge', ascending: true }));
-    expect(screen.getByRole('columnheader', { name: /Cargo/ }).getAttribute('aria-sort')).toBe('ascending');
+    expect(screen.getByRole('columnheader', { name: /Monto/ }).getAttribute('aria-sort')).toBe('ascending');
     expect(screen.getByRole('columnheader', { name: /Recibido Miami/ }).getAttribute('aria-sort')).toBe('none');
+  });
+
+  it('renders Estado as dot + icon with the label in the tooltip, not repeated as text', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    const cells = await screen.findAllByRole('img', { name: 'Entregado' });
+    const cell = cells[0].closest('td')!;
+    expect(cell.querySelector('span.rounded-full')).toBeTruthy();
+    expect(cell.querySelector('svg')).toBeTruthy();
+    // The status label only lives in the tooltip: no duplicated text in the row.
+    const tooltip = cell.querySelector('[role="tooltip"]')!;
+    expect(tooltip.textContent).toBe('Entregado');
+    expect(cell.textContent).toBe(tooltip.textContent);
+    expect(screen.getAllByRole('tooltip', { name: 'Entregado' }).length).toBeGreaterThan(0);
   });
 
   it('hides the provider filter when the agency has only one provider', async () => {

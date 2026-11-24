@@ -23,6 +23,18 @@ export const STATUS_SHORT: Record<ShipmentStatus, string> = {
   desconocido: 'Desconocido',
 }
 
+// Icon tone mirrors the solid dot, so the two cues never disagree. The icon itself
+// lives in LifecycleOverview (STATUS_ICON), next to the lifecycle cards.
+export const STATUS_ICON_TONE: Record<ShipmentStatus, string> = {
+  en_almacen: 'text-green-500',
+  parcial: 'text-yellow-500',
+  en_transito: 'text-red-500',
+  en_destino: 'text-purple-500',
+  entregado: 'text-orange-500',
+  excepcion: 'text-gray-500',
+  desconocido: 'text-gray-300',
+}
+
 // Solid dot — compact indicator for dense table rows.
 export const STATUS_DOT: Record<ShipmentStatus, string> = {
   en_almacen: 'bg-green-500',
