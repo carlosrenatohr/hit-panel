@@ -637,7 +637,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         // package creation below fails.
         bumpData('clients')
       }
-      await createPackage({
+      const created = await createPackage({
         almacenId: createForm.almacenId.trim(),
         trackingNumber: createForm.trackingNumber || null,
         serviceType,
@@ -654,6 +654,11 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         pricingKind: createForm.pricingKind,
         rateCardId: createForm.pricingKind === 'fixed' ? createForm.rateCardId || null : null,
       })
+      // Weight packages keep the tariff they were created with: the Worker
+      // resolves and stamps it (best effort, never blocks the create).
+      if (createForm.pricingKind !== 'fixed') {
+        void billingApi.stampWeightSnapshot(created.id).catch(() => {})
+      }
       // ADR-013: create_package es idempotente por tenant y nunca avisa ni
       // bloquea cross-tenant → el éxito SIEMPRE cierra el modal (el camino de
       // `warning` se eliminó cuando el Worker dejó de devolverlo).
@@ -1450,15 +1455,23 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
               <span class="font-medium text-gray-800">{bulkPreview.clientName}</span> · {bulkPreview.lines.length} paquete
               {bulkPreview.lines.length === 1 ? '' : 's'}
             </p>
-            <div class="scroll-thin max-h-64 overflow-y-auto rounded-lg border border-gray-100">
-              <table class="w-full text-left text-sm">
+            <p class="text-xs text-gray-500">
+              Tipo de tarifa:{' '}
+              <span class="font-medium text-gray-700">
+                {bulkPreview.lines[0]?.pricingKind === 'fixed' ? 'Cuota fija (1 unidad por guía)' : 'Por peso (tarifa guardada de cada paquete)'}
+              </span>
+            </p>
+            <div class="scroll-thin max-h-64 overflow-x-auto overflow-y-auto rounded-lg border border-gray-100">
+              <table class="w-full min-w-[36rem] text-left text-sm">
                 <thead>
                   <tr class="border-b border-gray-100 bg-gray-50/60 text-xs font-medium uppercase tracking-wide text-gray-500">
                     <th class="px-3 py-2">Guía</th>
                     <th class="px-3 py-2">Tracking</th>
                     <th class="px-3 py-2">Servicio</th>
+                    <th class="px-3 py-2">Tarifa</th>
                     <th class="px-3 py-2">Peso</th>
                     <th class="px-3 py-2 text-right">Precio</th>
+                    {canSeeCosts && <th class="px-3 py-2 text-right">Costo</th>}
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
@@ -1467,8 +1480,21 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                       <td class="px-3 py-2 font-mono text-xs">{l.guia}</td>
                       <td class="px-3 py-2 font-mono text-xs">{l.tracking ?? '—'}</td>
                       <td class="px-3 py-2">{l.serviceType ?? '—'}</td>
-                      <td class="px-3 py-2">{l.pricingKind === 'fixed' ? <span class="text-emerald-600">Cuota fija (1 unidad)</span> : l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
+                      <td class="px-3 py-2">
+                        <span
+                          class={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                            l.pricingKind === 'fixed'
+                              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                              : 'bg-sky-50 text-sky-700 ring-sky-200'
+                          }`}
+                        >
+                          {l.pricingKind === 'fixed' ? 'Cuota fija' : 'Por peso'}
+                        </span>
+                        <span class="ml-1.5 text-xs text-gray-600">{l.cardName ?? (l.pricingKind === 'fixed' ? 'Snapshot del paquete' : '—')}</span>
+                      </td>
+                      <td class="px-3 py-2">{l.pricingKind === 'fixed' ? '1 guía' : l.weightLb != null ? `${l.weightLb} lb` : '—'}</td>
                       <td class="px-3 py-2 text-right font-medium">${l.total.toFixed(2)}</td>
+                      {canSeeCosts && <td class="px-3 py-2 text-right text-gray-600">${l.freightCost.toFixed(2)}</td>}
                     </tr>
                   ))}
                 </tbody>

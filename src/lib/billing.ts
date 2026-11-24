@@ -173,6 +173,8 @@ export interface UnbilledPackage {
   pricingKind?: string | null
   customerCharge?: number | null
   customerUnit?: string | null
+  /** Weight services: the card snapshotted at creation (null on legacy rows). */
+  rateCardId?: string | null
   /** Fixed services: provider cost + utilidad (finance roles only). */
   providerCost?: number | null
   grossProfit?: number | null
@@ -194,6 +196,8 @@ export interface BulkPreviewLine {
   total: number
   freightCost: number
   profit: number
+  /** Card that priced the line (weight); null for fixed snapshot lines. */
+  cardName?: string | null
   /** 'fixed' = priced from the package's stored snapshot (quantity is 1 guía). */
   pricingKind?: 'fixed' | 'weight' | null
   unit?: string
@@ -255,6 +259,12 @@ export const billingApi = {
     })}`),
   quote: (freightType: FreightType, tier: PriceTier, lbs: number) =>
     workerApi<Quote>(`${API_BASE}/api/billing/quote${qs({ freightType, tier, lbs })}`),
+  /** Stamp the weight tariff the package was created with (server resolves it). */
+  stampWeightSnapshot: (packageId: string) =>
+    workerApi<{ rateCardId: string; cardName: string | null; unitPrice: number; total: number; cost: number; currency: string } | null>(
+      `${API_BASE}/api/billing/packages/${encodeURIComponent(packageId)}/weight-snapshot`,
+      { method: 'POST' },
+    ),
   listInvoices: (f: InvoiceFilters) => workerApi<{ rows: InvoiceListRow[]; count: number }>(`${API_BASE}/api/billing/invoices${qs({ ...f })}`),
   getInvoice: (id: string) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices/${id}`),
   createInvoice: (input: CreateInvoiceInput) => workerApi<InvoiceView>(`${API_BASE}/api/billing/invoices`, { method: 'POST', body: input }),

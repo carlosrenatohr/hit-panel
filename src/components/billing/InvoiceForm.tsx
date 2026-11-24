@@ -262,7 +262,7 @@ export default function InvoiceForm({
     const appliedKey = `${clientId ?? ''}:${clientDefaultRate}`
     if (appliedDefaultFor.current === appliedKey) return
     const card = rateCards.find((c) => c.id === clientDefaultRate)
-    if (!card) return // cards still loading — retry when they arrive
+    if (!card || !isWeightCard(card)) return // cards still loading / fixed card: retry when a weight default arrives
     appliedDefaultFor.current = appliedKey
     setLines((ls) =>
       ls.map((l) => {
@@ -275,16 +275,24 @@ export default function InvoiceForm({
 
   const activeConcepts = useMemo(() => concepts.filter((c) => c.active), [concepts])
 
-  // Rate cards for a freight (each card prices AIR and MAR; the line picks by service).
-  const tablesFor = (f: FreightType) => rateCards.filter((c) => c.currentVersion.entries.some((e) => e.serviceType === f))
+  /** Weight lines may only be priced by weight cards. */
+  const isWeightCard = (c: RateCardInfo) => (c.pricingKind ?? 'weight') === 'weight'
+  // Rate cards for a freight (each card prices AIR and MAR; the line picks by
+  // service). Fixed cards never show up on a weight line's selector.
+  const tablesFor = (f: FreightType) =>
+    rateCards.filter((c) => isWeightCard(c) && c.currentVersion.entries.some((e) => e.serviceType === f))
   const tableLabel = (c: RateCardInfo) => c.name
+
+  /** The agency's default weight card for this freight, if configured. */
+  const orgDefaultFor = (f: FreightType): string | null =>
+    rateCards.find((c) => isWeightCard(c) && c.isDefault && c.currentVersion.entries.some((e) => e.serviceType === f))?.id ?? null
 
   /** The client's default rate card when it offers the line's freight — preselects
    *  visually; the backend resolves the final price (server stays authoritative). */
   const clientDefaultFor = (f: FreightType): string | null => {
     if (!clientDefaultRate) return null
     const c = rateCards.find((x) => x.id === clientDefaultRate)
-    return c && c.currentVersion.entries.some((e) => e.serviceType === f) ? c.id : null
+    return c && isWeightCard(c) && c.currentVersion.entries.some((e) => e.serviceType === f) ? c.id : null
   }
 
   /** Tiers available for a line: the chosen card's entry name for that service,
@@ -292,9 +300,9 @@ export default function InvoiceForm({
   function tiersFor(freightType: FreightType, rateCardId: string | null): PriceTier[] {
     if (rateCardId) {
       const c = rateCards.find((x) => x.id === rateCardId)
-      if (c) return c.currentVersion.entries.filter((e) => e.serviceType === freightType).map((e) => e.name)
+      if (c && isWeightCard(c)) return c.currentVersion.entries.filter((e) => e.serviceType === freightType).map((e) => e.name)
     }
-    if (rateCards.some((x) => x.currentVersion.entries.some((e) => e.serviceType === freightType))) return []
+    if (rateCards.some((x) => isWeightCard(x) && x.currentVersion.entries.some((e) => e.serviceType === freightType))) return []
     const entry = catalog.find((c) => c.freightType === freightType)
     return entry ? LEGACY_TIERS.filter((t) => entry.tiers[t] != null) : []
   }
@@ -321,13 +329,16 @@ export default function InvoiceForm({
       }
     }
     const lbs = Number(l.quantityLbs) || 0
-    // Mirror the Worker's resolution: explicit table, then the client's default
-    // card when it prices this freight, then any org card. Only unmigrated orgs
-    // (no cards) fall back to the legacy catalog preview.
-    const hasFreight = (c: RateCardInfo) => c.currentVersion.entries.some((e) => e.serviceType === l.freightType)
+    // Mirror the Worker's resolution: explicit weight card, then the client's
+    // default weight card, then the agency default. Fixed cards are never used
+    // for weight lines and there is no "first card" fallback.
+    const hasFreight = (c: RateCardInfo) => isWeightCard(c) && c.currentVersion.entries.some((e) => e.serviceType === l.freightType)
     const explicit = l.rateTableId ? rateCards.find((c) => c.id === l.rateTableId) : undefined
     const clientDefault = clientDefaultRate ? rateCards.find((c) => c.id === clientDefaultRate) : undefined
-    const card = explicit ?? (clientDefault && hasFreight(clientDefault) ? clientDefault : rateCards.find(hasFreight))
+    const card =
+      (explicit && hasFreight(explicit) ? explicit : undefined) ??
+      (clientDefault && hasFreight(clientDefault) ? clientDefault : undefined) ??
+      rateCards.find((c) => c.isDefault && hasFreight(c))
     if (card) {
       const entry = card.currentVersion.entries.find((e) => e.serviceType === l.freightType)
       if (!entry) return { unitPrice: null, total: 0, cost: 0, profit: null }
@@ -379,7 +390,7 @@ export default function InvoiceForm({
   }
 
   function addFreightLine() {
-    const tableId = clientDefaultFor('AIR')
+    const tableId = clientDefaultFor('AIR') ?? orgDefaultFor('AIR')
     setLines((ls) => [...ls, { freightType: 'AIR', tier: tierFor('AIR', tableId), quantityLbs: '', description: '', rateTableId: tableId, guia: null, tracking: null, packageId: null, pricingKind: 'weight' }])
   }
 
@@ -391,8 +402,13 @@ export default function InvoiceForm({
       if (has) return ls.filter((l) => l.packageId !== pkg.packageId)
       if (ls.some((l) => l.packageId === pkg.packageId)) return ls
       const freightType = pkg.freightType ?? (pkg.serviceType === 'maritimo' ? 'MAR' : 'AIR')
-      const tableId = clientDefaultFor(freightType)
       const isFixed = pkg.pricingKind === 'fixed' && pkg.customerCharge != null
+      // Weight: keep the card the package was created with (snapshot); legacy
+      // rows fall back to the client then the agency default — never a fixed card.
+      const stored = pkg.rateCardId
+        ? rateCards.find((c) => c.id === pkg.rateCardId && isWeightCard(c) && c.currentVersion.entries.some((e) => e.serviceType === freightType))
+        : undefined
+      const tableId = isFixed ? null : stored?.id ?? clientDefaultFor(freightType) ?? orgDefaultFor(freightType)
       return [
         ...ls,
         {
