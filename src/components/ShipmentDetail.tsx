@@ -469,9 +469,17 @@ export default function ShipmentDetail({
                   tracking: d.pkg.tracking_number ?? null,
                   packageId: d.pkg.id,
                   // Fixed services bill the stored snapshot (one guía = one unit),
-                  // never a re-quote by weight.
+                  // never a re-quote by weight. The snapshot also carries the
+                  // internal cost, so the summary shows cost/utilidad without
+                  // waiting for the pricing preview to resolve.
                   pricingKind: d.pkg.pricing_kind === 'fixed' ? 'fixed' as const : 'weight' as const,
                   customerCharge: d.pkg.pricing_kind === 'fixed' ? d.pkg.customer_charge ?? null : null,
+                  customerProfit:
+                    d.pkg.pricing_kind === 'fixed' && canBill
+                      ? d.pkg.customer_charge != null && d.pkg.provider_cost != null
+                        ? Math.round((d.pkg.customer_charge - d.pkg.provider_cost + Number.EPSILON) * 100) / 100
+                        : pricing?.grossProfit ?? null
+                      : null,
                 },
               ],
               packageIds: [d.pkg.id],

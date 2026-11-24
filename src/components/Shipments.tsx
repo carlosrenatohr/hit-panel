@@ -1474,8 +1474,19 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                 </tbody>
               </table>
             </div>
-            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3">
-              <div class="text-lg font-bold text-secondary">Total: ${bulkPreview.total.toFixed(2)}</div>
+            {/* Same summary language as the single-package flow, right before the
+                actions: the operator sees the money the draft will snapshot. */}
+            <ChargeSummary
+              quantityLabel={`${bulkPreview.lines.length} ${bulkPreview.lines.length === 1 ? 'paquete' : 'paquetes'}`}
+              customerCharge={bulkPreview.total}
+              currency="USD"
+              unitLabel="total"
+              providerCost={canSeeCosts && typeof bulkPreview.profit === 'number' ? Math.round((bulkPreview.total - bulkPreview.profit + Number.EPSILON) * 100) / 100 : undefined}
+              profit={canSeeCosts && typeof bulkPreview.profit === 'number' ? bulkPreview.profit : null}
+              canSeeCosts={canSeeCosts}
+              note="El sistema recalcula y guarda los montos al crear la factura."
+            />
+            <div class="flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-3">
               <div class="flex gap-2">
                 <Button variant="ghost" onClick={clearSelection}>Cancelar</Button>
                 <Button onClick={createBulkInvoice} disabled={bulkBusy}>

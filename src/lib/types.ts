@@ -71,6 +71,8 @@ export interface Pkg {
   pricing_currency?: 'USD' | 'NIO' | null
   /** Unit price of the resolved tariff (weight: per lb; fixed: per carga). */
   customer_rate?: number | null
+  /** Internal cost snapshotted with the charge (fixed services, finance roles). */
+  provider_cost?: number | null
   provider_id: string
   providers?: Provider
 }

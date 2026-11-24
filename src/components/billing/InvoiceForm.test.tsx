@@ -381,6 +381,30 @@ describe('InvoiceForm package-detail prefill (client rate)', () => {
     expect(payload.lines[0]).toMatchObject({ packageId: 'pkg-1', quantityLbs: 5, freightType: 'AIR' })
     expect(onCreated).toHaveBeenCalledWith(createdView)
   })
+
+  it('resolves the internal cost of a prefilled fixed package from its snapshot', async () => {
+    render(
+      <InvoiceForm
+        prefill={{
+          clientId: 'c1',
+          clientName: 'Ana',
+          packageIds: ['p4'],
+          lines: [{ freightType: 'AIR', tier: 'FIXED', quantityLbs: 1, packageId: 'p4', guia: 'SG-4', pricingKind: 'fixed', customerCharge: 25 }],
+        }}
+        onClose={() => {}}
+        onCreated={() => {}}
+      />,
+    )
+
+    // The charge arrives in the prefill; the snapshot cost comes with the
+    // client's unbilled packages, so the summary never invents a $0.00 cost.
+    await waitFor(() => expect(unbilledPackages).toHaveBeenCalledWith('c1'))
+    const summary = (await screen.findByText('Resumen de cobro')).closest('div')!.parentElement as HTMLElement
+    expect(await within(summary).findByText('Costo interno')).toBeTruthy()
+    expect(within(summary).getByText('$8.00')).toBeTruthy()
+    expect(within(summary).getByText('Utilidad')).toBeTruthy()
+    expect(within(summary).getByText('$17.00')).toBeTruthy()
+  })
 })
 
 describe('InvoiceForm mixed billing kinds', () => {
