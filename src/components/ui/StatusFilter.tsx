@@ -3,7 +3,10 @@ import type { ComponentChildren } from 'preact'
 
 export interface StatusFilterOption {
   value: string
+  /** Chip text — keep it short; `title` carries the canonical name. */
   label: string
+  /** Native tooltip with the full status name when the chip shortens it. */
+  title?: string
   /** Same Lucide icon the lifecycle cards use — one status vocabulary everywhere. */
   icon: typeof Layers
   /** Tailwind classes for the icon chip (STATUS_SOFT from lib/format). */
@@ -40,12 +43,12 @@ export function StatusFilterChips({
   }
   const all = selected.length === 0
   return (
-    <div class="flex flex-wrap items-center gap-2" role="group" aria-label={label}>
+    <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
       <button
         type="button"
         onClick={() => onChange([])}
         aria-pressed={all}
-        class={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+        class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
           all ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
         }`}
       >
@@ -64,7 +67,8 @@ export function StatusFilterChips({
             type="button"
             onClick={() => toggle(o.value)}
             aria-pressed={active}
-            class={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+            title={o.title ?? o.label}
+            class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               active ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
             }`}
           >

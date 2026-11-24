@@ -444,7 +444,7 @@ export default function Reports({ user }: { user: SessionUser }) {
           {/* Status chips live right above the summary cards: the same icon +
               colour vocabulary as Paquetería, multi-select, instant. */}
           <StatusFilterChips
-            options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s], icon: STATUS_ICON[s], tone: STATUS_SOFT[s] }))}
+            options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s].replace(/\s*\(.*\)$/, ''), title: STATUS_LABEL[s], icon: STATUS_ICON[s], tone: STATUS_SOFT[s] }))}
             selected={filters.statuses ?? []}
             onChange={(v) => patch({ statuses: v.length ? v : undefined })}
             counts={statusCounts}
