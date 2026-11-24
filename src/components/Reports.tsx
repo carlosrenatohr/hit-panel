@@ -131,8 +131,10 @@ export default function Reports({ user }: { user: SessionUser }) {
   // request can't be overwritten by a slower stale one.
   const [rev, setRev] = useState(0)
   // Gate: un refetch del bus con los mismos filtros es silencioso (sin spinner).
-  // `statuses` is deliberately out of the query: the chips filter in memory.
-  const rowsKey = JSON.stringify([{ ...filters, statuses: undefined }, rev])
+  // `statuses` is deliberately out of the query: the chips filter in memory, so
+  // toggling them must not refetch the dataset nor the previous-period counts.
+  const serverKey = JSON.stringify({ ...filters, statuses: undefined })
+  const rowsKey = JSON.stringify([serverKey, rev])
   const { loading, begin: beginRows, done: doneRows } = useFetchGate(rowsKey)
   useEffect(() => {
     beginRows()
@@ -176,7 +178,8 @@ export default function Reports({ user }: { user: SessionUser }) {
     return () => {
       cancelled = true
     }
-  }, [filters])
+    // Keyed on the server filters only: a status chip toggle is purely visual.
+  }, [serverKey])
 
   const agg = useMemo(() => {
     const provCodes = Array.from(new Set(shown.map((r) => r.providers?.code ?? 'desconocido'))).sort()
