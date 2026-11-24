@@ -8,7 +8,7 @@ import type { Customer } from '../lib/customer'
 import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightType, AgencyProfile, PaymentCatalogs, RateCardEntryInput, RateCardInfo, PriceModel } from '../lib/config'
 import { insforge } from '../lib/insforge'
 import { fmtMoney } from '../lib/format'
-import { Button, Card, ConfirmDialog, Field, Modal, SectionTitle, Spinner, Toast, Tooltip, inputCls } from './ui'
+import { Button, AlertDialog, Card, ConfirmDialog, Field, Modal, SectionTitle, Spinner, Toast, Tooltip, inputCls } from './ui'
 
 const BRANDING_BUCKET = 'branding'
 
@@ -734,8 +734,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [newMarCost, setNewMarCost] = useState('')
   /** Active billing-kind tab: one group of cards visible at a time. */
   const [activeKind, setActiveKind] = useState<PriceModel>('weight')
-  /** Small informational modal (e.g. why a zeroed tariff cannot be the default). */
-  const [info, setInfo] = useState<{ title: string; message: string } | null>(null)
+  /** Small informational modal (e.g. a zeroed tariff is not allowed). */
+  const [info, setInfo] = useState<{ title: string; message: string; tone?: 'danger' | 'warning' | 'info' } | null>(null)
   /** Flexible pricing pilot: fixed cards + per-kind defaults only when enabled. */
   const [flexible, setFlexible] = useState(false)
   /** One editing surface per card: name + both prices + default + delete. */
@@ -810,11 +810,15 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     const entryName = newModel === 'fixed' ? newName.trim() : 'Regular'
     const air = { name: entryName, price: num(newAirPrice), cost: num(newAirCost) }
     const mar = { name: entryName, price: num(newMarPrice), cost: num(newMarCost) }
-    if (newIsDefault && (air.price <= 0 || mar.price <= 0)) {
+    // Creating a table with a zero/empty price would bill $0 for its whole
+    // group, so the form never saves one. The reason is the same one shown
+    // inline next to the button.
+    if (air.price <= 0 || mar.price <= 0 || air.cost <= 0 || mar.cost <= 0) {
       setInfo({
-        title: 'Falta cargar los precios',
+        title: 'No se puede crear la tabla',
+        tone: 'warning',
         message:
-          'Para crear la tabla como tarifa por defecto necesitás el precio de Aéreo y Marítimo, mayor a 0. También podés crearla vacía, completar los precios y marcarla después.',
+          'El precio y el costo de Aéreo y Marítimo deben ser mayores a 0. Una tabla en cero o vacía no se guarda: se cobraría $0 y el cobro de los paquetes quedaría sin sustento.',
       })
       return
     }
@@ -842,30 +846,12 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       setNewName('')
       setNewModel(kind)
       setNewIsDefault(false)
-      setNewAirPrice('')
-      setNewMarPrice('')
-      setNewAirCost('')
-      setNewMarCost('')
-      const priced = created.currentVersion.entries.some((e) => Number(e.price) > 0)
-      if (!priced) {
-        // Empty table: open its editor right away so the next step is obvious.
-        setCards((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]))
-        const draft = toCardDraft(created)
-        setEdit({
-          id: created.id,
-          originalName: created.name,
-          pricingKind: created.pricingKind,
-          isDefault: !!created.isDefault,
-          makeDefault: false,
-          name: created.name,
-          air: draft.air,
-          mar: draft.mar,
-        })
-        showNotice('Tabla creada', `"${created.name}" todavía no tiene precios. Completá Aéreo y Marítimo y guardá.`)
-      } else {
-        const defaultNote = created.isDefault ? ' Ya es la tarifa por defecto de su tipo de cobro.' : ''
-        showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}`, `"${created.name}" ya está disponible.${defaultNote}`)
-      }
+      setNewAirPrice('0')
+      setNewMarPrice('0')
+      setNewAirCost('0')
+      setNewMarCost('0')
+      const defaultNote = created.isDefault ? ' Ya es la tarifa por defecto de su tipo de cobro.' : ''
+      showNotice(`Tabla creada en ${KIND_LABEL[created.pricingKind] ?? 'su grupo'}`, `"${created.name}" ya está disponible.${defaultNote}`)
     } catch (e) {
       showError(e)
     }
@@ -953,13 +939,17 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const entryPriceLabel = (isFixed: boolean) => (isFixed ? `Precio por carga (${currency})` : `Precio por libra (${currency})`)
   const entryCostLabel = (isFixed: boolean) => (isFixed ? `Costo por carga (${currency})` : `Costo por libra (${currency})`)
 
-  // Why "Crear" is blocked: the reason is shown inline and in the button tooltip.
+  // Money fields start at 0 so the empty state is explicit: the create button
+  // stays blocked until every one of them is a real, positive amount.
+  const moneyMissing = (v: string) => v.trim() === '' || !(Number(v) > 0)
   const createBlockedReason = (() => {
     if (!newName.trim()) return 'Poné un nombre para la tabla.'
     if (newModel === 'volume') return 'El cobro por volumen todavía está en pruebas.'
     if (newModel === 'fixed' && !flexible) return 'La cuota fija no está habilitada para esta agencia.'
-    if (newIsDefault && !(Number(newAirPrice) > 0)) return 'Falta el precio de Aéreo, mayor a 0, para marcarla por defecto.'
-    if (newIsDefault && !(Number(newMarPrice) > 0)) return 'Falta el precio de Marítimo, mayor a 0, para marcarla por defecto.'
+    if (moneyMissing(newAirPrice)) return 'El precio de Aéreo debe ser mayor a 0.'
+    if (moneyMissing(newMarPrice)) return 'El precio de Marítimo debe ser mayor a 0.'
+    if (moneyMissing(newAirCost)) return 'El costo de Aéreo debe ser mayor a 0.'
+    if (moneyMissing(newMarCost)) return 'El costo de Marítimo debe ser mayor a 0.'
     return null
   })()
 
@@ -981,6 +971,11 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
             <Button
               onClick={() => {
                 setNewModel(kind)
+                setNewIsDefault(false)
+                setNewAirPrice('0')
+                setNewMarPrice('0')
+                setNewAirCost('0')
+                setNewMarCost('0')
                 setCreateOpen(true)
               }}
             >
@@ -1175,7 +1170,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
               <p class="text-xs text-gray-500">
                 {newIsDefault
                   ? 'La tabla entra en uso de inmediato como tarifa por defecto.'
-                  : 'Podés dejarla vacía y completar los precios al editarla.'}
+                  : 'Una tabla nueva se guarda completa: los cuatro montos deben ser mayores a 0.'}
               </p>
             )}
             <div class="mt-2 flex justify-end gap-2">
@@ -1264,12 +1259,15 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         </Modal>
       )}
 
-      <Modal open={info !== null} onClose={() => setInfo(null)} title={info?.title ?? ''} size="sm">
-        <p class="text-sm text-gray-600">{info?.message}</p>
-        <div class="mt-5 flex justify-end">
-          <Button onClick={() => setInfo(null)}>Entendido</Button>
-        </div>
-      </Modal>
+      <AlertDialog
+        open={info !== null}
+        onClose={() => setInfo(null)}
+        title={info?.title ?? ''}
+        tone={info?.tone ?? 'warning'}
+        label="Entendido"
+      >
+        {info?.message}
+      </AlertDialog>
 
       <ConfirmDialog
         open={confirm !== null}

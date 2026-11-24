@@ -97,12 +97,22 @@ vi.mock('../lib/insforge', () => ({
   getTagsForPackages: vi.fn().mockResolvedValue({}),
   exportPackages: vi.fn().mockResolvedValue(mockPkgs),
   createPackage: vi.fn().mockResolvedValue({ id: 'p-1', almacen_id: '123', organization_id: 'hit' }),
+  pricingKindAvailability: vi.fn().mockResolvedValue({ mixed: false }),
 }));
 
 vi.mock('../lib/customer', () => ({
   customerApi: {
     list: vi.fn().mockResolvedValue({ rows: [], count: 0 }),
     create: vi.fn().mockResolvedValue({ id: 'client-created-id', name: 'Nuevo Cliente' }),
+  },
+}));
+
+// Flexible pricing is feature-gated at runtime: the component imports this
+// module dynamically, so tests control the flag and the fixed cards from here.
+vi.mock('../lib/config', () => ({
+  configApi: {
+    features: vi.fn().mockResolvedValue({ flexiblePricing: false }),
+    listRateCards: vi.fn().mockResolvedValue({ cards: [] }),
   },
 }));
 
@@ -447,7 +457,46 @@ describe('Shipments', () => {
     await waitFor(() => expect(vi.mocked(customerApi.create)).toHaveBeenCalledWith({ name: 'Ana P' }));
     await waitFor(() =>
       expect(vi.mocked(createPackage)).toHaveBeenCalledWith(
-        expect.objectContaining({ almacenId: '25001234', clientId: 'client-created-id', status: 'en_almacen', serviceType: 'aereo', receivedAt: expect.stringMatching(/^2026-09-23T/) }),
+        expect.objectContaining({ almacenId: '25001234', clientId: 'client-created-id', status: 'en_almacen', serviceType: 'aereo', pricingKind: 'weight', rateCardId: null, receivedAt: expect.stringMatching(/^2026-09-23T/) }),
+      ),
+    );
+  });
+
+  it('sends the operator billing kind so a weight package never lands as fixed', async () => {
+    const { configApi } = await import('../lib/config');
+    vi.mocked(configApi.features).mockResolvedValue({ flexiblePricing: true } as never);
+    vi.mocked(configApi.listRateCards).mockResolvedValue({
+      cards: [{ id: 'rc-fixed', name: 'Fija estándar', pricingKind: 'fixed', isDefault: true, currentVersion: { entries: [] } }],
+    } as never);
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25007777' } });
+    await pickNewClientAndService();
+
+    // Weight is the default: no rate card rides along.
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
+    await waitFor(() =>
+      expect(vi.mocked(createPackage)).toHaveBeenCalledWith(
+        expect.objectContaining({ serviceType: 'aereo', pricingKind: 'weight', rateCardId: null }),
+      ),
+    );
+
+    // Switching to fixed sends the pick explicitly (the RPC only resolves a
+    // fixed card when the form says fixed).
+    vi.mocked(createPackage).mockClear();
+    await waitFor(() => expect(screen.queryByText('Crear paquete manual')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25008888' } });
+    await pickNewClientAndService();
+    fireEvent.change(await screen.findByDisplayValue('Por peso'), { target: { value: 'fixed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
+    await waitFor(() =>
+      expect(vi.mocked(createPackage)).toHaveBeenCalledWith(
+        expect.objectContaining({ pricingKind: 'fixed', rateCardId: 'rc-fixed' }),
       ),
     );
   });
@@ -606,4 +655,80 @@ describe('Shipments', () => {
     vi.mocked(listPackages).mockImplementation(original!);
   });
 
+
+  it('asks before discarding a manually typed package', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25009999' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    const dialog = await screen.findByRole('dialog', { name: '¿Descartar los datos del paquete?' });
+    expect(screen.getByText('Crear paquete manual')).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Descartar y salir' }));
+    await waitFor(() => expect(screen.queryByText('Crear paquete manual')).toBeNull());
+  });
+
+  it('offers the sort field and direction as separate, explicit controls', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await screen.findAllByText('910500');
+
+    const field = screen.getAllByLabelText('Ordenar por')[0] as HTMLSelectElement;
+    fireEvent.change(field, { target: { value: 'received_at' } });
+    await waitFor(() => {
+      const last = vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
+      expect(last).toMatchObject({ sortCol: 'received_at', ascending: false });
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cambiar a orden ascendente' })[0]);
+    await waitFor(() => {
+      const last = vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
+      expect(last).toMatchObject({ sortCol: 'received_at', ascending: true });
+    });
+  });
+
+  it('hides the provider filter when the agency has only one provider', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await screen.findAllByText('910500');
+    expect(screen.queryByLabelText('Filtrar por proveedor')).toBeNull();
+
+    vi.mocked(getProviders).mockResolvedValue([
+      { id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true },
+      { id: 'g2', code: 'everest', name: 'Everest', isDefault: false },
+    ]);
+  });
+
+  it('shows the tariff filter only when the agency mixes billing kinds', async () => {
+    const insforge = await import('../lib/insforge');
+    vi.mocked(insforge.pricingKindAvailability).mockResolvedValue({ mixed: false });
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await screen.findAllByText('910500');
+    expect(screen.queryByLabelText('Filtrar por tipo de tarifa')).toBeNull();
+  });
+
+  it('filters by tariff kind when the agency has both kinds', async () => {
+    const insforge = await import('../lib/insforge');
+    vi.mocked(insforge.pricingKindAvailability).mockResolvedValue({ mixed: true });
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    const kind = await screen.findByLabelText('Filtrar por tipo de tarifa');
+    fireEvent.change(kind, { target: { value: 'fixed' } });
+    await waitFor(() => {
+      const last = vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
+      expect(last.pricingKind).toBe('fixed');
+    });
+    // The select stays narrow so it does not stretch the filter row.
+    expect((kind as HTMLSelectElement).className).toContain('max-w-40');
+  });
+
+  it('renders the service as a single-tone Lucide icon', async () => {
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+    await screen.findAllByText('910500');
+    const air = screen.getAllByLabelText('Aéreo');
+    const sea = screen.getAllByLabelText('Marítimo');
+    expect(air.length).toBeGreaterThan(0);
+    expect(sea.length).toBeGreaterThan(0);
+    expect(air[0].className).toContain('text-slate-500');
+    expect(sea[0].className).toContain('text-slate-500');
+  });
 });

@@ -4,7 +4,7 @@ import { billingApi, type CatalogEntry, type CreateInvoiceInput, type FreightTyp
 import { configApi, type ChargeConcept, type RateCardInfo } from '../../lib/config'
 import { customerApi, type Customer } from '../../lib/customer'
 import { FREIGHT_LABEL, fmtMoney, TIER_LABEL } from '../../lib/format'
-import { AlertDialog, Button, Card, Field, inputCls, SectionTitle, Spinner, Tooltip } from '../ui'
+import { AlertDialog, Button, Card, ConfirmDialog, Field, inputCls, SectionTitle, Spinner, Tooltip } from '../ui'
 import ClientSearch from '../ui/ClientSearch'
 import ChargeSummary from './ChargeSummary'
 
@@ -112,6 +112,8 @@ export default function InvoiceForm({
   const [err, setErr] = useState<string | null>(null)
   /** Rules that stop the flow (mixed billing kinds): loud, blocking alert. */
   const [blocking, setBlocking] = useState<{ title: string; message: string } | null>(null)
+  /** Saving asks through the shared dialog (no window.confirm). */
+  const [confirmSave, setConfirmSave] = useState(false)
   const [loadingInvoice, setLoadingInvoice] = useState(isEdit)
 
   useEffect(() => {
@@ -393,7 +395,13 @@ export default function InvoiceForm({
     setOthers((os) => [...os, { conceptId: concept?.id ?? '', extra: '', amount: concept?.suggestedPrice != null ? String(concept.suggestedPrice) : '' }])
   }
 
-  async function submit() {
+  /** Validate first, then ask through the shared dialog. */
+  function submit() {
+    if (!validateBeforeSave()) return
+    setConfirmSave(true)
+  }
+
+  function validateBeforeSave(): boolean {
     setErr(null)
     // One invoice bills one pricing kind: catch it before the request so the
     // operator sees why, instead of a server round-trip.
@@ -404,12 +412,31 @@ export default function InvoiceForm({
         message:
           'Esta factura tiene paquetes por peso y paquetes de cuota fija. Generá una factura por tipo de servicio: así el cobro de cada guía queda claro y el cierre no se traba.',
       })
-      return
+      return false
     }
-    if (!clientName.trim()) return setErr('El cliente es obligatorio.')
+    if (!clientName.trim()) {
+      setErr('El cliente es obligatorio.')
+      return false
+    }
     const guidedCreate = !isEdit && !prefill?.packageIds?.length
-    if (guidedCreate && !clientId) return setErr('Selecciona un cliente para cargar sus guías.')
-    if (guidedCreate && selectedIds.length === 0) return setErr('Selecciona al menos una guía del cliente.')
+    if (guidedCreate && !clientId) {
+      setErr('Selecciona un cliente para cargar sus guías.')
+      return false
+    }
+    if (guidedCreate && selectedIds.length === 0) {
+      setErr('Selecciona al menos una guía del cliente.')
+      return false
+    }
+    const validLines = lines.filter((l) => l.pricingKind === 'fixed' || Number(l.quantityLbs) > 0)
+    if (validLines.length === 0) {
+      setErr('Agregá al menos una línea con cantidad.')
+      return false
+    }
+    return true
+  }
+
+  async function doSubmit() {
+    if (!validateBeforeSave()) return
     const cleanLines = lines
       .filter((l) => l.pricingKind === 'fixed' || Number(l.quantityLbs) > 0)
       .map((l) => ({
@@ -422,15 +449,9 @@ export default function InvoiceForm({
         rateTableId: l.rateTableId,
         packageId: l.packageId ?? null,
       }))
-    if (cleanLines.length === 0) return setErr('Agregá al menos una línea con cantidad.')
     const cleanOthers = others
       .map((o) => ({ conceptId: o.conceptId || null, description: o.extra || null, amount: otherAmount(o) }))
       .filter((o) => o.amount > 0)
-
-    const confirmMsg = isEdit
-      ? `¿Guardar los cambios de la factura? Se actualizarán las líneas y montos.`
-      : `¿Generar la factura? Se creará como borrador editable.`
-    if (!window.confirm(confirmMsg)) return
 
     setSaving(true)
     try {
@@ -442,7 +463,6 @@ export default function InvoiceForm({
           lines: cleanLines,
           otherLines: cleanOthers,
         })
-        window.alert(`Factura #${view.invoiceNumber} actualizada exitosamente.`)
       } else {
         view = await billingApi.createInvoice({
           clientName: clientName.trim(),
@@ -455,7 +475,6 @@ export default function InvoiceForm({
           packageIds: selectedIds.length ? selectedIds : prefill?.packageIds,
           status: 'DRAFT',
         })
-        window.alert(`Factura #${view.invoiceNumber} creada como borrador.`)
       }
       onCreated(view)
     } catch (e) {
@@ -467,6 +486,7 @@ export default function InvoiceForm({
       }
     } finally {
       setSaving(false)
+      setConfirmSave(false)
     }
   }
 
@@ -713,6 +733,21 @@ export default function InvoiceForm({
       <AlertDialog open={blocking !== null} onClose={() => setBlocking(null)} title={blocking?.title ?? ''}>
         {blocking?.message}
       </AlertDialog>
+
+      <ConfirmDialog
+        open={confirmSave}
+        onClose={() => !saving && setConfirmSave(false)}
+        onConfirm={() => void doSubmit()}
+        variant="warning"
+        title={isEdit ? '¿Guardar los cambios de la factura?' : '¿Generar la factura?'}
+        confirmLabel={isEdit ? 'Guardar cambios' : 'Crear factura'}
+        loading={saving}
+        message={
+          isEdit
+            ? 'Se actualizarán las líneas y montos de esta factura.'
+            : 'Se creará como borrador editable. Después podrás revisarla, enlazar las guías y cerrarla.'
+        }
+      />
     </div>
   )
 }

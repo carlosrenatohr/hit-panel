@@ -159,13 +159,21 @@ describe('Configuración › Tarifas', () => {
 
     const create = within(dialog).getByRole('button', { name: /Crear/ }) as HTMLButtonElement
     expect(create.disabled).toBe(true)
-    expect(within(dialog).getAllByText(/Falta el precio de Aéreo/).length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText(/El precio de Aéreo debe ser mayor a 0/).length).toBeGreaterThan(0)
+    // New tables start at 0: the empty state is explicit, never a silent blank.
+    const startPrices = within(dialog).getAllByLabelText('Precio por carga (USD)') as HTMLInputElement[]
+    expect(startPrices.every((i) => i.value === '0')).toBe(true)
 
     const priceFields = within(dialog).getAllByLabelText('Precio por carga (USD)')
+    const costFields = within(dialog).getAllByLabelText('Costo por carga (USD)')
     fireEvent.input(priceFields[0], { target: { value: '30' } })
     fireEvent.input(priceFields[1], { target: { value: '22' } })
+    // Price alone is not enough: the cost must be a real amount too.
+    expect(create.disabled).toBe(true)
+    fireEvent.input(costFields[0], { target: { value: '12' } })
+    fireEvent.input(costFields[1], { target: { value: '9' } })
     expect(create.disabled).toBe(false)
-    expect(within(dialog).queryByText(/Falta el precio/)).toBeNull()
+    expect(within(dialog).queryByText(/debe ser mayor a 0/)).toBeNull()
 
     fireEvent.click(create)
     await waitFor(() =>
@@ -175,8 +183,8 @@ describe('Configuración › Tarifas', () => {
           priceModel: 'fixed',
           isDefault: true,
           entries: [
-            { serviceType: 'AIR', name: 'Express', price: 30, cost: 0 },
-            { serviceType: 'MAR', name: 'Express', price: 22, cost: 0 },
+            { serviceType: 'AIR', name: 'Express', price: 30, cost: 12 },
+            { serviceType: 'MAR', name: 'Express', price: 22, cost: 9 },
           ],
         }),
       ),

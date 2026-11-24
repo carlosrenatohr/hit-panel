@@ -4,7 +4,7 @@ import { billingApi, type DateRangeSummary, type FreightType, type InvoiceFilter
 import { bumpData, useDataVersion, useFetchGate } from '../../lib/dataVersion'
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
-import { Button, Card, IconButton, inputCls, SectionTitle, Spinner } from '../ui'
+import { Button, Card, ConfirmDialog, IconButton, inputCls, SectionTitle, Spinner } from '../ui'
 import { DateRangePicker } from '../DateRangePicker'
 import { InvoiceDaysBadge } from './badges'
 import BillingReports from './BillingReports'
@@ -154,8 +154,10 @@ export default function Facturacion({ role }: { role: Role }) {
     }
   }
 
+  /** Destructive row actions ask through the shared dialog, never window.confirm. */
+  const [pending, setPending] = useState<{ kind: 'close' | 'void' | 'archive'; row: InvoiceListRow } | null>(null)
+
   async function runRowClose(r: InvoiceListRow) {
-    if (!confirm(`¿Cerrar la factura #${r.invoiceNumber}? Pasará de borrador a emitida y sus líneas, montos y guías quedarán bloqueados.`)) return
     setActionId(r.id)
     try {
       const v = await billingApi.closeInvoice(r.id)
@@ -170,7 +172,6 @@ export default function Facturacion({ role }: { role: Role }) {
   }
 
   async function runRowVoid(r: InvoiceListRow) {
-    if (!confirm(`¿Anular la factura #${r.invoiceNumber}? Se liberarán los paquetes enlazados y el documento quedará como inválido. No se puede deshacer.`)) return
     setActionId(r.id)
     try {
       const v = await billingApi.voidInvoice(r.id, 'Anulada desde la lista')
@@ -185,7 +186,6 @@ export default function Facturacion({ role }: { role: Role }) {
   }
 
   async function runRowArchive(r: InvoiceListRow) {
-    if (!confirm(`¿Archivar la factura #${r.invoiceNumber}? Dejará de aparecer en la lista y reportes, y sus paquetes enlazados se liberán para volver a facturar. No se puede deshacer.`)) return
     setActionId(r.id)
     try {
       await billingApi.archiveInvoice(r.id, 'Archivada desde la lista')
@@ -334,9 +334,9 @@ export default function Facturacion({ role }: { role: Role }) {
                         busy={actionId === r.id}
                         onView={() => setDetailId(r.id)}
                         onEdit={() => setEditingId(r.id)}
-                        onClose={() => void runRowClose(r)}
-                        onVoid={() => void runRowVoid(r)}
-                        onArchive={() => void runRowArchive(r)}
+                        onClose={() => setPending({ kind: 'close', row: r })}
+                        onVoid={() => setPending({ kind: 'void', row: r })}
+                        onArchive={() => setPending({ kind: 'archive', row: r })}
                       />
                     </td>
                   </tr>
@@ -384,6 +384,36 @@ export default function Facturacion({ role }: { role: Role }) {
         />
       )}
       {detailId && <InvoiceDetail id={detailId} canWrite={canWrite} onClose={() => setDetailId(null)} onChanged={reload} />}
+
+      <ConfirmDialog
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        onConfirm={() => {
+          const p = pending
+          setPending(null)
+          if (!p) return
+          if (p.kind === 'close') void runRowClose(p.row)
+          else if (p.kind === 'void') void runRowVoid(p.row)
+          else void runRowArchive(p.row)
+        }}
+        variant={pending?.kind === 'close' ? 'warning' : 'danger'}
+        title={
+          pending?.kind === 'close'
+            ? 'Cerrar factura'
+            : pending?.kind === 'void'
+              ? 'Anular factura'
+              : 'Archivar factura'
+        }
+        confirmLabel={pending?.kind === 'close' ? 'Cerrar factura' : pending?.kind === 'void' ? 'Anular factura' : 'Archivar factura'}
+        loading={actionId !== null}
+        message={
+          pending?.kind === 'close'
+            ? `¿Cerrar la factura #${pending.row.invoiceNumber}? Pasará de borrador a emitida y sus líneas, montos y guías quedarán bloqueados.`
+            : pending?.kind === 'void'
+              ? `¿Anular la factura #${pending?.row.invoiceNumber}? Se liberarán los paquetes enlazados y el documento quedará como inválido. No se puede deshacer.`
+              : `¿Archivar la factura #${pending?.row.invoiceNumber}? Dejará de aparecer en la lista y reportes, y sus paquetes enlazados se liberarán para volver a facturar. No se puede deshacer.`
+        }
+      />
     </div>
   )
 }

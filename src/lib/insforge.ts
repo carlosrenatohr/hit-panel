@@ -103,11 +103,32 @@ export interface ListFilters {
   organizationId?: string  // tenant filter — staff gets pinned; admin/billing can override
   clientId?: string        // filter by assigned client; pass 'null' string for unassigned packages
   tag?: { label: string; value?: string | null } // etiqueta — resuelta a ids antes del IN
+  /** Billing kind: legacy rows (null) count as weight, matching the list icon. */
+  pricingKind?: 'weight' | 'fixed' | 'volume'
 }
 
 export interface ListResult {
   rows: Pkg[]
   count: number
+}
+
+/**
+ * Does the organization mix billing kinds? The tariff-kind filter only earns
+ * its place when there is more than one kind in the list; a weight-only agency
+ * would see a select that changes nothing. Two head-only counts, no rows.
+ */
+export async function pricingKindAvailability(organizationId?: string): Promise<{ mixed: boolean }> {
+  const base = () => {
+    let q = insforge.database.from('packages').select('id', { count: 'exact', head: true }).is('deleted_at', null)
+    if (organizationId) q = q.eq('organization_id', organizationId)
+    return q
+  }
+  const [{ count: fixedCount, error: fixedErr }, { count: weightCount, error: weightErr }] = await Promise.all([
+    base().eq('pricing_kind', 'fixed'),
+    base().or('pricing_kind.eq.weight,pricing_kind.is.null'),
+  ])
+  if (fixedErr || weightErr) throw fixedErr ?? weightErr
+  return { mixed: (fixedCount ?? 0) > 0 && (weightCount ?? 0) > 0 }
 }
 
 export async function listPackages(f: ListFilters): Promise<ListResult> {
@@ -156,6 +177,10 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   else if (f.service) q = q.eq('effective_service_type', f.service)
   if (f.clientId === 'null') q = q.is('client_id', null)
   else if (f.clientId) q = q.eq('client_id', f.clientId)
+  // Tariff kind: legacy packages have no pricing_kind (they bill by weight), so
+  // "Por peso" also matches null instead of hiding those rows.
+  if (f.pricingKind === 'weight') q = q.or('pricing_kind.eq.weight,pricing_kind.is.null')
+  else if (f.pricingKind) q = q.eq('pricing_kind', f.pricingKind)
   // Filtro por etiqueta: se resuelve primero etiqueta → package_ids y se filtra con IN.
   // Un filtro embebido (`package_tags.label`) repetiría cada paquete una vez por etiqueta.
   if (f.tag) {
@@ -256,8 +281,12 @@ export async function createPackage(input: {
   status?: ShipmentStatus | null
   /** Flexible pricing: explicit fixed-service card (server validates same-org). */
   rateCardId?: string | null
+  /** Operator-chosen billing kind; without it the RPC auto-resolves a fixed card. */
+  pricingKind?: 'weight' | 'fixed' | null
 }): Promise<{ id: string; almacenId: string; organizationId: string }> {
-  const { error, data } = await insforge.database.rpc('create_package', {
+  // v2 adds the operator-chosen billing kind; create_package stays untouched so
+  // its 19/20-arg overloads never turn ambiguous.
+  const { error, data } = await insforge.database.rpc('create_package_v2', {
     p_almacen_id: input.almacenId,
     p_tracking_number: input.trackingNumber ?? null,
     p_service_type: input.serviceType ?? null,
@@ -277,10 +306,13 @@ export async function createPackage(input: {
     p_provider_code: input.providerCode ?? null,
     p_client_id: input.clientId ?? null,
     p_status: input.status ?? null,
-    // ALWAYS sent: with the create_package overloads (19/20 args), omitting it
-    // makes PostgREST resolution ambiguous (PGRST203). The 20-arg call is the
+    // ALWAYS sent: with the create_package overloads, omitting it makes
+    // PostgREST resolution ambiguous (PGRST203). The 21-arg call is the
     // uniquely resolvable one.
     p_rate_card_id: input.rateCardId ?? null,
+    // Explicit billing kind: without it the RPC resolves the client/agency
+    // FIXED card for any package with a service type, even a weight one.
+    p_pricing_kind: input.pricingKind ?? null,
   })
   if (error) throw error
   const d = data as { id: string; almacen_id: string; organization_id: string; error?: string | null; message?: string | null } | null

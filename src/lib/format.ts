@@ -95,7 +95,6 @@ export const PIPELINE_STEP: Record<ShipmentStatus, number> = {
 export const PIPELINE_STAGES = ['Bodega Miami', 'En tránsito', 'Nicaragua', 'Entregado']
 
 export const SERVICE_LABEL: Record<string, string> = { aereo: 'Aéreo', maritimo: 'Marítimo' }
-export const SERVICE_EMOJI: Record<string, string> = { aereo: '✈️', maritimo: '🚢' }
 export const PROVIDER_LABEL: Record<string, string> = {
   everest: 'Everest',
   global_connection: 'Global Connection',

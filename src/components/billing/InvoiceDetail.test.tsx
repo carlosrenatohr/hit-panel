@@ -130,4 +130,12 @@ describe('InvoiceDetail › pagos', () => {
     expect(screen.getAllByText('$9.00').length).toBeGreaterThan(0)
     expect(screen.getByText('(C$328.50 en córdobas)')).toBeTruthy()
   })
+
+  it('shows the total, paid and balance with their córdoba equivalents', async () => {
+    await renderInvoice()
+    // Total 20, paid 11 and balance 9 each carry their NIO line at 36.50.
+    expect((await screen.findAllByText('C$730.00')).length).toBeGreaterThanOrEqual(1)
+    expect((await screen.findAllByText('C$401.50')).length).toBeGreaterThanOrEqual(1)
+    expect((await screen.findAllByText('C$328.50')).length).toBeGreaterThanOrEqual(1)
+  })
 })
