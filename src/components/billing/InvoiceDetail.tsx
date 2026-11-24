@@ -11,7 +11,7 @@ import {
 import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal, waPhone, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { customerApi } from '../../lib/customer'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
-import { Button, Card, ConfirmDialog, Field, inputCls, Modal, Spinner, Tooltip } from '../ui'
+import { AlertDialog, Button, Card, ConfirmDialog, Field, inputCls, Modal, Spinner, Tooltip } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
 
@@ -62,6 +62,10 @@ export default function InvoiceDetail({
   const [fx, setFx] = useState('')
   const [guia, setGuia] = useState('')
   const [copied, setCopied] = useState(false)
+  /** Guide pending link: the dialog spells out the charge it will add. */
+  const [linkConfirm, setLinkConfirm] = useState<string | null>(null)
+  /** Link failures get their own readable dialog (not a silent banner). */
+  const [linkError, setLinkError] = useState<string | null>(null)
   /** Payment review modal: nothing is posted until the operator confirms. */
   const [payConfirmOpen, setPayConfirmOpen] = useState(false)
   /** Close/void ask through the shared dialog (no browser confirm). */
@@ -138,6 +142,26 @@ export default function InvoiceDetail({
       onChanged?.()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'La acción falló.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Link a guide only after the operator confirms the money it adds to the
+   *  draft; a rejected link explains itself in a dialog instead of a toast. */
+  async function confirmLink() {
+    const g = linkConfirm
+    if (!g || busy) return
+    setBusy(true)
+    setErr(null)
+    try {
+      setInv(await billingApi.linkPackage(id, { guia: g }))
+      setGuia('')
+      setLinkConfirm(null)
+      onChanged?.()
+    } catch (e) {
+      setLinkConfirm(null)
+      setLinkError(e instanceof Error ? e.message : 'No se pudo enlazar la guía.')
     } finally {
       setBusy(false)
     }
@@ -589,7 +613,7 @@ export default function InvoiceDetail({
                         <input class={inputCls} value={guia} onInput={(e) => setGuia((e.target as HTMLInputElement).value)} placeholder="N.º de guía / almacén" />
                       </Field>
                     </div>
-                    <Button variant="ghost" disabled={busy || !guia.trim()} onClick={() => run(() => billingApi.linkPackage(id, { guia: guia.trim() })).then(() => setGuia(''))}>
+                    <Button variant="ghost" disabled={busy || !guia.trim()} onClick={() => setLinkConfirm(guia.trim())}>
                       <Link2 class="h-4 w-4" /> Enlazar
                     </Button>
                   </div>
@@ -645,6 +669,47 @@ export default function InvoiceDetail({
               : 'Se liberarán los paquetes enlazados y la factura quedará como inválida. No se puede deshacer.'
         }
       />
+
+      {/* Linking a guide changes the invoice money: review first, always. */}
+      <ConfirmDialog
+        open={linkConfirm !== null}
+        onClose={() => (!busy ? setLinkConfirm(null) : undefined)}
+        onConfirm={() => void confirmLink()}
+        variant="warning"
+        title="¿Enlazar esta guía?"
+        confirmLabel="Enlazar guía"
+        loading={busy}
+        message={
+          <span class="block space-y-2">
+            <span class="block">
+              Vas a enlazar la guía <strong class="text-gray-800">{linkConfirm}</strong> a la factura{' '}
+              <strong class="text-gray-800">#{inv?.invoiceNumber}</strong>
+              {inv?.clientName ? <> de <strong class="text-gray-800">{inv.clientName}</strong></> : null}.
+            </span>
+            <span class="block">
+              Se agregará una línea con la tarifa vigente del cliente (o la cuota fija guardada en el paquete) y el total
+              se recalculará al confirmar. La acción queda en el historial.
+            </span>
+            <span class="block text-xs text-gray-500">
+              Si la guía no existe, ya está facturada o pertenece a otra agencia, no se hará ningún cambio y verás el
+              motivo.
+            </span>
+          </span>
+        }
+      />
+
+      <AlertDialog
+        open={linkError !== null}
+        onClose={() => setLinkError(null)}
+        title="No se pudo enlazar la guía"
+        tone="danger"
+      >
+        <span class="block space-y-2">
+          <span class="block">La guía no se agregó a la factura #{inv?.invoiceNumber ?? ''}. No se guardó ningún cambio.</span>
+          <span class="block rounded-lg bg-white/70 p-2 font-medium text-red-900">{linkError}</span>
+          <span class="block text-xs">Corregí la guía o revisá el estado del paquete y volvé a intentarlo.</span>
+        </span>
+      </AlertDialog>
 
       {/* Payment review — the post only fires after this confirmation. */}
       <Modal open={payConfirmOpen && inv !== null} onClose={() => (!busy ? setPayConfirmOpen(false) : undefined)} title="Confirmar registro de pago" size="md">
