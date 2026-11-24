@@ -476,13 +476,24 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     getProviders(user.agency).then(setProviders).catch(() => {})
   }, [user.agency])
 
+  // Same trap as the tariff kind: no provider select means no provider filter.
+  useEffect(() => {
+    if (providers.length <= 1) setFilters((f) => (f.providerId ? { ...f, providerId: undefined } : f))
+  }, [providers.length])
+
   // The tariff-kind filter only shows when the org actually mixes kinds; a
   // weight-only agency gets no select that would change nothing.
   const [mixedKinds, setMixedKinds] = useState(false)
   useEffect(() => {
     let alive = true
     pricingKindAvailability(selectedOrg)
-      .then(({ mixed }) => alive && setMixedKinds(mixed))
+      .then(({ mixed }) => {
+        if (!alive) return
+        setMixedKinds(mixed)
+        // The select disappears when the agency stops mixing kinds; a leftover
+        // filter would keep hiding rows with no control to clear it.
+        if (!mixed) setFilters((f) => (f.pricingKind ? { ...f, pricingKind: undefined } : f))
+      })
       .catch(() => alive && setMixedKinds(false))
     return () => {
       alive = false
@@ -757,8 +768,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     createForm.pieces !== '1' ||
     createForm.status !== 'en_almacen' ||
     createForm.pricingKind !== 'weight' ||
-    createForm.rateCardId !== '' ||
-    createForm.providerCode !== ((providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '')
+    createForm.rateCardId !== ''
 
   /** Close the manual form: dirty forms ask before dropping the data. */
   function requestCloseCreate() {
@@ -940,7 +950,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
           )}
           {providers.length <= 1 && !mixedKinds && <div class="hidden lg:block" />}
         </div>
-        <div class="mt-3 flex flex-wrap items-end gap-3">
+        <div class="mt-3 hidden flex-wrap items-end gap-3 lg:flex">
           <SortControl
             col={filters.sortCol ?? 'status_rank'}
             ascending={filters.ascending ?? true}

@@ -144,6 +144,9 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   q = q.is('deleted_at', null)
 
   if (f.organizationId) q = q.eq('organization_id', f.organizationId)
+  /** Search arms, kept as an expression: two `or=` params in one request make
+   *  PostgREST reject the query (PGRST100), so the kind filter must merge in. */
+  let searchExpr: string | null = null
   if (f.search && f.search.trim()) {
     // Accent-insensitive PLAIN term (no LIKE bracket classes — they don't match in
     // this cluster). The billing CLIENT name matches through a resolved
@@ -166,7 +169,7 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
     } catch {
       // Keep the package-field search if the clients lookup fails.
     }
-    q = q.or(arms.join(','))
+    searchExpr = arms.join(',')
   }
   // -- Multi-select arrays filter with PostgREST IN; the single-value fields stay for the shipments list. --
   if (f.providerIds?.length) q = q.in('provider_id', f.providerIds)
@@ -178,9 +181,16 @@ export async function listPackages(f: ListFilters): Promise<ListResult> {
   if (f.clientId === 'null') q = q.is('client_id', null)
   else if (f.clientId) q = q.eq('client_id', f.clientId)
   // Tariff kind: legacy packages have no pricing_kind (they bill by weight), so
-  // "Por peso" also matches null instead of hiding those rows.
-  if (f.pricingKind === 'weight') q = q.or('pricing_kind.eq.weight,pricing_kind.is.null')
-  else if (f.pricingKind) q = q.eq('pricing_kind', f.pricingKind)
+  // "Por peso" also matches null instead of hiding those rows. Weight + search
+  // share ONE `or` (two groups) because duplicate `or` params break PostgREST.
+  if (f.pricingKind === 'weight') {
+    q = searchExpr
+      ? q.or(`and(or(${searchExpr}),pricing_kind.is.null),and(or(${searchExpr}),pricing_kind.eq.weight)`)
+      : q.or('pricing_kind.eq.weight,pricing_kind.is.null')
+  } else {
+    if (searchExpr) q = q.or(searchExpr)
+    if (f.pricingKind) q = q.eq('pricing_kind', f.pricingKind)
+  }
   // Filtro por etiqueta: se resuelve primero etiqueta → package_ids y se filtra con IN.
   // Un filtro embebido (`package_tags.label`) repetiría cada paquete una vez por etiqueta.
   if (f.tag) {
