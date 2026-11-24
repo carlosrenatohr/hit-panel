@@ -51,6 +51,9 @@ export default function ShipmentDetail({
   onChanged?: () => void
 }) {
   const [d, setD] = useState<PackageDetail | null>(null)
+  // Active invoice link from the Worker: RLS is default-deny on `invoices`, so the
+  // PostgREST embed on the package is always null and the invoice button vanished.
+  const [invoiceLink, setInvoiceLink] = useState<{ invoiceId: string; status: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -165,7 +168,28 @@ export default function ShipmentDetail({
   const canRefresh = user.role === 'admin' && scrapable
   const isAdmin = user.role === 'admin'
 
-  const linkedInvoiceId = d?.pkg.invoice_packages?.find((ip) => ip.active)?.invoice_id ?? null
+  const linkedInvoiceId =
+    invoiceLink?.invoiceId ?? d?.pkg.invoice_packages?.find((ip) => ip.active)?.invoice_id ?? null
+
+  useEffect(() => {
+    const pkgId = d?.pkg.id
+    if (!pkgId) {
+      setInvoiceLink(null)
+      return
+    }
+    let alive = true
+    billingApi
+      .invoiceLinks([pkgId])
+      .then(({ links }) => {
+        if (!alive) return
+        const link = links[0]
+        setInvoiceLink(link ? { invoiceId: link.invoiceId, status: link.status } : null)
+      })
+      .catch(() => alive && setInvoiceLink(null))
+    return () => {
+      alive = false
+    }
+  }, [d?.pkg.id])
 
   async function handleInvoiceClick() {
     if (!linkedInvoiceId) {

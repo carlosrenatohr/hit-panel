@@ -535,6 +535,24 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         getTagsForPackages(r.rows.map((x) => x.id))
           .then((t) => !cancelled && setTagsByPkg(t))
           .catch(() => !cancelled && setTagsByPkg({}))
+        // Paid icon: the invoice + its status come from the Worker because RLS is
+        // default-deny on `invoices` (the PostgREST embed was always null).
+        void import('../lib/billing')
+          .then(({ billingApi }) => billingApi.invoiceLinks(r.rows.map((x) => x.id)))
+          .then(({ links }) => {
+            if (cancelled || links.length === 0) return
+            const byId = new Map(links.map((l) => [l.packageId, l]))
+            setRows((prev) =>
+              prev.map((p) => {
+                const l = byId.get(p.id)
+                if (!l) return p
+                // Same shape the PostgREST embed used to return, so every consumer
+                // (activeInvoiceLink / isPaidInvoiceLink) works unchanged.
+                return { ...p, invoice_packages: [{ invoice_id: l.invoiceId, active: true, invoices: { status: l.status } }] }
+              }),
+            )
+          })
+          .catch(() => {})
       })
       .catch(() => !cancelled && setErr('No se pudieron cargar los paquetes.'))
       .finally(() => !cancelled && doneList())
