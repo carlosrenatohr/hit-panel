@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Plus, RefreshCw, Search, SquareCheck, Square, X } from 'lucide-preact'
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Plus, RefreshCw, Search, SquareCheck, Square, X } from 'lucide-preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -24,7 +24,7 @@ import { DateRangePicker } from './DateRangePicker'
 import { fmtMoney } from '../lib/format'
 import LifecycleOverview, { PickupQuickAction, StatusSelector, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import FilterSheet from './shipments/FilterSheet'
-import { activeInvoiceLink, COLUMN_DEFS, ColumnPicker, isPaidInvoiceLink, PricingKindIcon, ServiceIcon, useColumnPrefs } from './ShipmentColumns'
+import { activeInvoiceLink, COLUMN_DEFS, ColumnPicker, isPaidInvoiceLink, PricingKindIcon, ServiceIcon, SortableHeader, useColumnPrefs } from './ShipmentColumns'
 import ChargeSummary from './billing/ChargeSummary'
 import { AlertDialog, Button, Card, ConfirmDialog, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill, Tooltip } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
@@ -48,90 +48,6 @@ function translateBulkError(msg: string): string {
   if (/an unexpected error/i.test(msg)) return 'Ocurrió un error inesperado. Intenta de nuevo.'
   return msg || 'Ocurrió un error. Intenta de nuevo.'
 }
-// `dir` is the direction applied when the option is picked. The default (status_rank asc) puts
-// packages ready for pickup in Nicaragua at the top; insforge.ts adds oldest-reception-first as a
-// tiebreaker. The rest default to descending (newest/highest first), which reads naturally.
-const SORTS: { col: string; label: string; dir: 'asc' | 'desc' }[] = [
-  { col: 'status_rank', label: 'Listos para retiro', dir: 'asc' },
-  { col: 'received_at', label: 'Recibido', dir: 'desc' },
-  { col: 'last_event_at', label: 'Último evento', dir: 'desc' },
-  { col: 'scraped_at', label: 'Actualizado', dir: 'desc' },
-  { col: 'almacen_id', label: 'Guía', dir: 'desc' },
-  { col: 'referencia_name', label: 'Nombre', dir: 'desc' },
-  { col: 'tracking_number', label: 'Tracking', dir: 'desc' },
-  { col: 'effective_status', label: 'Estado', dir: 'desc' },
-  { col: 'service_type', label: 'Servicio', dir: 'desc' },
-  { col: 'effective_weight_lb', label: 'Peso', dir: 'desc' },
-  { col: 'pieces', label: 'Piezas', dir: 'desc' },
-]
-
-/** Sort = field + direction as two explicit controls: the old single select
- *  mixed both axes in its labels, so "asc" vs "desc" was never obvious. */
-function SortControl({
-  col,
-  ascending,
-  onChange,
-  compact = false,
-}: {
-  col: string
-  ascending: boolean
-  onChange: (col: string, ascending: boolean) => void
-  compact?: boolean
-}) {
-  const isRank = col === 'status_rank'
-  return (
-    <div class={`flex items-center gap-2 ${compact ? '' : 'flex-wrap'}`}>
-      {!compact && (
-        <label for="shipments-sort" class="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-gray-400">
-          Ordenar por
-        </label>
-      )}
-      <select
-        id={compact ? 'shipments-sort-m' : 'shipments-sort'}
-        aria-label="Ordenar por"
-        class={compact ? 'max-w-40 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-800 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary' : `${inputCls} w-44`}
-        value={col}
-        onChange={(e) => {
-          const next = (e.target as HTMLSelectElement).value
-          const dir = SORTS.find((s) => s.col === next)?.dir === 'asc'
-          onChange(next, dir)
-        }}
-      >
-        {SORTS.map((s) => (
-          <option key={s.col} value={s.col}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-      <Tooltip
-        text={
-          isRank
-            ? 'Listos para retiro se ordenan por antigüedad de recepción'
-            : ascending
-              ? 'Orden ascendente: menor a mayor'
-              : 'Orden descendente: mayor a menor'
-        }
-      >
-        <button
-          type="button"
-          aria-label={`Cambiar a orden ${ascending ? 'descendente' : 'ascendente'}`}
-          aria-pressed={!ascending}
-          disabled={isRank}
-          onClick={() => onChange(col, !ascending)}
-          class={`inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
-            isRank
-              ? 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-300'
-              : 'border-gray-200 bg-white text-gray-700 hover:border-primary/40 hover:text-primary'
-          }`}
-        >
-          {ascending ? <ArrowUp class="h-3.5 w-3.5" aria-hidden="true" /> : <ArrowDown class="h-3.5 w-3.5" aria-hidden="true" />}
-          <span>{ascending ? 'Asc' : 'Desc'}</span>
-        </button>
-      </Tooltip>
-    </div>
-  )
-}
-
 // Condensed page list with ellipses — always shows first, last, and a window
 // around the current page. Keeps the pager a fixed width no matter how many
 // thousands of packages accumulate.
@@ -618,6 +534,14 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     setPage(1)
   }
 
+  // Header sorting: ONE active field at a time, persisted in the same filters the
+  // list query already uses (sort changes keep filters and reset to page 1).
+  const activeSortCol = filters.sortCol ?? 'status_rank'
+  const activeAscending = filters.ascending ?? true
+  const applySort = (field: string, ascending: boolean) => patch({ sortCol: field, ascending })
+  const sortState = (field: string): 'ascending' | 'descending' | 'none' =>
+    activeSortCol === field ? (activeAscending ? 'ascending' : 'descending') : 'none'
+
   /** Chip de la tabla → filtro con chip removible en la tarjeta de filtros. */
   function applyTagFilter(label: string, value?: string | null) {
     patch({ tag: { label, value: value ?? null } })
@@ -957,7 +881,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             <label class="flex flex-col gap-1">
               <span class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Tipo de tarifa</span>
               <select
-                class={`${inputCls} max-w-40`}
+                class={inputCls}
                 aria-label="Filtrar por tipo de tarifa"
                 value={filters.pricingKind ?? ''}
                 onChange={(e) => {
@@ -972,14 +896,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
               </select>
             </label>
           )}
-          {providers.length <= 1 && !mixedKinds && <div class="hidden lg:block" />}
-        </div>
-        <div class="mt-3 hidden flex-wrap items-end gap-3 lg:flex">
-          <SortControl
-            col={filters.sortCol ?? 'status_rank'}
-            ascending={filters.ascending ?? true}
-            onChange={(col, ascending) => patch({ sortCol: col, ascending })}
-          />
         </div>
         {filters.tag && (
           <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -1028,15 +944,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
       {err && <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
 
-      {/* Mobile: section header with count + compact sort (desktop keeps them in the filter card) */}
+      {/* Mobile: section header with the count. Sorting lives on the table headers (desktop). */}
       <div class="flex items-center justify-between gap-3 lg:hidden">
         <h2 class="text-lg font-bold text-secondary">Paquetes ({count})</h2>
-        <SortControl
-          compact
-          col={filters.sortCol ?? 'status_rank'}
-          ascending={filters.ascending ?? true}
-          onChange={(col, ascending) => patch({ sortCol: col, ascending })}
-        />
       </div>
 
       {/* List — cards on mobile, table on desktop */}
@@ -1118,10 +1028,28 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
           <table class="w-full min-w-[900px] align-middle text-sm">
             <thead>
               <tr class="border-b border-gray-100 bg-gray-50/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                <th class="px-4 py-3">Guía</th>
+                <th class="px-4 py-3" aria-sort={sortState('almacen_id')}>
+                  <SortableHeader
+                    label="Guía"
+                    field="almacen_id"
+                    sortCol={activeSortCol}
+                    ascending={activeAscending}
+                    onSort={applySort}
+                  />
+                </th>
                 {visibleCols.map((c) => (
-                  <th key={c.key} class="px-4 py-3">
-                    {c.label}
+                  <th key={c.key} class="px-4 py-3" aria-sort={c.sortField ? sortState(c.sortField) : undefined}>
+                    {c.sortField ? (
+                      <SortableHeader
+                        label={c.label}
+                        field={c.sortField}
+                        sortCol={activeSortCol}
+                        ascending={activeAscending}
+                        onSort={applySort}
+                      />
+                    ) : (
+                      c.label
+                    )}
                   </th>
                 ))}
               </tr>

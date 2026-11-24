@@ -1171,7 +1171,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
               <Button variant="ghost" onClick={() => setCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Tooltip text={createBlockedReason ?? 'Crear la tabla de tarifas'}>
+              <Tooltip text={createBlockedReason ?? 'Crear la tabla de tarifas'} align="end">
                 <span>
                   <Button onClick={createCard} disabled={createBlockedReason !== null}>
                     <Plus class="h-4 w-4" aria-hidden="true" />

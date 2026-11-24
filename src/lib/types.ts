@@ -67,6 +67,8 @@ export interface Pkg {
   /** Fixed packages: the charge snapshotted at creation. */
   customer_charge?: number | null
   customer_unit?: string | null
+  /** Currency of the snapshot charge ('USD' | 'NIO'). */
+  pricing_currency?: 'USD' | 'NIO' | null
   /** Unit price of the resolved tariff (weight: per lb; fixed: per carga). */
   customer_rate?: number | null
   provider_id: string

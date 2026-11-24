@@ -137,13 +137,29 @@ export function IconButton({
 }
 
 /** Immediate hover tooltip (pure CSS — no JS delay). Wrap an icon-only button. */
-export function Tooltip({ text, children }: { text: string; children: ComponentChildren }) {
+/** Hover/focus hint. `align` and `placement` exist so a tooltip on a button next
+ *  to a viewport or scroll-container edge cannot push the page wider: the
+ *  centered bubble used to add horizontal scroll to the whole page. */
+export function Tooltip({
+  text,
+  children,
+  align = 'center',
+  placement = 'top',
+}: {
+  text: string
+  children: ComponentChildren
+  align?: 'start' | 'center' | 'end'
+  placement?: 'top' | 'bottom'
+}) {
+  const horizontal =
+    align === 'end' ? 'right-0' : align === 'start' ? 'left-0' : 'left-1/2 -translate-x-1/2'
+  const vertical = placement === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
   return (
     <span class="group relative inline-flex">
       {children}
       <span
         role="tooltip"
-        class="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1.5 hidden w-max max-w-56 -translate-x-1/2 whitespace-normal rounded-lg bg-secondary px-2.5 py-1.5 text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-100 group-hover:block group-hover:opacity-100 group-focus-within:opacity-100"
+        class={`pointer-events-none absolute ${vertical} ${horizontal} z-30 hidden w-max max-w-[min(14rem,calc(100vw-2rem))] whitespace-normal rounded-lg bg-secondary px-2.5 py-1.5 text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-100 group-hover:block group-hover:opacity-100 group-focus-within:opacity-100`}
       >
         {text}
       </span>

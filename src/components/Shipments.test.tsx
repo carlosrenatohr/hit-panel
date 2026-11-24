@@ -730,22 +730,33 @@ describe('Shipments', () => {
     await waitFor(() => expect(screen.queryByText('Crear paquete manual')).toBeNull());
   });
 
-  it('offers the sort field and direction as separate, explicit controls', async () => {
+  it('sorts from the column headers, toggling ASC/DESC with one active column', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
     await screen.findAllByText('910500');
 
-    const field = screen.getAllByLabelText('Ordenar por')[0] as HTMLSelectElement;
-    fireEvent.change(field, { target: { value: 'received_at' } });
-    await waitFor(() => {
-      const last = vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
-      expect(last).toMatchObject({ sortCol: 'received_at', ascending: false });
-    });
+    // No global sort selector anymore.
+    expect(screen.queryByRole('combobox', { name: 'Ordenar por' })).toBeNull();
+    // Default view: Estado (status_rank) ascending.
+    expect(screen.getByRole('columnheader', { name: /Estado/ }).getAttribute('aria-sort')).toBe('ascending');
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Cambiar a orden ascendente' })[0]);
-    await waitFor(() => {
-      const last = vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
-      expect(last).toMatchObject({ sortCol: 'received_at', ascending: true });
-    });
+    const lastCall = () => vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
+
+    // Inactive header → ASC on the first click.
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Recibido Miami' }));
+    await waitFor(() => expect(lastCall()).toMatchObject({ sortCol: 'received_at', ascending: true }));
+    expect(screen.getByRole('columnheader', { name: /Recibido Miami/ }).getAttribute('aria-sort')).toBe('ascending');
+    expect(screen.getByRole('columnheader', { name: /Estado/ }).getAttribute('aria-sort')).toBe('none');
+
+    // Same header → DESC.
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Recibido Miami' }));
+    await waitFor(() => expect(lastCall()).toMatchObject({ sortCol: 'received_at', ascending: false }));
+    expect(screen.getByRole('columnheader', { name: /Recibido Miami/ }).getAttribute('aria-sort')).toBe('descending');
+
+    // Money column: sortable like any other (server-side numeric order).
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Cargo' }));
+    await waitFor(() => expect(lastCall()).toMatchObject({ sortCol: 'customer_charge', ascending: true }));
+    expect(screen.getByRole('columnheader', { name: /Cargo/ }).getAttribute('aria-sort')).toBe('ascending');
+    expect(screen.getByRole('columnheader', { name: /Recibido Miami/ }).getAttribute('aria-sort')).toBe('none');
   });
 
   it('hides the provider filter when the agency has only one provider', async () => {
@@ -773,8 +784,9 @@ describe('Shipments', () => {
       const last = vi.mocked(listPackages).mock.calls[vi.mocked(listPackages).mock.calls.length - 1][0];
       expect(last.pricingKind).toBe('fixed');
     });
-    // The select stays narrow so it does not stretch the filter row.
-    expect((kind as HTMLSelectElement).className).toContain('max-w-40');
+    // Same width as every other filter control: a narrower select left the row
+    // misaligned when another filter was hidden.
+    expect((kind as HTMLSelectElement).className).not.toContain('max-w-40');
   });
 
   it('renders the service as a single-tone Lucide icon', async () => {
