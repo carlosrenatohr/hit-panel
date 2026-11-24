@@ -9,9 +9,13 @@ import {
   isHazmat,
   officeFlag,
   providerLabel,
+  STATUS_DOT,
+  STATUS_ICON_TONE,
+  STATUS_LABEL,
 } from '../lib/format'
+import { STATUS_ICON } from './shipments/LifecycleOverview'
 import type { Pkg, ShipmentStatus, Tag } from '../lib/types'
-import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot, Tooltip } from './ui'
+import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, Tooltip } from './ui'
 import { ArrowDown, ArrowUp, ArrowUpDown, GripVertical, Lock, Package, Plane, Receipt, Search, Ship, SlidersHorizontal, Weight, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
@@ -134,6 +138,22 @@ export function isPaidInvoiceLink(link: InvoiceLink | null | undefined): boolean
   return linkStatus(link) === 'PAID'
 }
 
+/** Status at a glance: colored dot (already used everywhere) + the same icon the
+ *  lifecycle filters use, with the full label in a tooltip. */
+function StatusIcon({ s }: { s?: ShipmentStatus | null }) {
+  const key = (s ?? 'desconocido') as ShipmentStatus
+  const Icon = STATUS_ICON[key] ?? STATUS_ICON.desconocido
+  const label = STATUS_LABEL[key] ?? key
+  return (
+    <Tooltip text={label}>
+      <span class="inline-flex items-center gap-1.5" role="img" aria-label={label}>
+        <span class={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[key] ?? STATUS_DOT.desconocido}`} aria-hidden="true" />
+        <Icon class={`h-4 w-4 ${STATUS_ICON_TONE[key] ?? STATUS_ICON_TONE.desconocido}`} aria-hidden="true" />
+      </span>
+    </Tooltip>
+  )
+}
+
 export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'nombre',
@@ -155,8 +175,9 @@ export const COLUMN_DEFS: ColumnDef[] = [
   },
   { key: 'provider', label: 'Proveedor', render: (p) => <span class="text-gray-600">{providerLabel(p.providers?.code)}</span> },
   // Sin el lápiz de "estado manual": la columna se queda limpia y el detalle explica
-  // el estado con "Estado fijado manualmente".
-  { key: 'status', label: 'Estado', sortField: 'status_rank', render: (p) => <StatusDot s={p.effective_status as ShipmentStatus} /> },
+  // el estado con "Estado fijado manualmente". Punto + icono (mismo par que los filtros):
+  // el nombre completo solo vive en el tooltip para no repetir texto en cada fila.
+  { key: 'status', label: 'Estado', sortField: 'status_rank', render: (p) => <StatusIcon s={p.effective_status as ShipmentStatus} /> },
   {
     key: 'service',
     label: 'Servicio',
@@ -190,8 +211,9 @@ export const COLUMN_DEFS: ColumnDef[] = [
   },
   {
     // Dinero ya resuelto al crear (snapshot) — sirve para ordenar de mayor a menor.
+    // «Monto» y no «Cargo»: «Carga» ya nombra el peso/piezas de la fila.
     key: 'cargo',
-    label: 'Cargo',
+    label: 'Monto',
     sortField: 'customer_charge',
     render: (p) =>
       p.customer_charge == null ? (
