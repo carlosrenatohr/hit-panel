@@ -268,6 +268,19 @@ export async function getTagsForPackages(ids: string[]): Promise<Record<string, 
   return out
 }
 
+/** PostgREST returns plain error objects, so `e instanceof Error` was false and the
+ *  form fell back to "Error al crear el paquete." — the operator never saw the cause.
+ *  Map the codes that need an action; otherwise keep the database message. */
+function createPackageError(error: { code?: string; message?: string } | null): string {
+  if (error?.code === '42P10') {
+    return 'La base rechazó el alta del paquete (42P10: índice único sin coincidencia). Avisá a soporte con este código.'
+  }
+  if (error?.code === 'PGRST203') {
+    return 'El alta de paquetes está deshabilitada en este momento (función RPC ambigua). Avisá a soporte.'
+  }
+  return error?.message || 'Error al crear el paquete.'
+}
+
 // ── Writes (staff-only RPCs) ────────────────────────────────────────────────────
 export async function createPackage(input: {
   almacenId: string
@@ -324,7 +337,7 @@ export async function createPackage(input: {
     // FIXED card for any package with a service type, even a weight one.
     p_pricing_kind: input.pricingKind ?? null,
   })
-  if (error) throw error
+  if (error) throw new Error(createPackageError(error))
   const d = data as { id: string; almacen_id: string; organization_id: string; error?: string | null; message?: string | null } | null
   if (!d) throw new Error('No se pudo crear el paquete.')
   if (d.error) throw new Error(d.message ?? 'No se pudo crear el paquete.')

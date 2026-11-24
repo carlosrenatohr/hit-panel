@@ -400,6 +400,30 @@ describe('Shipments', () => {
     expect(screen.getByText('Crear paquete manual')).toBeTruthy();
   });
 
+  it('crea el cliente una sola vez aunque falle el paquete y el reintento lo reutiliza', async () => {
+    vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
+    vi.mocked(createPackage).mockRejectedValueOnce(new Error('La base rechazó el alta del paquete (42P10).'));
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear paquete' }));
+    fireEvent.input(screen.getByPlaceholderText(/Ej: 25001234/), { target: { value: '25007777' } });
+    await pickNewClientAndService();
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
+
+    // First attempt: client created, package rejected.
+    await waitFor(() => expect(screen.getByText(/42P10/)).toBeTruthy());
+    expect(vi.mocked(customerApi.create)).toHaveBeenCalledTimes(1);
+    const firstClientId = vi.mocked(createPackage).mock.calls[0][0].clientId;
+
+    // Retry from the same form: the created client is reused, never re-created.
+    fireEvent.click(screen.getByRole('button', { name: 'Crear' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar y crear' }));
+    await waitFor(() => expect(vi.mocked(createPackage)).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(customerApi.create)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(createPackage).mock.calls[1][0].clientId).toBe(firstClientId);
+  });
+
   it('blocks creation until a client and a service type are set', async () => {
     vi.mocked(getProviders).mockResolvedValue([{ id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true }]);
     render(<Shipments user={mockUser} onOpen={() => {}} />);
