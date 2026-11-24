@@ -436,7 +436,10 @@ export default function InvoiceForm({
   }
 
   async function doSubmit() {
-    if (!validateBeforeSave()) return
+    if (!validateBeforeSave()) {
+      setConfirmSave(false)
+      return
+    }
     const cleanLines = lines
       .filter((l) => l.pricingKind === 'fixed' || Number(l.quantityLbs) > 0)
       .map((l) => ({
