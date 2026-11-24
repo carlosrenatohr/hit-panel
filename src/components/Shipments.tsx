@@ -849,21 +849,26 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       {/* Search + filters — between the transport selector and the lifecycle cards */}
       <Card class="p-4">
         <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div class="relative col-span-2 lg:col-span-2">
-            <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
-            <input
-              ref={searchRef}
-              class={`${inputCls} w-full pl-9`}
-              placeholder="Buscar guía, tracking, nombre o casillero…"
-              value={searchInput}
-              onInput={(e) => setSearchInput((e.target as HTMLInputElement).value)}
-            />
-          </div>
+          {/* Same label + fixed height as the selects below: without the label the
+              search box sat ~20px higher and the row looked misaligned. */}
+          <label class="col-span-2 flex flex-col gap-1 lg:col-span-2">
+            <span class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Buscar</span>
+            <span class="relative block">
+              <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+              <input
+                ref={searchRef}
+                class={`${inputCls} h-10 w-full pl-9`}
+                placeholder="Buscar guía, tracking, nombre o casillero…"
+                value={searchInput}
+                onInput={(e) => setSearchInput((e.target as HTMLInputElement).value)}
+              />
+            </span>
+          </label>
           {providers.length > 1 && (
             <label class="flex flex-col gap-1">
               <span class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Proveedor</span>
               <select
-                class={inputCls}
+                class={`${inputCls} h-10`}
                 aria-label="Filtrar por proveedor"
                 value={filters.providerId ?? ''}
                 onChange={(e) => patch({ providerId: (e.target as HTMLSelectElement).value || undefined })}
@@ -881,7 +886,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             <label class="flex flex-col gap-1">
               <span class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Tipo de tarifa</span>
               <select
-                class={inputCls}
+                class={`${inputCls} h-10`}
                 aria-label="Filtrar por tipo de tarifa"
                 value={filters.pricingKind ?? ''}
                 onChange={(e) => {
