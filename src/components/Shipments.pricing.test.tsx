@@ -262,6 +262,7 @@ describe('Shipments bulk invoicing', () => {
     vi.mocked(billingApi.bulkPreview).mockResolvedValue({
       clientName: 'Ana Perez',
       total: 60,
+      profit: 20,
       lines: [
         { packageId: 'p1', guia: 'G-1', tracking: null, serviceType: 'aereo', weightLb: 3, pricingKind: 'weight', total: 35 },
         { packageId: 'p2', guia: 'G-2', tracking: null, serviceType: 'aereo', weightLb: 5, pricingKind: 'fixed', total: 25 },
@@ -270,8 +271,14 @@ describe('Shipments bulk invoicing', () => {
     await selectBoth()
 
     const dialog = await screen.findByRole('dialog', { name: 'Vista previa: factura por paquetes' })
-    expect(within(dialog).getByText('Total: $60.00')).toBeTruthy()
     expect(within(dialog).getByText('Cuota fija (1 unidad)')).toBeTruthy()
+    // Shared charge summary before the actions: charge, internal cost and utilidad.
+    expect(within(dialog).getByText('Resumen de cobro')).toBeTruthy()
+    expect(within(dialog).getByText(/^\$60\.00/)).toBeTruthy()
+    expect(within(dialog).getByText('Costo interno')).toBeTruthy()
+    expect(within(dialog).getByText('$40.00')).toBeTruthy()
+    expect(within(dialog).getByText('Utilidad')).toBeTruthy()
+    expect(within(dialog).getByText('$20.00')).toBeTruthy()
   })
 
   it('blocks a mixed weight + fixed selection with a prominent alert', async () => {

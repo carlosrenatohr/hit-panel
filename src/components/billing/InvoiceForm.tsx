@@ -207,6 +207,24 @@ export default function InvoiceForm({
     }
   }, [clientId])
 
+  // The package-detail prefill carries the stored charge, but the internal cost
+  // lives in the package snapshot. Resolve it from the client's unbilled list so
+  // the summary never shows a made-up $0.00 while the charge is already known.
+  useEffect(() => {
+    if (!clientPkgs.length) return
+    setLines((ls) => {
+      let changed = false
+      const next = ls.map((l) => {
+        if (l.pricingKind !== 'fixed' || !l.packageId || l.fixedProfit != null) return l
+        const pkg = clientPkgs.find((p) => p.packageId === l.packageId)
+        if (!pkg || pkg.grossProfit == null) return l
+        changed = true
+        return { ...l, fixedCharge: l.fixedCharge ?? pkg.customerCharge ?? null, fixedProfit: pkg.grossProfit }
+      })
+      return changed ? next : ls
+    })
+  }, [clientPkgs])
+
   // Hydrate the selected / prefilled / edited client: canonical name + assigned
   // rate card. The Worker prices freight with the client's default card, so the
   // preview AND the "Tarifa" select must use that same card, not the first org
@@ -288,7 +306,7 @@ export default function InvoiceForm({
     return tiers[0] ?? 'REGULAR'
   }
 
-  function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; cost: number; profit: number | null } {
+  function lineAmounts(l: DraftLine): { unitPrice: number | null; total: number; cost: number | null; profit: number | null } {
     // Fixed package: the package's stored charge is the amount; its cost/utilidad
     // come from the API (never estimated in the browser).
     if (l.pricingKind === 'fixed') {
@@ -297,7 +315,8 @@ export default function InvoiceForm({
       return {
         unitPrice: charge,
         total: charge ?? 0,
-        cost: charge != null && profit != null ? round2(charge - profit) : 0,
+        // Without the snapshot profit the cost is unknown — never show $0.00.
+        cost: charge != null && profit != null ? round2(charge - profit) : null,
         profit,
       }
     }
@@ -335,10 +354,14 @@ export default function InvoiceForm({
     let cost = 0
     // A single unknown fixed utilidad must not be shown as 0 — the footer says "—".
     let profitComplete = true
+    // Same rule for the internal cost: if any fixed line lacks its snapshot
+    // profit the cost is unknown and the summary hides the row.
+    let costComplete = true
     for (const l of lines) {
       const a = lineAmounts(l)
       total += a.total
-      cost += a.cost
+      if (a.cost == null) costComplete = false
+      else cost += a.cost
       if (a.profit == null) profitComplete = false
       else profit += a.profit
     }
@@ -347,7 +370,7 @@ export default function InvoiceForm({
       total += amount
       profit += amount
     }
-    return { total: round2(total), cost: round2(cost), profit: round2(profit), profitComplete }
+    return { total: round2(total), costComplete, cost: round2(cost), profit: round2(profit), profitComplete }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, others, rateCards, catalog, activeConcepts])
 
@@ -718,7 +741,7 @@ export default function InvoiceForm({
               title="Resumen de cobro"
               customerCharge={totals.total}
               currency={currency}
-              providerCost={totals.cost}
+              providerCost={totals.costComplete ? totals.cost : undefined}
               profit={totals.profitComplete ? totals.profit : null}
               canSeeCosts
               note="El sistema recalcula y guarda los montos al crear o guardar la factura."
