@@ -1,7 +1,7 @@
 import { Archive, Ban, Flag, History, Layers, Pencil, Plus, RefreshCw, Save, SlidersHorizontal, UserCheck, Users, GitMerge } from 'lucide-preact'
 import { useEffect, useState } from 'preact/hooks'
 import { configApi, type RateCardInfo } from '../lib/config'
-import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerInput, type RateAssignment } from '../lib/customer'
+import { customerApi, type Customer, type CustomerAggregateStats, type CustomerDeletePreview, type CustomerEvent, type CustomerFilters, type CustomerInput, type RateAssignment } from '../lib/customer'
 import type { Role, SessionUser } from '../lib/types'
 import { navigate } from '../lib/router'
 import { getSimilarClients, mergeClients, type SimilarClientPair } from '../lib/insforge'
@@ -12,8 +12,8 @@ import { DateRangePicker } from './DateRangePicker'
 import CustomerCards, { CardPickerModal, ALL_CARD_OPTIONS, DEFAULT_CARD_HIDDEN, CARD_STORAGE_KEY, loadCardHidden } from './CustomerCards'
 import { CUSTOMER_COLUMN_DEFS, CustomerColumnPicker, useCustomerColumnPrefs } from './CustomerColumns'
 import CustomerTimeline from './CustomerTimeline'
-
-const PAGE_SIZE = 25
+import { SortableHeader } from './ui/SortableHeader'
+import { DEFAULT_PAGE_SIZE, Pagination, type PageSize } from './ui/Pagination'
 
 const FILTER_STORAGE_KEY = 'hit-panel:customers:filters:v2'
 
@@ -82,6 +82,8 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   const [rows, setRows] = useState<Customer[]>([])
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
+  const [sort, setSort] = useState<{ field: NonNullable<CustomerFilters['sort']>; ascending: boolean }>({ field: 'name', ascending: true })
   const [search, setSearch] = useState(savedFilters.search)
   // `statusSeed` (Dashboard drilldown ?estado=) takes precedence over the persisted filter
   // at mount; afterwards the persisted filters take over again (same pattern as Shipments).
@@ -99,7 +101,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   const auditRev = useDataVersion('clients')
   // Gate: un refetch del bus con la misma query es silencioso — la tabla y los
   // KPIs conservan lo que tienen en pantalla en vez de caer al spinner.
-  const listKey = JSON.stringify([page, statuses, search, from, to, revision])
+  const listKey = JSON.stringify([page, pageSize, sort, statuses, search, from, to, revision])
   const { loading, begin: beginList, done: doneList } = useFetchGate(listKey)
   const [saving, setSaving] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
@@ -118,6 +120,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   const [auditRows, setAuditRows] = useState<CustomerEvent[]>([])
   const [auditCount, setAuditCount] = useState(0)
   const [auditPage, setAuditPage] = useState(1)
+  const [auditPageSize, setAuditPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
   const [auditLoading, setAuditLoading] = useState(false)
   const [duplicatesOpen, setDuplicatesOpen] = useState(false)
   const [similarPairs, setSimilarPairs] = useState<SimilarClientPair[]>([])
@@ -138,7 +141,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
     let cancelled = false
     setError(null)
     customerApi
-      .list({ search: search || undefined, statuses: statuses.length ? statuses : undefined, from: from || undefined, to: to || undefined, page, pageSize: PAGE_SIZE })
+      .list({ search: search || undefined, statuses: statuses.length ? statuses : undefined, from: from || undefined, to: to || undefined, page, pageSize, sort: sort.field, ascending: sort.ascending })
       .then((result) => {
         if (cancelled) return
         setRows(result.rows)
@@ -162,7 +165,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
     let cancelled = false
     setAuditLoading(true)
     configApi
-      .audit({ entityType: 'billing_client', page: auditPage, pageSize: PAGE_SIZE })
+      .audit({ entityType: 'billing_client', page: auditPage, pageSize: auditPageSize })
       .then((res) => {
         if (cancelled) return
         setAuditRows(res.rows as CustomerEvent[])
@@ -171,10 +174,8 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
       .catch(() => !cancelled && setAuditRows([]))
       .finally(() => !cancelled && setAuditLoading(false))
     return () => { cancelled = true }
-  }, [auditPage, revision, auditRev])
+  }, [auditPage, auditPageSize, revision, auditRev])
 
-  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
-  const auditTotalPages = Math.max(1, Math.ceil(auditCount / PAGE_SIZE))
 
   function openCreate() {
     setError(null)
@@ -337,6 +338,15 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
   }
 
   const activeTabKey = STATUS_TABS.find((t) => JSON.stringify(t.filter) === JSON.stringify(statuses))?.key ?? 'all'
+
+  // Header sorting: one column at a time; a new order returns to page 1.
+  const applySort = (field: string, ascending: boolean) => {
+    setSort({ field: field as NonNullable<CustomerFilters['sort']>, ascending })
+    setPage(1)
+  }
+  const sortState = (field: string): 'ascending' | 'descending' | 'none' =>
+    sort.field === field ? (sort.ascending ? 'ascending' : 'descending') : 'none'
+
 
   return (
     <div class="space-y-4">
@@ -547,7 +557,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
 
       {tab === 'bitacora' ? (
         <Card>
-          <SectionTitle class="justify-between"><span>Bitácora de clientes</span><span class="text-xs font-normal text-gray-400">Página {auditPage} de {auditTotalPages}</span></SectionTitle>
+          <SectionTitle class="justify-between"><span>Bitácora de clientes</span></SectionTitle>
           {auditLoading ? (
             <div class="p-6"><Spinner label="Cargando bitácora…" /></div>
           ) : auditRows.length === 0 ? (
@@ -557,7 +567,15 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
               <CustomerTimeline events={auditRows} />
             </div>
           )}
-          {auditTotalPages > 1 && <div class="flex justify-center gap-2 border-t border-gray-100 p-3"><Button variant="ghost" disabled={auditPage <= 1} onClick={() => setAuditPage((value) => value - 1)}>Anterior</Button><Button variant="ghost" disabled={auditPage >= auditTotalPages} onClick={() => setAuditPage((value) => value + 1)}>Siguiente</Button></div>}
+          <Pagination
+            page={auditPage}
+            count={auditCount}
+            pageSize={auditPageSize}
+            onPageChange={setAuditPage}
+            onPageSizeChange={(size) => { setAuditPageSize(size); setAuditPage(1) }}
+            noun={auditCount === 1 ? 'evento' : 'eventos'}
+            disabled={auditLoading}
+          />
         </Card>
       ) : (
         <>
@@ -594,7 +612,7 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
           {stats && <CustomerCards stats={stats} onViewClient={viewClientPackages} hidden={cardHidden} onApply={setCardHidden} />}
 
           <Card>
-            <SectionTitle class="justify-between"><span>{count} clientes</span><span class="text-xs font-normal text-gray-400">Página {page} de {totalPages}</span></SectionTitle>
+            <SectionTitle class="justify-between"><span>{count} clientes</span></SectionTitle>
             {loading ? (
               <div class="p-6"><Spinner label="Cargando clientes…" /></div>
             ) : rows.length === 0 ? (
@@ -604,11 +622,19 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
               <table class="min-w-[900px] w-full text-left text-sm">
                   <thead>
                     <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
-                      <th class="px-4 py-2" rowSpan={2}>Nombre</th>
+                      <th class="px-4 py-2" rowSpan={2} aria-sort={sortState('name')}>
+                        <SortableHeader label="Nombre" field="name" sortCol={sort.field} ascending={sort.ascending} onSort={applySort} />
+                      </th>
                       {visibleCols
                         .filter((c) => !showWeightGroup || (c.key !== 'maritimo' && c.key !== 'aereo'))
                         .map((col) => (
-                          <th key={col.key} class="px-4 py-2" rowSpan={2}>{col.label}</th>
+                          <th key={col.key} class="px-4 py-2" rowSpan={2} aria-sort={col.sortField ? sortState(col.sortField) : undefined}>
+                            {col.sortField ? (
+                              <SortableHeader label={col.label} field={col.sortField} sortCol={sort.field} ascending={sort.ascending} onSort={applySort} />
+                            ) : (
+                              col.label
+                            )}
+                          </th>
                         ))}
                       {showWeightGroup && (
                         <th class="px-4 py-2 text-center" colSpan={2} title="Volumen total en libras (total paquetes)">Volumen total en libras (total paquetes)</th>
@@ -701,7 +727,15 @@ export default function Customers({ user, role, statusSeed }: { user: SessionUse
                 </table>
               </div>
             )}
-            {totalPages > 1 && <div class="flex justify-center gap-2 border-t border-gray-100 p-3"><Button variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Anterior</Button><Button variant="ghost" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Siguiente</Button></div>}
+            <Pagination
+              page={page}
+              count={count}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+              noun={count === 1 ? 'cliente' : 'clientes'}
+              disabled={loading}
+            />
           </Card>
         </>
       )}

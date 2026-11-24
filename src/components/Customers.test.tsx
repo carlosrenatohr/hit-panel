@@ -67,8 +67,11 @@ describe('Customers', () => {
     expect(screen.getAllByTitle('Deshabilitado').length).toBeGreaterThan(0)
     // Review flag is still next to the name.
     expect(screen.getByTitle('Requiere revisión')).toBeInTheDocument()
-    expect(screen.getByText('3')).toBeInTheDocument()
-    expect(screen.getByText('7')).toBeInTheDocument()
+    // Package totals live in the table body (the pagination footer also prints
+    // the count, so scope the assertion to the rows).
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('3')).toBeInTheDocument()
+    expect(within(table).getByText('7')).toBeInTheDocument()
   })
 
   it('creates a client from the shared modal after confirming the dialog', async () => {
@@ -93,6 +96,28 @@ describe('Customers', () => {
       ).toBe(true)
     })
     expect(screen.getByRole('button', { name: /Revisión/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('sorts the client list from a header and flips the direction', async () => {
+    render(<Customers user={mockUser} role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Casillero' }))
+    await waitFor(() =>
+      expect(vi.mocked(customerApi.list).mock.calls.some(([f]) => f.sort === 'casillero' && f.ascending === true)).toBe(true),
+    )
+    expect(screen.getByRole('columnheader', { name: /Casillero/ })).toHaveAttribute('aria-sort', 'ascending')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Casillero' }))
+    await waitFor(() =>
+      expect(vi.mocked(customerApi.list).mock.calls.some(([f]) => f.sort === 'casillero' && f.ascending === false)).toBe(true),
+    )
+  })
+
+  it('asks for 20 clients per page by default', async () => {
+    render(<Customers user={mockUser} role="admin" />)
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument())
+    expect(vi.mocked(customerApi.list).mock.calls.at(-1)![0]).toMatchObject({ page: 1, pageSize: 20, sort: 'name', ascending: true })
   })
 
   it('ignores persisted filters in favour of the drilldown seed only at mount', async () => {

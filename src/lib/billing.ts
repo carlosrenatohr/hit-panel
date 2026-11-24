@@ -144,6 +144,9 @@ export interface InvoiceFilters {
   to?: string
   page?: number
   pageSize?: number
+  /** Whitelisted column key; the worker maps it to a real DB column. */
+  sort?: 'invoice_number' | 'client' | 'date' | 'status' | 'total'
+  ascending?: boolean
 }
 export interface CreateInvoiceInput {
   clientName: string

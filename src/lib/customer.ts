@@ -43,6 +43,9 @@ export interface CustomerFilters {
   to?: string
   page?: number
   pageSize?: number
+  /** Whitelisted column key; the worker maps it to a real DB column. */
+  sort?: 'name' | 'casillero' | 'email' | 'phone' | 'company' | 'taxId'
+  ascending?: boolean
 }
 
 /** KPI-card aggregates for the whole agency within a date range. */
