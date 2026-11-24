@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/pre
 import ShipmentDetail from './ShipmentDetail';
 import { deletePackage, deleteTag, getPackageDetail, setPackageClient, setPackageWeight } from '../lib/insforge';
 import { configApi } from '../lib/config';
+import { billingApi } from '../lib/billing';
 import type { PackageDetail } from '../lib/types';
 
 // The untyped mockDetail fixture misses a few Pkg fields; build overrides from it
@@ -108,7 +109,9 @@ vi.mock('./billing/InvoiceForm', () => ({
 }));
 
 const pricingPreview = vi.hoisted(() => vi.fn())
-vi.mock('../lib/billing', () => ({ billingApi: { pricingPreview, getInvoice: vi.fn() } }))
+vi.mock('../lib/billing', () => ({
+  billingApi: { pricingPreview, getInvoice: vi.fn(), invoiceLinks: vi.fn().mockResolvedValue({ links: [] }) },
+}))
 
 const adminUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as const, name: 'Admin', agency: 'hit' as const };
 
@@ -292,6 +295,17 @@ describe('ShipmentDetail', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Factura' }));
     await waitFor(() => expect(screen.getByText('Mock InvoiceForm: c1 | Original Express')).toBeTruthy());
+  });
+
+  it('muestra "Ver factura" con el vínculo que devuelve el Worker (RLS bloquea el embed)', async () => {
+    vi.mocked(getPackageDetail).mockResolvedValue(detailWith({ effective_status: 'entregado', invoice_packages: [] }));
+    vi.mocked(billingApi.invoiceLinks).mockResolvedValue({
+      links: [{ packageId: '1', invoiceId: 'inv-13', status: 'PAID' }],
+    });
+    render(<ShipmentDetail guia="910500" user={adminUser} onClose={() => {}} />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ver factura' })).toBeTruthy());
+    expect(billingApi.invoiceLinks).toHaveBeenCalledWith(['1']);
   });
 
   it('guarda el peso editado en Acciones con set_package_weight', async () => {

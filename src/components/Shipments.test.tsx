@@ -4,6 +4,7 @@ import Shipments from './Shipments';
 import { listPackages, getProviders, createPackage, getTagsForPackages, type ListFilters } from '../lib/insforge';
 import type { Pkg } from '../lib/types';
 import { customerApi } from '../lib/customer';
+import { billingApi } from '../lib/billing';
 import { bumpData, bumpList } from '../lib/dataVersion';
 
 // The create modal now requires a client (typed → created at submit), a
@@ -100,6 +101,13 @@ vi.mock('../lib/insforge', () => ({
   pricingKindAvailability: vi.fn().mockResolvedValue({ mixed: false }),
 }));
 
+// RLS is default-deny on `invoices`, so the list reads the link + status from the
+// Worker. Spread the real module: Shipments also uses billingApi for bulk actions.
+vi.mock('../lib/billing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/billing')>();
+  return { ...actual, billingApi: { ...actual.billingApi, invoiceLinks: vi.fn() } };
+});
+
 vi.mock('../lib/customer', () => ({
   customerApi: {
     list: vi.fn().mockResolvedValue({ rows: [], count: 0 }),
@@ -121,6 +129,7 @@ const mockUser = { id: 'u-1', email: 'admin@hit-cargo.com', role: 'admin' as con
 describe('Shipments', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(billingApi.invoiceLinks).mockResolvedValue({ links: [] });
   });
 
   it('renders the shipments table with packages', async () => {
@@ -679,6 +688,34 @@ describe('Shipments', () => {
     vi.mocked(listPackages).mockImplementation(original!);
   });
 
+
+  it('marks the invoice green with the status the Worker returns (RLS blocks the embed)', async () => {
+    const original = vi.mocked(listPackages).getMockImplementation();
+    // The PostgREST embed comes back null for every row: no invoice data at all.
+    vi.mocked(listPackages).mockResolvedValue({
+      rows: [
+        { ...mockPkgs[0], id: 'p-paid', almacen_id: 'G-PAID', referencia_name: 'Ana', invoice_packages: [] },
+        { ...mockPkgs[0], id: 'p-open', almacen_id: 'G-OPEN', referencia_name: 'Luis', invoice_packages: [] },
+      ],
+      count: 2,
+    } as never);
+    vi.mocked(billingApi.invoiceLinks).mockResolvedValue({
+      links: [
+        { packageId: 'p-paid', invoiceId: 'inv-13', status: 'PAID' },
+        { packageId: 'p-open', invoiceId: 'inv-14', status: 'ISSUED' },
+      ],
+    });
+    render(<Shipments user={mockUser} onOpen={() => {}} />);
+
+    await screen.findAllByText('G-PAID');
+    const paid = await screen.findAllByLabelText('Factura pagada');
+    expect(paid.length).toBeGreaterThan(0);
+    expect(paid[0].className).toContain('text-emerald-600');
+    // The issued one stays on the neutral tone.
+    expect(screen.getAllByLabelText('Ver factura').length).toBeGreaterThan(0);
+
+    vi.mocked(listPackages).mockImplementation(original!);
+  });
 
   it('asks before discarding a manually typed package', async () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);

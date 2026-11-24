@@ -281,6 +281,11 @@ export const billingApi = {
   exceptions: () => workerApi<Exceptions>(`${API_BASE}/api/billing/exceptions`),
   /** -- Org-scoped package IDs with at least one invoice link (for the reports billing filter). -- */
   linkedPackageIds: () => workerApi<{ ids: string[] }>(`${API_BASE}/api/billing/linked-packages`),
+  /** -- Active invoice + status per package (paid icon in the package list). The SDK's PostgREST embed on `invoices` is RLS default-deny, so it always came back null. -- */
+  invoiceLinks: (ids: string[]) =>
+    workerApi<{ links: Array<{ packageId: string; invoiceId: string; status: string }> }>(
+      `${API_BASE}/api/billing/invoice-links${qs({ ids: ids.join(',') })}`,
+    ),
   shareInvoice: (id: string) => workerApi<{ token: string; url: string }>(`${API_BASE}/api/billing/invoices/${id}/share`, { method: 'POST' }),
   invoiceEvents: (id: string) =>
     workerApi<{ events: Array<{ action: string; detail: string | null; actor: string | null; createdAt: string }> }>(`${API_BASE}/api/billing/invoices/${id}/events`),
