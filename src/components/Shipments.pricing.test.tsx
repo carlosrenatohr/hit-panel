@@ -54,6 +54,7 @@ vi.mock('../lib/billing', () => ({
     pricingPreview,
     bulkPreview: vi.fn(),
     bulkCreate: vi.fn(),
+    stampWeightSnapshot: vi.fn().mockResolvedValue(null),
   },
 }));
 
@@ -237,6 +238,9 @@ describe('Shipments create modal — tariff preselection and confirmation', () =
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar y crear' }));
     await waitFor(() => expect(createPackage).toHaveBeenCalled());
+    // The weight tariff used at creation is stamped for later invoicing.
+    const { billingApi } = await import('../lib/billing');
+    await waitFor(() => expect(billingApi.stampWeightSnapshot).toHaveBeenCalledWith('p-1'));
   });
 });
 
@@ -264,14 +268,17 @@ describe('Shipments bulk invoicing', () => {
       total: 60,
       profit: 20,
       lines: [
-        { packageId: 'p1', guia: 'G-1', tracking: null, serviceType: 'aereo', weightLb: 3, pricingKind: 'weight', total: 35 },
-        { packageId: 'p2', guia: 'G-2', tracking: null, serviceType: 'aereo', weightLb: 5, pricingKind: 'fixed', total: 25 },
+        { packageId: 'p1', guia: 'G-1', tracking: null, serviceType: 'aereo', weightLb: 3, pricingKind: 'weight', total: 35, freightCost: 24, profit: 11, cardName: 'Estándar' },
+        { packageId: 'p2', guia: 'G-2', tracking: null, serviceType: 'aereo', weightLb: 5, pricingKind: 'fixed', total: 25, freightCost: 8, profit: 17, cardName: null },
       ],
     } as never)
     await selectBoth()
 
     const dialog = await screen.findByRole('dialog', { name: 'Vista previa: factura por paquetes' })
-    expect(within(dialog).getByText('Cuota fija (1 unidad)')).toBeTruthy()
+    expect(within(dialog).getByText(/Por peso \(tarifa guardada de cada paquete\)/)).toBeTruthy()
+    expect(within(dialog).getByText('Cuota fija')).toBeTruthy()
+    expect(within(dialog).getByText('Estándar')).toBeTruthy()
+    expect(within(dialog).getByText('Snapshot del paquete')).toBeTruthy()
     // Shared charge summary before the actions: charge, internal cost and utilidad.
     expect(within(dialog).getByText('Resumen de cobro')).toBeTruthy()
     expect(within(dialog).getByText(/^\$60\.00/)).toBeTruthy()

@@ -53,6 +53,8 @@ vi.mock('../../lib/config', () => ({
           organizationId: 'hit',
           name: 'Estándar',
           structure: 'simple_pair',
+          pricingKind: 'weight',
+          isDefault: true,
           createdAt: '',
           updatedAt: '',
           currentVersion: {
@@ -82,6 +84,26 @@ vi.mock('../../lib/config', () => ({
             status: 'published',
             entries: [
               { id: 'ev1', serviceType: 'AIR', name: 'VIP', unit: 'lb', price: 5.5, cost: 4.5 },
+            ],
+          },
+        },
+        {
+          id: 't-fixed',
+          organizationId: 'hit',
+          name: 'Documentos',
+          structure: 'simple_pair',
+          pricingKind: 'fixed',
+          isDefault: false,
+          createdAt: '',
+          updatedAt: '',
+          currentVersion: {
+            id: 'v-fixed',
+            version: 1,
+            priceModel: 'fixed',
+            currency: 'USD',
+            status: 'published',
+            entries: [
+              { id: 'ef1', serviceType: 'AIR', name: 'Documentos', unit: 'package', price: 25, cost: 8 },
             ],
           },
         },
@@ -430,5 +452,39 @@ describe('InvoiceForm mixed billing kinds', () => {
     expect(within(alert).getByText(/paquetes por peso y paquetes de cuota fija/)).toBeTruthy()
     expect(within(alert).getByText('⛔')).toBeTruthy()
     expect(createInvoice).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('InvoiceForm weight tariff selection', () => {
+  it('never offers a fixed card on a weight line', async () => {
+    renderForm()
+    fireEvent.click(screen.getByText('select-client'))
+    await waitFor(() => expect(screen.getByText('SG-1')).toBeTruthy())
+    fireEvent.click(screen.getByText('SG-1'))
+    const select = (await screen.findByLabelText(/Tarifa/)) as HTMLSelectElement
+    const options = [...select.options].map((o) => o.textContent)
+    expect(options).toContain('Estándar')
+    expect(options).not.toContain('Documentos')
+  })
+
+  it('prefers the card stored on the guide over the client and agency defaults', async () => {
+    unbilledPackages.mockResolvedValueOnce({
+      clientId: 'c1',
+      packages: [{ ...UNBILLED[0], rateCardId: 't-vip' }],
+    })
+    renderForm()
+    fireEvent.click(screen.getByText('select-client'))
+    await waitFor(() => expect(screen.getByText('SG-1')).toBeTruthy())
+    fireEvent.click(screen.getByText('SG-1'))
+    await waitFor(() => expect((screen.getByLabelText(/Tarifa/) as HTMLSelectElement).value).toBe('t-vip'))
+  })
+
+  it('falls back to the agency default weight card when the client has none', async () => {
+    renderForm()
+    fireEvent.click(screen.getByText('select-client'))
+    await waitFor(() => expect(screen.getByText('SG-1')).toBeTruthy())
+    fireEvent.click(screen.getByText('SG-1'))
+    await waitFor(() => expect((screen.getByLabelText(/Tarifa/) as HTMLSelectElement).value).toBe('t1'))
   })
 })
