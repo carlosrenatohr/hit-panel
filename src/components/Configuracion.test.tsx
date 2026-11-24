@@ -48,6 +48,7 @@ const createRateCard = vi.hoisted(() => vi.fn())
 vi.mock('../lib/config', () => ({
   configApi: {
     info: vi.fn().mockResolvedValue({ name: 'HIT', ruc: null, address: null, phone: null, currency: 'USD', exchangeRateNioPerUsd: 36.5 }),
+    branding: vi.fn().mockResolvedValue({ agencies: [] }),
     features: vi.fn().mockResolvedValue({ flexiblePricing: true }),
     listRateCards,
     setRateCardDefault,
@@ -222,5 +223,99 @@ describe('Configuración › Tarifas', () => {
     expect(renameRateCard).toHaveBeenCalledWith('f-default', 'Documentos Plus')
     const toast = await screen.findByRole('status')
     expect(within(toast).getByText('Cambios guardados')).toBeTruthy()
+  })
+
+  it('weight tables no longer ask for a per-entry "Categoría"', async () => {
+    const replaceCardEntries = vi.fn().mockResolvedValue(undefined)
+    const cfg = await import('../lib/config')
+    vi.mocked(cfg.configApi.replaceCardEntries).mockImplementation(replaceCardEntries)
+    await openRates()
+
+    const premium = (await screen.findByText('Premium')).closest('.rounded-xl') as HTMLElement
+    fireEvent.click(within(premium).getByRole('button', { name: 'Editar' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Editar tabla de tarifas' })
+    expect(within(dialog).queryByLabelText('Categoría')).toBeNull()
+    expect(within(dialog).queryByText('Categoría')).toBeNull()
+
+    fireEvent.input(within(dialog).getAllByLabelText('Precio por libra (USD)')[0], { target: { value: '10' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Guardar cambios en la tarifa' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() => expect(replaceCardEntries).toHaveBeenCalledWith('w-premium', [
+      { serviceType: 'AIR', name: 'Premium', price: 10, cost: 5 },
+      { serviceType: 'MAR', name: 'Premium', price: 3.5, cost: 1.5 },
+    ]))
+  })
+
+  it('pages the rate tables one card at a time', async () => {
+    const many = Array.from({ length: 21 }, (_, i) => {
+      const n = String(i + 1).padStart(2, '0')
+      return {
+        id: `w-${n}`, organizationId: 'hit', name: `Tarifa ${n}`, structure: 'simple_pair',
+        pricingKind: 'weight', isDefault: i === 0, active: true, createdAt: '', updatedAt: '',
+        currentVersion: { id: `v-${n}`, version: 1, priceModel: 'weight', currency: 'USD', status: 'published', entries: [
+          { id: `a-${n}`, serviceType: 'AIR', name: 'Regular', unit: 'lb', price: 7, cost: 4 },
+          { id: `m-${n}`, serviceType: 'MAR', name: 'Regular', unit: 'lb', price: 3, cost: 1 },
+        ] },
+      }
+    })
+    listRateCards.mockResolvedValue({ organizationId: 'hit', cards: many })
+    await openRates()
+
+    // 20 tables by default; the 21st waits on page 2.
+    expect(screen.getAllByText(/^Tarifa \d{2}$/)).toHaveLength(20)
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }))
+    await waitFor(() => expect(screen.getAllByText(/^Tarifa \d{2}$/)).toHaveLength(1))
+    expect(screen.getByText('Tarifa 21')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Filas por página'), { target: { value: '50' } })
+    await waitFor(() => expect(screen.getAllByText(/^Tarifa \d{2}$/)).toHaveLength(21))
+  })
+})
+
+describe('Configuración › Información', () => {
+  it('lists the pending changes, asks first and confirms the save', async () => {
+    const cfg = await import('../lib/config')
+    const updateInfo = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(cfg.configApi.updateInfo).mockImplementation(updateInfo)
+    vi.mocked(cfg.configApi.info).mockResolvedValue({
+      slug: 'hit', name: 'HIT Cargo', ruc: null, address: null, phone: null, currency: 'USD',
+      isScrapable: false, exchangeRateNioPerUsd: 36.5, exchangeRateSource: 'manual',
+      exchangeRateUpdatedAt: null, nameLastUpdated: null,
+    })
+
+    render(<Configuracion user={admin} />)
+    const name = (await screen.findByLabelText('Nombre de la agencia')) as HTMLInputElement
+    fireEvent.change(name, { target: { value: 'HIT Cargo Plus' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    const dialog = await screen.findByRole('dialog', { name: '¿Guardar los cambios de la información?' })
+    expect(within(dialog).getByText(/Nombre: HIT Cargo → HIT Cargo Plus/)).toBeTruthy()
+    expect(updateInfo).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }))
+    await waitFor(() => expect(updateInfo).toHaveBeenCalledWith(expect.objectContaining({ name: 'HIT Cargo Plus' })))
+    const toast = await screen.findByRole('status')
+    expect(within(toast).getByText('Información actualizada.')).toBeTruthy()
+    expect(await screen.findByText(/Guardado \d{2}:\d{2}/)).toBeTruthy()
+  })
+
+  it('says there is nothing to save instead of posting an empty update', async () => {
+    const cfg = await import('../lib/config')
+    const updateInfo = vi.fn()
+    vi.mocked(cfg.configApi.updateInfo).mockImplementation(updateInfo)
+    vi.mocked(cfg.configApi.info).mockResolvedValue({
+      slug: 'hit', name: 'HIT Cargo', ruc: null, address: null, phone: null, currency: 'USD',
+      isScrapable: false, exchangeRateNioPerUsd: 36.5, exchangeRateSource: 'manual',
+      exchangeRateUpdatedAt: null, nameLastUpdated: null,
+    })
+
+    render(<Configuracion user={admin} />)
+    await screen.findByLabelText('Nombre de la agencia')
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByText('Sin cambios que guardar.')).toBeTruthy()
+    expect(updateInfo).not.toHaveBeenCalled()
   })
 })

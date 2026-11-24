@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
-import { Ban, Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, UserCheck, X } from 'lucide-preact'
+import { Ban, Upload, Building2, Table2, ScrollText, Save, Plus, Trash2, Pencil, UserCheck, X, CheckCircle2 } from 'lucide-preact'
 import type { SessionUser } from '../lib/types'
 import { configApi } from '../lib/config'
 import { customerApi } from '../lib/customer'
@@ -28,7 +28,11 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ title: string; message?: string } | null>(null)
+  /** Saving asks first through the shared dialog, listing what will change. */
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  /** Last successful save, shown as the green badge next to the button. */
+  const [savedAt, setSavedAt] = useState<Date | null>(null)
 
   useEffect(() => {
     configApi
@@ -46,9 +50,8 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const showNotice = (msg: string) => {
-    setNotice(msg)
-    window.setTimeout(() => setNotice(null), 4000)
+  const showNotice = (title: string, message?: string) => {
+    setNotice({ title, message })
   }
 
   const nameChanged = name.trim() !== (profile?.name ?? '')
@@ -56,12 +59,37 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
 
-  async function save() {
+  /** Human list of the fields that differ from the loaded profile. */
+  const changes = useMemo(() => {
+    if (!profile) return [] as string[]
+    const out: string[] = []
+    if (nameChanged) out.push(`Nombre: ${profile.name} → ${name.trim()}`)
+    if ((profile.ruc ?? '') !== ruc.trim()) out.push(`RUC: ${profile.ruc ?? '—'} → ${ruc.trim() || '—'}`)
+    if ((profile.address ?? '') !== address.trim()) out.push('Dirección')
+    if ((profile.phone ?? '') !== phone.trim()) out.push('Teléfono')
+    if (profile.currency !== currency) out.push(`Moneda: ${profile.currency} → ${currency}`)
+    const loadedRate = profile.exchangeRateNioPerUsd != null ? String(profile.exchangeRateNioPerUsd) : ''
+    if (loadedRate !== rate.trim()) out.push(`Tasa de cambio: ${loadedRate || '—'} → ${rate.trim() || '—'}`)
+    return out
+  }, [profile, nameChanged, name, ruc, address, phone, currency, rate])
+
+  /** Validate, then ask with the exact list of changes (no silent submit). */
+  function requestSave() {
     const parsed = rate.trim() === '' ? null : Number(rate)
     if (parsed != null && !(parsed > 0)) {
       setError('La tasa de cambio debe ser un número mayor que cero.')
       return
     }
+    setError(null)
+    if (changes.length === 0) {
+      showNotice('Sin cambios que guardar.', 'Los datos de la agencia ya están al día.')
+      return
+    }
+    setConfirmOpen(true)
+  }
+
+  async function save() {
+    const parsed = rate.trim() === '' ? null : Number(rate)
     setSaving(true)
     setError(null)
     try {
@@ -73,15 +101,25 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
         exchangeRateNioPerUsd: parsed,
       }
       if (nameChanged) payload.name = name.trim()
-      const updated = await configApi.updateInfo(payload)
+      await configApi.updateInfo(payload)
+      // Refresh from the server: the card shows what was really persisted
+      // (e.g. server-side normalization), never just the local draft.
+      const updated = await configApi.info()
       setProfile(updated)
       setName(updated.name)
-      showNotice('Información guardada.')
+      setRuc(updated.ruc ?? '')
+      setAddress(updated.address ?? '')
+      setPhone(updated.phone ?? '')
+      setCurrency(updated.currency)
+      setRate(updated.exchangeRateNioPerUsd != null ? String(updated.exchangeRateNioPerUsd) : '')
+      setSavedAt(new Date())
+      showNotice('Información actualizada.', 'Los cambios ya se aplican a las facturas nuevas.')
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''
       setError(/once per month/i.test(msg) ? 'El nombre de la agencia solo se puede cambiar una vez cada mes.' : msg || 'No se pudo guardar.')
     } finally {
       setSaving(false)
+      setConfirmOpen(false)
     }
   }
 
@@ -90,7 +128,7 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
   return (
     <div class="flex flex-col gap-4">
       {error && <p class="text-sm text-red-600">{error}</p>}
-      {notice && <p class="text-sm text-green-700">{notice}</p>}
+      <Toast open={notice !== null} title={notice?.title ?? ''} message={notice?.message} onClose={() => setNotice(null)} />
       <Card class="p-5">
         <div class="grid gap-6 lg:grid-cols-2">
           {/* Left: agency logo, then the display name below it */}
@@ -162,8 +200,16 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
               RUC, dirección y teléfono (opcionales) aparecen bajo el nombre de la agencia en cada factura. La moneda define el símbolo de los montos: $ para USD, C$ para NIO. La tasa de cambio se captura manualmente (fuente: Manual) y se usará para conversiones futuras.
             </p>
             {canWrite && (
-              <div class="flex justify-end">
-                <Button onClick={save} disabled={saving}>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                {savedAt && (
+                  <span
+                    class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100"
+                  >
+                    <CheckCircle2 class="h-3.5 w-3.5" aria-hidden="true" />
+                    Guardado {savedAt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                <Button onClick={requestSave} disabled={saving}>
                   <Save class="h-4 w-4" aria-hidden="true" />
                   {saving ? 'Guardando…' : 'Guardar'}
                 </Button>
@@ -172,6 +218,29 @@ function InfoTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
           </div>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => (!saving ? setConfirmOpen(false) : undefined)}
+        onConfirm={() => void save()}
+        variant="warning"
+        title="¿Guardar los cambios de la información?"
+        confirmLabel="Guardar cambios"
+        loading={saving}
+        message={
+          <span class="block space-y-2">
+            <span class="block">Vas a actualizar los datos de la agencia con estos cambios:</span>
+            <ul class="list-disc space-y-0.5 pl-4 text-gray-700">
+              {changes.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+            <span class="block text-xs text-gray-500">
+              Se reflejan en las facturas nuevas. El nombre de la agencia solo se puede cambiar una vez cada mes.
+            </span>
+          </span>
+        }
+      />
     </div>
   )
 }
@@ -728,10 +797,10 @@ const KIND_HINT: Record<PriceModel, string> = {
 }
 
 /** One editable card = the two AIR/MAR entries of the current published version.
- *  Fixed cards have no per-entry name: the table name is the service name. */
+ *  Neither kind has a per-entry name: the table name is the service name. */
 type CardDraft = {
-  air: { name: string; price: string; cost: string }
-  mar: { name: string; price: string; cost: string }
+  air: { price: string; cost: string }
+  mar: { price: string; cost: string }
 }
 
 function toCardDraft(card: RateCardInfo): CardDraft {
@@ -739,21 +808,21 @@ function toCardDraft(card: RateCardInfo): CardDraft {
   const a = entry('AIR')
   const m = entry('MAR')
   return {
-    air: { name: a?.name ?? '', price: a ? String(a.price) : '', cost: a ? String(a.cost) : '' },
-    mar: { name: m?.name ?? '', price: m ? String(m.price) : '', cost: m ? String(m.cost) : '' },
+    air: { price: a ? String(a.price) : '', cost: a ? String(a.cost) : '' },
+    mar: { price: m ? String(m.price) : '', cost: m ? String(m.cost) : '' },
   }
 }
 
-/** Both entries must be complete — a card is a single AIR/MAR pair. Fixed cards
- *  stamp the table name on the entries so no generic "Regular" row is stored. */
-function draftToEntries(d: CardDraft, tableName: string, isFixed: boolean): RateCardEntryInput[] {
+/** Both entries must be complete — a card is a single AIR/MAR pair. The table
+ *  name is stamped on the entries so no per-entry "categoría" is stored. */
+function draftToEntries(d: CardDraft, tableName: string): RateCardEntryInput[] {
   const out: RateCardEntryInput[] = []
   for (const key of ['air', 'mar'] as const) {
     const f = d[key]
     if (f.price === '') continue
     out.push({
       serviceType: key === 'air' ? 'AIR' : 'MAR',
-      name: isFixed ? tableName : f.name.trim() || 'Regular',
+      name: tableName,
       price: Number(f.price) || 0,
       cost: f.cost === '' ? 0 : Number(f.cost) || 0,
     })
@@ -768,8 +837,8 @@ type EditDraft = {
   isDefault: boolean
   makeDefault: boolean
   name: string
-  air: { name: string; price: string; cost: string }
-  mar: { name: string; price: string; cost: string }
+  air: { price: string; cost: string }
+  mar: { price: string; cost: string }
 }
 
 function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) {
@@ -797,6 +866,9 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   const [edit, setEdit] = useState<EditDraft | null>(null)
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'save'; id: string; name: string } | null>(null)
   const [notice, setNotice] = useState<{ title: string; message?: string } | null>(null)
+  /** Local paging of the rate-card cards: one card (table) = one item. */
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
   // The Worker resolves the organization from the session (never the payload).
   const agency = user.agency
 
@@ -833,6 +905,10 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
   // Only weight and fixed have UI today; volume stays announced but disabled.
   const kinds = RATE_KINDS.filter((k) => k !== 'volume' && (k !== 'fixed' || flexible))
   const kind = kinds.includes(activeKind) ? activeKind : kinds[0]
+  // A different billing kind or page size is a new result set: start at page 1.
+  useEffect(() => {
+    setPage(1)
+  }, [kind, pageSize])
   const cardsOf = (k: PriceModel) => cards.filter((c) => (c.pricingKind ?? 'weight') === k)
   // The default always leads its group: the owner sees it first without hunting.
   const sortGroup = (list: RateCardInfo[]) =>
@@ -855,14 +931,14 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     })
   }
 
-  function updateField(key: 'air' | 'mar', field: 'name' | 'price' | 'cost', value: string) {
+  function updateField(key: 'air' | 'mar', field: 'price' | 'cost', value: string) {
     setEdit((prev) => (prev ? { ...prev, [key]: { ...prev[key], [field]: value } } : prev))
   }
 
   async function createCard() {
     if (!newName.trim() || newModel === 'volume' || (newModel === 'fixed' && !flexible)) return
     const num = (v: string) => (v.trim() === '' ? 0 : Number(v) || 0)
-    const entryName = newModel === 'fixed' ? newName.trim() : 'Regular'
+    const entryName = newName.trim()
     const air = { name: entryName, price: num(newAirPrice), cost: num(newAirCost) }
     const mar = { name: entryName, price: num(newMarPrice), cost: num(newMarCost) }
     // Creating a table with a zero/empty price would bill $0 for its whole
@@ -953,8 +1029,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       } else {
         if (!edit) return
         setSaving(c.id)
-        const isFixed = edit.pricingKind === 'fixed'
-        const entries = draftToEntries(edit, edit.name.trim(), isFixed)
+        const entries = draftToEntries(edit, edit.name.trim())
         await configApi.replaceCardEntries(c.id, entries)
         if (edit.name.trim() !== edit.originalName) {
           await configApi.renameRateCard(c.id, edit.name.trim())
@@ -979,12 +1054,14 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     }
   }
 
-  if (loading && cards.length === 0) return <Spinner label="Cargando tarifas…" />
-
   // One tab per billing kind: only the active group is shown, and the tab itself
   // carries that group's default so the owner sees it without opening anything.
   const activeCards = sortGroup(cardsOf(kind))
   const activeDefault = activeCards.find((c) => c.isDefault)
+  // Each rate table counts as one item for paging.
+  const totalPages = Math.max(1, Math.ceil(activeCards.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const visibleCards = activeCards.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   const entryPriceLabel = (isFixed: boolean) => (isFixed ? `Precio por carga (${currency})` : `Precio por libra (${currency})`)
   const entryCostLabel = (isFixed: boolean) => (isFixed ? `Costo por carga (${currency})` : `Costo por libra (${currency})`)
 
@@ -1001,6 +1078,8 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
     if (moneyMissing(newMarCost)) return 'El costo de Marítimo debe ser mayor a 0.'
     return null
   })()
+
+  if (loading && cards.length === 0) return <Spinner label="Cargando tarifas…" />
 
   return (
     <div class="flex flex-col gap-5">
@@ -1093,7 +1172,7 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
         )}
 
         <div class="grid gap-3 lg:grid-cols-2">
-          {activeCards.map((card) => {
+          {visibleCards.map((card) => {
             const isFixed = card.currentVersion.priceModel === 'fixed'
             const entryOf = (s: 'AIR' | 'MAR') => card.currentVersion.entries.find((e) => e.serviceType === s)
             return (
@@ -1115,14 +1194,10 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                     const service = key === 'air' ? 'AIR' : 'MAR'
                     const entry = entryOf(service)
                     const label = key === 'air' ? 'Aéreo' : 'Marítimo'
-                    // Fixed services have no per-entry name; a weight card's entry
-                    // name is its tier, shown only when it adds information.
-                    const tier = !isFixed && entry?.name && entry.name !== 'Regular' && entry.name !== card.name ? entry.name : null
                     return (
                       <div key={key} class="rounded-lg border border-gray-100 p-3">
                         <div class="mb-2 flex items-center gap-1.5">
                           <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">{label}</span>
-                          {tier && <span class="truncate text-[11px] text-gray-400">{tier}</span>}
                         </div>
                         <div class="grid grid-cols-2 gap-2 text-sm">
                           <div>
@@ -1142,6 +1217,19 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
             )
           })}
         </div>
+
+        {activeCards.length > 0 && (
+          <Card>
+            <Pagination
+              page={currentPage}
+              count={activeCards.length}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              noun={activeCards.length === 1 ? 'tabla' : 'tablas'}
+            />
+          </Card>
+        )}
       </section>
 
       {cards.length === 0 && (
@@ -1255,13 +1343,6 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
                   return (
                     <div key={key} class="rounded-lg border border-gray-100 p-3">
                       <div class="mb-2 text-xs font-semibold text-gray-600">{label}</div>
-                      {!isFixed && (
-                        <div class="mb-2">
-                          <Field label="Categoría">
-                            <input class={inputCls} value={f.name} placeholder="Regular" onChange={(e) => updateField(key, 'name', (e.target as HTMLInputElement).value)} />
-                          </Field>
-                        </div>
-                      )}
                       <Field label={entryPriceLabel(isFixed)}>
                         <input type="number" min="0" step="0.01" class={inputCls} value={f.price} placeholder="0.00" onInput={(e) => updateField(key, 'price', (e.target as HTMLInputElement).value)} />
                       </Field>
