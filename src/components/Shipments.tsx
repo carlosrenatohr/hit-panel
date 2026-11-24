@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Plus, RefreshCw, Search, SquareCheck, Square, X } from 'lucide-preact'
+import { CalendarDays, ChevronRight, Download, FileText, Package, Plus, RefreshCw, Search, SquareCheck, Square, X } from 'lucide-preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -24,12 +24,12 @@ import { DateRangePicker } from './DateRangePicker'
 import { fmtMoney } from '../lib/format'
 import LifecycleOverview, { PickupQuickAction, StatusSelector, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import FilterSheet from './shipments/FilterSheet'
-import { activeInvoiceLink, COLUMN_DEFS, ColumnPicker, isPaidInvoiceLink, PricingKindIcon, ServiceIcon, SortableHeader, useColumnPrefs } from './ShipmentColumns'
+import { activeInvoiceLink, COLUMN_DEFS, ColumnPicker, isPaidInvoiceLink, PricingKindIcon, ServiceIcon, useColumnPrefs } from './ShipmentColumns'
+import { SortableHeader } from './ui/SortableHeader'
+import { DEFAULT_PAGE_SIZE, Pagination, type PageSize } from './ui/Pagination'
 import ChargeSummary from './billing/ChargeSummary'
 import { AlertDialog, Button, Card, ConfirmDialog, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill, Tooltip } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
-
-const PAGE_SIZE = 25
 
 // Local calendar date (yyyy-mm-dd) — keeps the default reception date on its day.
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -48,23 +48,6 @@ function translateBulkError(msg: string): string {
   if (/an unexpected error/i.test(msg)) return 'Ocurrió un error inesperado. Intenta de nuevo.'
   return msg || 'Ocurrió un error. Intenta de nuevo.'
 }
-// Condensed page list with ellipses — always shows first, last, and a window
-// around the current page. Keeps the pager a fixed width no matter how many
-// thousands of packages accumulate.
-function pageWindow(current: number, total: number): (number | '…')[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const keep = new Set([1, total, current, current - 1, current + 1])
-  const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b)
-  const out: (number | '…')[] = []
-  let prev = 0
-  for (const p of sorted) {
-    if (p - prev > 1) out.push('…')
-    out.push(p)
-    prev = p
-  }
-  return out
-}
-
 export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, statusSeed }: { user: SessionUser; onOpen: (guia: string) => void; clientSeed?: string | null; unassignedSeed?: boolean; statusSeed?: string | null }) {
   const colPrefs = useColumnPrefs()
   const visibleCols = colPrefs.columns
@@ -93,6 +76,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     }
   })
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
   // Re-invalidates list + cards on demand (refresh button, post-mutation reload)
   // without changing the filters. `dataRev` propagates mutations from any view.
   const [rev, setRev] = useState(0)
@@ -110,7 +94,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   // Keys del gate: cambian con filtros/página/org o con `rev` (recarga manual).
   // Un refetch del bus con la misma key es silencioso — la tabla no se va a un
   // spinner (eso era el parpadeo al volver a la pestaña).
-  const listKey = JSON.stringify([filters, page, selectedOrg, rev])
+  const listKey = JSON.stringify([filters, page, pageSize, selectedOrg, rev])
   const { loading, begin: beginList, done: doneList } = useFetchGate(listKey)
   // Per-status totals for the lifecycle cards (see the summary effect below).
   const [summary, setSummary] = useState<Partial<Record<ShipmentStatus, number>>>({})
@@ -439,7 +423,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     beginList()
     let cancelled = false
     setErr(null)
-    listPackages({ ...filters, page, pageSize: PAGE_SIZE, organizationId: selectedOrg })
+    listPackages({ ...filters, page, pageSize, organizationId: selectedOrg })
       .then((r) => {
         if (cancelled) return
         setRows(r.rows)
@@ -732,8 +716,6 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     setShowCreate(false)
     setCreateError(null)
   }
-
-  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   function openCreate() {
     setCreateError(null)
@@ -1126,51 +1108,15 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             </tbody>
           </table>
         </div>
-        {/* Pagination — numeric, condensed with ellipses */}
-        <div class="flex items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 text-sm">
-          <span class="hidden shrink-0 text-gray-500 sm:block">
-            {count} resultados · pág. {page}/{pages}
-          </span>
-          <nav class="flex flex-1 items-center justify-end gap-1" aria-label="Paginación">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              aria-label="Anterior"
-              class="rounded-lg px-2 py-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              <ChevronLeft class="h-4 w-4" aria-hidden="true" />
-            </button>
-            {pageWindow(page, pages).map((p, i) =>
-              p === '…' ? (
-                <span key={`e${i}`} class="px-1.5 text-gray-400">
-                  …
-                </span>
-              ) : (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPage(p)}
-                  aria-current={p === page ? 'page' : undefined}
-                  class={`min-w-[2rem] rounded-lg px-2 py-1.5 text-center tabular-nums transition-colors ${
-                    p === page ? 'bg-primary font-semibold text-white' : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  {p}
-                </button>
-              ),
-            )}
-            <button
-              type="button"
-              disabled={page >= pages}
-              onClick={() => setPage((p) => Math.min(pages, p + 1))}
-              aria-label="Siguiente"
-              class="rounded-lg px-2 py-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
-            >
-              <ChevronRight class="h-4 w-4" aria-hidden="true" />
-            </button>
-          </nav>
-        </div>
+        <Pagination
+          page={page}
+          count={count}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+          noun="resultados"
+          disabled={loading}
+        />
       </Card>
 
       {/* ── Create Package Modal ── */}
