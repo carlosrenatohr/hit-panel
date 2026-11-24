@@ -140,7 +140,7 @@ describe('Configuración › Tarifas', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }))
 
     const info = await screen.findByRole('dialog', { name: 'Tarifa en cero' })
-    expect(within(info).getByText(/no puede ser la tarifa por defecto/)).toBeTruthy()
+    expect(within(info).getByText(/El precio y el costo de Aéreo y Marítimo deben ser mayores a 0/)).toBeTruthy()
     fireEvent.click(within(info).getByRole('button', { name: 'Entendido' }))
     expect(setRateCardDefault).not.toHaveBeenCalled()
     expect(await screen.findByRole('dialog', { name: 'Editar tabla de tarifas' })).toBeTruthy()

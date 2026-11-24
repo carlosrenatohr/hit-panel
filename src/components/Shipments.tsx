@@ -132,7 +132,9 @@ function SortControl({
   )
 }
 
-// Condensed page list with ellipses — always shows first, last, and a window around the current// page. Keeps the pager a fixed width no matter how many thousands of packages accumulate.
+// Condensed page list with ellipses — always shows first, last, and a window
+// around the current page. Keeps the pager a fixed width no matter how many
+// thousands of packages accumulate.
 function pageWindow(current: number, total: number): (number | '…')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const keep = new Set([1, total, current, current - 1, current + 1])
