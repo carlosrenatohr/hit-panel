@@ -25,14 +25,22 @@ import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import { DateRangePicker } from './DateRangePicker'
 import { SectionPicker, useReportSections } from './reports/ReportSections'
 import { MultiSelect } from './ui/MultiSelect'
+import { StatusFilterChips } from './ui/StatusFilter'
+import { STATUS_ICON } from './shipments/LifecycleOverview'
+import { STATUS_SOFT } from '../lib/format'
 import { SplitButton } from './ui/SplitButton'
-import { Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
+import { Button, Card, IconButton, inputCls, SectionTitle, Spinner, StatusDot } from './ui'
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 const BASE_FONT = { family: 'Inter, system-ui, sans-serif', size: 12 }
+const PRICING_KIND_LABEL: Record<string, string> = {
+  weight: 'Tarifa por peso',
+  fixed: 'Cuota fija',
+  volume: 'Por volumen',
+}
 const EXPORT_CAP = 5000
 
 export default function Reports({ user }: { user: SessionUser }) {
@@ -65,11 +73,26 @@ export default function Reports({ user }: { user: SessionUser }) {
       cancelled = true
     }
   }, [dataRev])
-  const shown = useMemo(() => {
+  // Billing partition first — the status chips read their counts from it, so the
+  // numbers under "Todos" always match what the table/charts would show.
+  const billingRows = useMemo(() => {
     if (billingFilter === 'facturadas') return rows.filter((r) => linkedIds.has(r.id))
     if (billingFilter === 'sin') return rows.filter((r) => !linkedIds.has(r.id))
     return rows
   }, [rows, billingFilter, linkedIds])
+  // Status filtering is client-side: the dataset for the period is already in
+  // memory, so toggling a chip is instant, cumulative and costs zero requests.
+  const shown = useMemo(() => {
+    const statuses = filters.statuses
+    if (!statuses?.length) return billingRows
+    const wanted = new Set(statuses)
+    return billingRows.filter((r) => wanted.has(r.effective_status))
+  }, [billingRows, filters.statuses])
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const r of billingRows) counts[r.effective_status] = (counts[r.effective_status] ?? 0) + 1
+    return counts
+  }, [billingRows])
   // "vs período anterior" counts come from the server (no billing filter there) — only honest when unfiltered.
   const showTrend = billingFilter === 'all'
   const [err, setErr] = useState<string | null>(null)
@@ -108,13 +131,14 @@ export default function Reports({ user }: { user: SessionUser }) {
   // request can't be overwritten by a slower stale one.
   const [rev, setRev] = useState(0)
   // Gate: un refetch del bus con los mismos filtros es silencioso (sin spinner).
-  const rowsKey = JSON.stringify([filters, rev])
+  // `statuses` is deliberately out of the query: the chips filter in memory.
+  const rowsKey = JSON.stringify([{ ...filters, statuses: undefined }, rev])
   const { loading, begin: beginRows, done: doneRows } = useFetchGate(rowsKey)
   useEffect(() => {
     beginRows()
     let cancelled = false
     setErr(null)
-    exportPackages({ ...filters, organizationId }, EXPORT_CAP)
+    exportPackages({ ...filters, statuses: undefined, organizationId }, EXPORT_CAP)
       .then((r) => !cancelled && setRows(r))
       .catch(() => !cancelled && setErr('No se pudieron cargar los datos.'))
       .finally(() => !cancelled && doneRows())
@@ -144,8 +168,8 @@ export default function Reports({ user }: { user: SessionUser }) {
     prevFrom.setDate(prevFrom.getDate() - (spanDays - 1))
     let cancelled = false
     Promise.all([
-      listPackages({ ...filters, organizationId, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
-      listPackages({ ...filters, organizationId, statuses: ['entregado'], from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+      listPackages({ ...filters, statuses: undefined, organizationId, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
+      listPackages({ ...filters, statuses: ['entregado'], organizationId, from: ymd(prevFrom), to: ymd(prevTo), page: 1, pageSize: 1 }),
     ])
       .then(([totalRes, entRes]) => !cancelled && setPrev({ total: totalRes.count, entregados: entRes.count }))
       .catch(() => !cancelled && setPrev(null))
@@ -310,6 +334,7 @@ export default function Reports({ user }: { user: SessionUser }) {
     summaryList(filters.providerIds, (id) => providerLabel(providers.find((p) => p.id === id)?.code) ?? id),
     summaryList(filters.statuses, (s) => STATUS_LABEL[s as ShipmentStatus] ?? s),
     summaryList(filters.services, (s) => SERVICE_LABEL[s] ?? s),
+    filters.pricingKind && PRICING_KIND_LABEL[filters.pricingKind],
     billingFilter !== 'all' && (billingFilter === 'sin' ? 'Sin facturar' : 'Facturadas'),
     (filters.from || filters.to) && `${filters.from || 'inicio'} – ${filters.to || 'hoy'}`,
   ]
@@ -350,9 +375,11 @@ export default function Reports({ user }: { user: SessionUser }) {
           </div>
         </div>
 
-        <Card class="p-4">
-          <div class="grid grid-cols-2 gap-3 lg:grid-cols-7">
-            <div class="relative col-span-2 lg:col-span-2">
+        <Card class="space-y-3 p-4">
+          {/* Row 1: the wide controls (search + period). Row 2: the scoping
+              selects, in the same order they narrow the data. */}
+          <div class="flex flex-wrap items-end gap-2">
+            <div class="relative min-w-[240px] flex-1">
               <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
               <input
                 class={`${inputCls} w-full pl-9`}
@@ -361,31 +388,66 @@ export default function Reports({ user }: { user: SessionUser }) {
                 onInput={(e) => setSearchInput((e.target as HTMLInputElement).value)}
               />
             </div>
-            <MultiSelect
-              options={providers.filter((p): p is Provider & { id: string } => !!p.id).map((p) => ({ value: p.id, label: providerLabel(p.code) }))}
-              selected={filters.providerIds ?? []}
-              onChange={(v) => patch({ providerIds: v.length ? v : undefined })}
-              placeholder="Proveedores"
-            />
-            <MultiSelect
-              options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
-              selected={filters.statuses ?? []}
-              onChange={(v) => patch({ statuses: v.length ? v : undefined })}
-              placeholder="Estados"
-            />
-            <MultiSelect
-              options={[{ value: 'aereo', label: 'Aéreo' }, { value: 'maritimo', label: 'Marítimo' }]}
-              selected={filters.services ?? []}
-              onChange={(v) => patch({ services: v.length ? v : undefined })}
-              placeholder="Servicio"
-            />
-            <select class={inputCls} value={billingFilter} onChange={(e) => setBillingFilter((e.target as HTMLSelectElement).value as 'all' | 'sin' | 'facturadas')}>
-              <option value="all">Facturación</option>
-              <option value="sin">Sin facturar</option>
-              <option value="facturadas">Facturadas</option>
-            </select>
-            <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
+            <div class="min-w-[240px]">
+              <DateRangePicker from={filters.from} to={filters.to} onChange={(from, to) => patch({ from, to })} />
+            </div>
           </div>
+          <div class="flex flex-wrap items-center gap-2">
+            {/* A single-provider agency gains nothing from a provider filter. */}
+            {providers.length > 1 && (
+              <div class="w-[170px]">
+                <MultiSelect
+                  options={providers.filter((p): p is Provider & { id: string } => !!p.id).map((p) => ({ value: p.id, label: providerLabel(p.code) }))}
+                  selected={filters.providerIds ?? []}
+                  onChange={(v) => patch({ providerIds: v.length ? v : undefined })}
+                  placeholder="Proveedores"
+                />
+              </div>
+            )}
+            <div class="w-[170px]">
+              <MultiSelect
+                options={[{ value: 'aereo', label: 'Aéreo' }, { value: 'maritimo', label: 'Marítimo' }]}
+                selected={filters.services ?? []}
+                onChange={(v) => patch({ services: v.length ? v : undefined })}
+                placeholder="Servicio"
+              />
+            </div>
+            <div class="w-[170px]">
+              <select
+                class={inputCls}
+                value={filters.pricingKind ?? ''}
+                aria-label="Tipo de tarifa"
+                onChange={(e) => patch({ pricingKind: ((e.target as HTMLSelectElement).value || undefined) as ListFilters['pricingKind'] })}
+              >
+                <option value="">Tipo de tarifa</option>
+                <option value="weight">Por peso</option>
+                <option value="fixed">Cuota fija</option>
+                <option value="volume">Por volumen</option>
+              </select>
+            </div>
+            <div class="w-[160px]">
+              <select class={inputCls} value={billingFilter} aria-label="Facturación" onChange={(e) => setBillingFilter((e.target as HTMLSelectElement).value as 'all' | 'sin' | 'facturadas')}>
+                <option value="all">Facturación</option>
+                <option value="sin">Sin facturar</option>
+                <option value="facturadas">Facturadas</option>
+              </select>
+            </div>
+            {(filters.statuses?.length || filters.providerIds?.length || filters.providerId || filters.services?.length || filters.pricingKind || billingFilter !== 'all') && (
+              <Button variant="ghost" onClick={() => { patch({ statuses: undefined, providerIds: undefined, services: undefined, pricingKind: undefined }); setBillingFilter('all') }}>
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
+          {/* Status chips live right above the summary cards: the same icon +
+              colour vocabulary as Paquetería, multi-select, instant. */}
+          <StatusFilterChips
+            options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_LABEL[s], icon: STATUS_ICON[s], tone: STATUS_SOFT[s] }))}
+            selected={filters.statuses ?? []}
+            onChange={(v) => patch({ statuses: v.length ? v : undefined })}
+            counts={statusCounts}
+            loading={loading}
+            label="Filtrar reportes por estado"
+          />
         </Card>
       </div>
 
