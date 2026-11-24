@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // filter must always emit a single `or`. This test records the builder calls
 // instead of hitting the network.
 const log = vi.hoisted(() => ({ calls: [] as Array<{ m: string; args: unknown[] }> }))
+const rpc = vi.hoisted(() => ({ result: { data: null, error: null } as { data: unknown; error: unknown } }))
 
 const client = vi.hoisted(() => {
   const make = (): any =>
@@ -19,7 +20,7 @@ const client = vi.hoisted(() => {
         },
       },
     )
-  return { database: { from: () => make() } }
+  return { database: { from: () => make(), rpc: () => Promise.resolve(rpc.result) } }
 })
 
 vi.mock('@insforge/sdk', () => ({ createClient: () => client }))
@@ -27,7 +28,7 @@ vi.mock('./customer', () => ({
   customerApi: { list: vi.fn().mockResolvedValue({ rows: [{ id: 'c1' }], count: 1 }) },
 }))
 
-import { listPackages } from './insforge'
+import { createPackage, listPackages } from './insforge'
 
 const callsOf = (method: string) => log.calls.filter((c) => c.m === method)
 
@@ -60,5 +61,26 @@ describe('listPackages tariff-kind filter', () => {
     const kinds = callsOf('eq').filter((c) => c.args[0] === 'pricing_kind')
     expect(kinds).toHaveLength(1)
     expect(kinds[0].args[1]).toBe('fixed')
+  })
+})
+
+describe('createPackage RPC errors', () => {
+  beforeEach(() => {
+    rpc.result = { data: null, error: null }
+  })
+
+  // PostgREST errors are plain objects, so the form used to show the generic
+  // "Error al crear el paquete." instead of the cause.
+  it('surfaces a 42P10 as an actionable message', async () => {
+    rpc.result = {
+      data: null,
+      error: { code: '42P10', message: 'there is no unique or exclusion constraint matching the ON CONFLICT specification' },
+    }
+    await expect(createPackage({ almacenId: 'G-1' })).rejects.toThrow(/42P10/)
+  })
+
+  it('keeps the database message for any other RPC failure', async () => {
+    rpc.result = { data: null, error: { code: 'P0001', message: 'client is required' } }
+    await expect(createPackage({ almacenId: 'G-1' })).rejects.toThrow('client is required')
   })
 })

@@ -704,6 +704,12 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         const created = await customerApi.create({ name: client.name })
         clientId = created.id
         createdNewClient = true
+        // Persist the new client in the form BEFORE the package call: if the package
+        // fails, the retry must reuse this id instead of creating a second client.
+        setCreateForm((f) => ({ ...f, client: { id: created.id, name: created.name } }))
+        // The client already exists on the server — refresh the pickers even if the
+        // package creation below fails.
+        bumpData('clients')
       }
       await createPackage({
         almacenId: createForm.almacenId.trim(),
