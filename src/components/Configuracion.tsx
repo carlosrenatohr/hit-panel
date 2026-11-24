@@ -865,21 +865,15 @@ function RatesTab({ user, canWrite }: { user: SessionUser; canWrite: boolean }) 
       setInfo({ title: 'Falta el nombre', message: 'Poné un nombre para identificar la tabla dentro de su tipo de cobro.' })
       return
     }
-    const airPrice = edit.air.price === '' ? null : Number(edit.air.price)
-    const marPrice = edit.mar.price === '' ? null : Number(edit.mar.price)
-    if (airPrice === null || marPrice === null) {
-      setInfo({
-        title: 'Faltan precios',
-        message: 'Completá el precio de Aéreo y Marítimo antes de guardar. El costo es opcional.',
-      })
-      return
-    }
-    const willBeDefault = edit.isDefault || edit.makeDefault
-    if (willBeDefault && (airPrice <= 0 || marPrice <= 0)) {
+    // Zero never saves, default or not: a non-default table can still be
+    // assigned to a client and would bill $0 there.
+    const moneyOk = (v: string) => v.trim() !== '' && Number(v) > 0
+    if (!moneyOk(edit.air.price) || !moneyOk(edit.mar.price) || !moneyOk(edit.air.cost) || !moneyOk(edit.mar.cost)) {
       setInfo({
         title: 'Tarifa en cero',
+        tone: 'warning',
         message:
-          'Una tabla con precios en cero no puede ser la tarifa por defecto: se cobraría $0. Cargá el precio de Aéreo y Marítimo, o desmarcá la opción de predeterminada.',
+          'El precio y el costo de Aéreo y Marítimo deben ser mayores a 0. Una tabla en cero no se guarda: se cobraría $0 y el cobro de los paquetes quedaría sin sustento.',
       })
       return
     }

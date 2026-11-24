@@ -692,11 +692,6 @@ describe('Shipments', () => {
     render(<Shipments user={mockUser} onOpen={() => {}} />);
     await screen.findAllByText('910500');
     expect(screen.queryByLabelText('Filtrar por proveedor')).toBeNull();
-
-    vi.mocked(getProviders).mockResolvedValue([
-      { id: 'g1', code: 'global_connection', name: 'Global Connection', isDefault: true },
-      { id: 'g2', code: 'everest', name: 'Everest', isDefault: false },
-    ]);
   });
 
   it('shows the tariff filter only when the agency mixes billing kinds', async () => {
