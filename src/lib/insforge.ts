@@ -10,7 +10,7 @@ export const insforge = createClient({ baseUrl, anonKey })
 
 // Lightweight column set for the list view (skip heavy/internal-only fields).
 const LIST_COLS =
-  'id,almacen_id,organization_id,tracking_number,status,manual_status,effective_status,service_type,service_type_override,effective_service_type,weight_lb,weight_override_lb,effective_weight_lb,pieces,origin_office,dest_office,referencia_name,client_id,billing_clients(name),photo_ref,received_at,last_event_at,scraped_at,provider_id,pricing_kind,customer_charge,customer_unit,rate_card_id,providers(code,name,base_url),invoice_packages(invoice_id,active,invoices(status))'
+  'id,almacen_id,organization_id,tracking_number,status,manual_status,effective_status,service_type,service_type_override,effective_service_type,weight_lb,weight_override_lb,effective_weight_lb,pieces,origin_office,dest_office,referencia_name,client_id,billing_clients(name),photo_ref,received_at,last_event_at,scraped_at,provider_id,pricing_kind,customer_charge,customer_unit,pricing_currency,rate_card_id,providers(code,name,base_url),invoice_packages(invoice_id,active,invoices(status))'
 
 // ── Auth ────────────────────────────────────────────────────────────────────────
 export async function signIn(email: string, password: string): Promise<void> {

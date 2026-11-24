@@ -4,6 +4,7 @@ import {
   cleanName,
   daysAgo,
   fmtDate,
+  fmtMoney,
   foldAccents,
   isHazmat,
   officeFlag,
@@ -11,7 +12,7 @@ import {
 } from '../lib/format'
 import type { Pkg, ShipmentStatus, Tag } from '../lib/types'
 import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot, Tooltip } from './ui'
-import { GripVertical, Lock, Package, Plane, Receipt, Search, Ship, SlidersHorizontal, Weight, X } from 'lucide-preact'
+import { ArrowDown, ArrowUp, ArrowUpDown, GripVertical, Lock, Package, Plane, Receipt, Search, Ship, SlidersHorizontal, Weight, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
 export interface ColCtx {
@@ -24,8 +25,52 @@ export interface ColCtx {
 export interface ColumnDef {
   key: string
   label: string
+  /** Columna de `packages` por la que ordena el header. Sin field → no ordenable. */
+  sortField?: string
   /** `ctx` es opcional para que las previews del picker rendericen sin etiquetas. */
   render: (p: Pkg, ctx?: ColCtx) => JSX.Element | string
+}
+
+/** Header ordenable: un solo campo activo a la vez (el dueño del estado es la lista).
+ *  Lucide ArrowUpDown = sin ordenar, ArrowUp = ascendente, ArrowDown = descendente.
+ *  El tooltip va abajo porque el header vive dentro de un contenedor con scroll. */
+export function SortableHeader({
+  label,
+  field,
+  sortCol,
+  ascending,
+  onSort,
+}: {
+  label: string
+  field: string
+  sortCol: string
+  ascending: boolean
+  onSort: (field: string, ascending: boolean) => void
+}) {
+  const active = sortCol === field
+  const Icon = active ? (ascending ? ArrowUp : ArrowDown) : ArrowUpDown
+  const nextAscending = active ? !ascending : true
+  const state = active ? (ascending ? 'Orden ascendente' : 'Orden descendente') : 'Sin orden'
+  return (
+    <Tooltip text={`${state} · clic para ${nextAscending ? 'ascendente' : 'descendente'}`} placement="bottom" align="start">
+      <button
+        type="button"
+        onClick={() => onSort(field, nextAscending)}
+        aria-label={`Ordenar por ${label}`}
+        class={`group/sort inline-flex items-center gap-1 uppercase tracking-wide transition-colors ${
+          active ? 'text-secondary' : 'text-gray-500 hover:text-secondary'
+        }`}
+      >
+        <span>{label}</span>
+        <Icon
+          class={`h-3 w-3 shrink-0 transition-colors ${
+            active ? 'text-primary' : 'text-gray-400 group-hover/sort:text-gray-500'
+          }`}
+          aria-hidden="true"
+        />
+      </button>
+    </Tooltip>
+  )
 }
 
 const PRICING_KIND_META = {
@@ -93,6 +138,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'nombre',
     label: 'Nombre',
+    sortField: 'referencia_name',
     render: (p) => (
       <div class="flex items-center gap-1.5">
         <span class="text-gray-700">{cleanName(p.referencia_name)}</span>
@@ -104,15 +150,17 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'tracking',
     label: 'Tracking',
+    sortField: 'tracking_number',
     render: (p) => <div class="max-w-[160px] truncate font-mono text-xs text-gray-500">{p.tracking_number ?? '—'}</div>,
   },
   { key: 'provider', label: 'Proveedor', render: (p) => <span class="text-gray-600">{providerLabel(p.providers?.code)}</span> },
   // Sin el lápiz de "estado manual": la columna se queda limpia y el detalle explica
   // el estado con "Estado fijado manualmente".
-  { key: 'status', label: 'Estado', render: (p) => <StatusDot s={p.effective_status as ShipmentStatus} /> },
+  { key: 'status', label: 'Estado', sortField: 'status_rank', render: (p) => <StatusDot s={p.effective_status as ShipmentStatus} /> },
   {
     key: 'service',
     label: 'Servicio',
+    sortField: 'service_type',
     render: (p) => (
       <span class="inline-flex items-center gap-1.5" title={p.effective_service_type ?? p.service_type ?? undefined}>
         <ServiceIcon service={p.effective_service_type} />
@@ -123,12 +171,14 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'tarifa',
     label: 'Tipo de tarifa',
+    sortField: 'pricing_kind',
     // Icon-only: the card name added nothing the detail does not already show.
     render: (p) => <PricingKindIcon kind={p.pricing_kind ?? 'weight'} />,
   },
   {
     key: 'carga',
     label: 'Carga',
+    sortField: 'effective_weight_lb',
     render: (p) => {
       // Peso principal = effective_weight_lb (coalesce weight_override_lb, weight_lb):
       // un peso fijado a mano por el staff se ve al toque, sin esperar al próximo scrape.
@@ -139,6 +189,18 @@ export const COLUMN_DEFS: ColumnDef[] = [
     },
   },
   {
+    // Dinero ya resuelto al crear (snapshot) — sirve para ordenar de mayor a menor.
+    key: 'cargo',
+    label: 'Cargo',
+    sortField: 'customer_charge',
+    render: (p) =>
+      p.customer_charge == null ? (
+        <span class="text-gray-300">—</span>
+      ) : (
+        <span class="text-gray-700">{fmtMoney(p.customer_charge, (p.pricing_currency as 'USD' | 'NIO' | null) ?? 'USD')}</span>
+      ),
+  },
+  {
     key: 'ruta',
     label: 'Ruta',
     render: (p) => <span class="text-gray-600">{(p.origin_office ?? '—') + ' → ' + (p.dest_office ?? '—')}</span>,
@@ -146,6 +208,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'recibido',
     label: 'Recibido Miami',
+    sortField: 'received_at',
     render: (p) => {
       // Days in the pipeline since Miami reception — shown until the package is delivered.
       const days = daysAgo(p.received_at)
@@ -161,6 +224,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'ultEvento',
     label: 'Últ. evento',
+    sortField: 'last_event_at',
     render: (p) => {
       const stale = daysAgo(p.last_event_at)
       const showStale = stale !== null && stale > 10 && p.effective_status !== 'entregado'
