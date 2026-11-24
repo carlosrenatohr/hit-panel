@@ -80,8 +80,10 @@ export default function Facturacion({ role }: { role: Role }) {
     setFilters((f) => ({ ...f, sort: field as InvoiceFilters['sort'], ascending }))
     setPage(1)
   }
+  // The default order (newest invoice first) is a real sort too: aria-sort has
+  // to describe what the table is actually showing, not just the clicked state.
   const sortState = (field: string): 'ascending' | 'descending' | 'none' =>
-    filters.sort === field ? (activeAscending ? 'ascending' : 'descending') : 'none'
+    activeSort === field ? (activeAscending ? 'ascending' : 'descending') : 'none'
 
   // Single fetch pipeline: the effect owns the request, its cleanup cancels the
   // previous in-flight one, so a slow response can never overwrite a newer one.

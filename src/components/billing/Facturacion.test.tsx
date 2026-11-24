@@ -44,6 +44,8 @@ describe('Facturacion — listado', () => {
     await renderAndWait('admin')
     const last = listInvoices.mock.calls.at(-1)![0] as Record<string, unknown>
     expect(last).toMatchObject({ page: 1, pageSize: 20 })
+    // The default order is newest-first; the header must say so to screen readers.
+    expect(screen.getByRole('columnheader', { name: /Factura/ })).toHaveAttribute('aria-sort', 'descending')
     expect(screen.getByText(/Mostrando/)).toHaveTextContent('Mostrando 1–1 de 1 factura')
   })
 
