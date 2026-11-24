@@ -1,7 +1,7 @@
 import { AlertTriangle, Biohazard, CheckCircle2, Clock, Loader2, X } from 'lucide-preact'
 import type { LucideIcon } from 'lucide-preact'
 import type { ComponentChildren, JSX } from 'preact'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { STATUS_DOT, STATUS_LABEL, STATUS_SOFT } from '../lib/format'
 import type { ShipmentStatus } from '../lib/types'
 
@@ -136,10 +136,11 @@ export function IconButton({
   )
 }
 
-/** Immediate hover tooltip (pure CSS — no JS delay). Wrap an icon-only button. */
-/** Hover/focus hint. `align` and `placement` exist so a tooltip on a button next
- *  to a viewport or scroll-container edge cannot push the page wider: the
- *  centered bubble used to add horizontal scroll to the whole page. */
+/** Hover/focus hint. The bubble is `position: fixed` and clamped to the viewport:
+ *  an absolutely positioned bubble inside a scroll container (the package table,
+ *  invoice rows, modals) pushed scrollWidth and got clipped, so the text stayed
+ *  hidden and the page flickered as it opened. `align`/`placement` still only
+ *  pick the preferred side; the clamp wins at the edges. */
 export function Tooltip({
   text,
   children,
@@ -151,15 +152,68 @@ export function Tooltip({
   align?: 'start' | 'center' | 'end'
   placement?: 'top' | 'bottom'
 }) {
-  const horizontal =
-    align === 'end' ? 'right-0' : align === 'start' ? 'left-0' : 'left-1/2 -translate-x-1/2'
-  const vertical = placement === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const bubbleRef = useRef<HTMLSpanElement>(null)
+  const [open, setOpen] = useState(false)
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+
+  const place = () => {
+    const anchor = anchorRef.current?.getBoundingClientRect()
+    if (!anchor || typeof window === 'undefined') return
+    const bubble = bubbleRef.current?.getBoundingClientRect()
+    const width = bubble?.width ?? 0
+    const height = bubble?.height ?? 0
+    const gap = 6
+    const margin = 8
+    const preferred =
+      align === 'start' ? anchor.left : align === 'end' ? anchor.right - width : anchor.left + anchor.width / 2 - width / 2
+    const left = Math.min(Math.max(margin, preferred), Math.max(margin, window.innerWidth - width - margin))
+    let top = placement === 'bottom' ? anchor.bottom + gap : anchor.top - height - gap
+    // Flip below when the bubble would leave the viewport at the top.
+    if (top < margin) top = anchor.bottom + gap
+    setCoords({ top, left })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    place()
+    const onScrollOrResize = () => place()
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, text, align, placement])
+
+  const show = () => {
+    setOpen(true)
+    place()
+  }
+  const hide = (e?: JSX.TargetedFocusEvent<HTMLSpanElement>) => {
+    const next = e?.relatedTarget as Node | null
+    if (next && anchorRef.current?.contains(next)) return
+    setOpen(false)
+  }
+
   return (
-    <span class="group relative inline-flex">
+    <span
+      ref={anchorRef}
+      class="inline-flex"
+      onMouseEnter={show}
+      onMouseLeave={() => setOpen(false)}
+      onFocusIn={show}
+      onFocusOut={hide}
+    >
       {children}
       <span
+        ref={bubbleRef}
         role="tooltip"
-        class={`pointer-events-none absolute ${vertical} ${horizontal} z-30 hidden w-max max-w-[min(14rem,calc(100vw-2rem))] whitespace-normal rounded-lg bg-secondary px-2.5 py-1.5 text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-100 group-hover:block group-hover:opacity-100 group-focus-within:opacity-100`}
+        style={{ top: `${coords?.top ?? 0}px`, left: `${coords?.left ?? 0}px` }}
+        class={`pointer-events-none fixed z-50 w-max max-w-[min(14rem,calc(100vw-2rem))] whitespace-normal rounded-lg bg-secondary px-2.5 py-1.5 text-[11px] font-normal leading-snug text-white shadow-lg transition-opacity duration-100 ${
+          open ? 'visible opacity-100' : 'invisible opacity-0'
+        }`}
       >
         {text}
       </span>
