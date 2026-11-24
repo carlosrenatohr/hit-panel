@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, act } from '@testing-library/preact'
+import { fireEvent, render, screen, waitFor, act, within } from '@testing-library/preact'
 import type { InvoiceListRow } from '../../lib/billing'
 import Facturacion from './Facturacion'
 import { bumpData } from '../../lib/dataVersion'
@@ -42,21 +42,22 @@ async function renderAndWait(role: 'admin' | 'billing' | 'viewer') {
 describe('Facturacion — archivar', () => {
   it('archives the invoice after confirmation and reloads the list', async () => {
     archiveInvoice.mockResolvedValue({ id: 'i1', archived: true })
-    const confirm = vi.fn().mockReturnValue(true)
-    vi.stubGlobal('confirm', confirm)
     await renderAndWait('admin')
 
     fireEvent.click(screen.getByLabelText('Archivar factura #7'))
-    expect(confirm).toHaveBeenCalledTimes(1)
+    // The shared dialog replaces window.confirm.
+    const dialog = await screen.findByRole('dialog', { name: 'Archivar factura' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archivar factura' }))
     await waitFor(() => expect(archiveInvoice).toHaveBeenCalledWith('i1', 'Archivada desde la lista'))
     await waitFor(() => expect(listInvoices.mock.calls.length).toBeGreaterThanOrEqual(3), { timeout: 2000 })
   })
 
   it('does not archive when the confirmation is declined', async () => {
-    vi.stubGlobal('confirm', vi.fn().mockReturnValue(false))
     await renderAndWait('admin')
 
     fireEvent.click(screen.getByLabelText('Archivar factura #7'))
+    const dialog = await screen.findByRole('dialog', { name: 'Archivar factura' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
     expect(archiveInvoice).not.toHaveBeenCalled()
   })
 

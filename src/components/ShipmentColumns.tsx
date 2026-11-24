@@ -8,11 +8,10 @@ import {
   isHazmat,
   officeFlag,
   providerLabel,
-  SERVICE_EMOJI,
 } from '../lib/format'
 import type { Pkg, ShipmentStatus, Tag } from '../lib/types'
 import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, StatusDot, Tooltip } from './ui'
-import { GripVertical, Lock, Package, Receipt, Search, SlidersHorizontal, Weight, X } from 'lucide-preact'
+import { GripVertical, Lock, Package, Plane, Receipt, Search, Ship, SlidersHorizontal, Weight, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
 export interface ColCtx {
@@ -49,6 +48,47 @@ export function PricingKindIcon({ kind }: { kind: 'weight' | 'fixed' | 'volume' 
   )
 }
 
+const SERVICE_META = {
+  aereo: { Icon: Plane, label: 'Aéreo' },
+  maritimo: { Icon: Ship, label: 'Marítimo' },
+} as const
+
+/** Service type as a Lucide icon in ONE neutral tone: it must not compete with
+ *  the colored tariff icons next to it. */
+export function ServiceIcon({ service }: { service: string | null | undefined }) {
+  if (!service) return <span class="text-gray-300">—</span>
+  const meta = SERVICE_META[service as keyof typeof SERVICE_META]
+  if (!meta) return <span class="text-gray-300">—</span>
+  const Icon = meta.Icon
+  return (
+    <Tooltip text={meta.label}>
+      <span class="inline-flex items-center text-slate-500" aria-label={meta.label} role="img">
+        <Icon class="h-4 w-4" aria-hidden="true" />
+      </span>
+    </Tooltip>
+  )
+}
+
+type InvoiceLink = NonNullable<Pkg['invoice_packages']>[number]
+
+/** PostgREST can hand a to-one embed as an object or a one-item array. */
+function linkStatus(link: InvoiceLink | null | undefined): string | null {
+  const inv = link?.invoices
+  if (!inv) return null
+  const row = Array.isArray(inv) ? inv[0] : inv
+  return row?.status ?? null
+}
+
+/** The link worth showing: an active PAID one wins over any other active link. */
+export function activeInvoiceLink(pkg: Pkg): InvoiceLink | null {
+  const links = (pkg.invoice_packages ?? []).filter((l) => l.active)
+  return links.find((l) => linkStatus(l) === 'PAID') ?? links[0] ?? null
+}
+
+export function isPaidInvoiceLink(link: InvoiceLink | null | undefined): boolean {
+  return linkStatus(link) === 'PAID'
+}
+
 export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'nombre',
@@ -74,8 +114,9 @@ export const COLUMN_DEFS: ColumnDef[] = [
     key: 'service',
     label: 'Servicio',
     render: (p) => (
-      <span title={p.effective_service_type ?? p.service_type ?? undefined}>
-        {p.effective_service_type ? SERVICE_EMOJI[p.effective_service_type] : '—'} {officeFlag(p.origin_office)}
+      <span class="inline-flex items-center gap-1.5" title={p.effective_service_type ?? p.service_type ?? undefined}>
+        <ServiceIcon service={p.effective_service_type} />
+        {officeFlag(p.origin_office)}
       </span>
     ),
   },

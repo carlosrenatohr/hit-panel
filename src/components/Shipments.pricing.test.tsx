@@ -16,6 +16,7 @@ vi.mock('../lib/insforge', () => ({
   getTagsForPackages: vi.fn().mockResolvedValue({}),
   exportPackages: vi.fn().mockResolvedValue([]),
   createPackage,
+  pricingKindAvailability: vi.fn().mockResolvedValue({ mixed: false }),
 }));
 
 const rateAssignments = vi.hoisted(() => vi.fn().mockResolvedValue([]))

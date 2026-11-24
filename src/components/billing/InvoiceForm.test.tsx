@@ -122,6 +122,14 @@ vi.mock('../ui/ClientSearch', () => ({
   ),
 }))
 
+
+/** Saving now goes through the shared confirmation dialog (no window.confirm). */
+async function confirmSubmit(label: 'Crear factura' | 'Guardar cambios') {
+  fireEvent.click(screen.getAllByText(label)[0])
+  const dialog = await screen.findByRole('dialog', { name: /Generar la factura|Guardar los cambios de la factura/ })
+  fireEvent.click(within(dialog).getByText(label))
+}
+
 function renderForm() {
   const onCreated = vi.fn()
   const onClose = vi.fn()
@@ -170,7 +178,7 @@ describe('InvoiceForm guided flow', () => {
     await waitFor(() => expect(screen.getByText('SG-1')).toBeTruthy())
     fireEvent.click(screen.getByText('SG-1'))
     await waitFor(() => expect(screen.getByText('SG-1')).toBeTruthy())
-    fireEvent.click(screen.getByText('Crear factura'))
+    await confirmSubmit('Crear factura')
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     const payload = createInvoice.mock.calls[0][0]
     expect(payload.status).toBe('DRAFT')
@@ -187,7 +195,7 @@ describe('InvoiceForm guided flow', () => {
     await waitFor(() => expect(unbilledPackages).toHaveBeenCalled())
     fireEvent.click(screen.getByText('SG-1'))
     await waitFor(() => expect(screen.getByText('Estándar')).toBeTruthy())
-    fireEvent.click(screen.getByText('Crear factura'))
+    await confirmSubmit('Crear factura')
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     const payload = createInvoice.mock.calls[0][0]
     expect(payload.lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't1' })
@@ -206,7 +214,7 @@ describe('InvoiceForm guided flow', () => {
     expect(tariff.selectedOptions[0]?.textContent).toBe('Estándar')
     expect(screen.getAllByText('$21.00').length).toBeGreaterThan(0)
     expect(screen.getAllByText('$7.00/lb').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByText('Crear factura'))
+    await confirmSubmit('Crear factura')
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     const payload = createInvoice.mock.calls[0][0]
     expect(payload.lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't1' })
@@ -225,7 +233,7 @@ describe('InvoiceForm guided flow', () => {
     expect(screen.queryByDisplayValue('VIP')).toBeNull()
     expect(screen.queryByText(/^Tier:/)).toBeNull()
     expect(screen.getAllByText('$16.50').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByText('Crear factura'))
+    await confirmSubmit('Crear factura')
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     expect(createInvoice.mock.calls[0][0].lines[0]).toMatchObject({ packageId: 'p1', rateTableId: 't-vip', tier: 'VIP' })
   })
@@ -252,7 +260,7 @@ describe('InvoiceForm guided flow', () => {
     // Line 1 keeps its own card; line 2 inherits the client's assigned card.
     expect(tariffs[0].value).toBe('t1')
     expect(tariffs[1].value).toBe('t-orig')
-    fireEvent.click(screen.getByText('Guardar cambios'))
+    await confirmSubmit('Guardar cambios')
     await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
     const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ rateTableId: string | null }> }
     expect(body.lines.map((l) => l.rateTableId)).toEqual(['t1', 't-orig'])
@@ -274,7 +282,7 @@ describe('InvoiceForm guided flow', () => {
     expect(screen.getByText('por unidad')).toBeTruthy()
     expect(screen.getAllByText('$25.00').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByText('Crear factura'))
+    await confirmSubmit('Crear factura')
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     const payload = createInvoice.mock.calls[0][0]
     expect(payload.lines[0]).toMatchObject({ packageId: 'p4', quantityLbs: 1, tier: 'FIXED' })
@@ -305,7 +313,7 @@ describe('InvoiceForm guided flow', () => {
     expect(screen.getAllByText('$25.00').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Utilidad').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByText('Guardar cambios'))
+    await confirmSubmit('Guardar cambios')
     await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
     const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ packageId: string | null; quantityLbs: number; tier: string }> }
     expect(body.lines).toHaveLength(1)
@@ -333,7 +341,7 @@ describe('InvoiceForm guided flow', () => {
     const linked = screen.getByText('SG-1').closest('button')
     expect(linked?.disabled).toBe(false)
     fireEvent.click(screen.getByText('SG-3'))
-    fireEvent.click(screen.getByText('Guardar cambios'))
+    await confirmSubmit('Guardar cambios')
     await waitFor(() => expect(updateInvoice).toHaveBeenCalledTimes(1))
     const body = updateInvoice.mock.calls[0][1] as { lines: Array<{ packageId: string | null }> }
     expect(body.lines.map((l) => l.packageId).filter(Boolean)).toEqual(['p1', 'p3'])
@@ -365,7 +373,7 @@ describe('InvoiceForm package-detail prefill (client rate)', () => {
     // for the org default.
     expect((screen.getByLabelText(/Tarifa/) as HTMLSelectElement).value).toBe('t-orig')
 
-    fireEvent.click(screen.getByText('Crear factura'))
+    await confirmSubmit('Crear factura')
     await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1))
     const payload = createInvoice.mock.calls[0][0]
     expect(payload.clientId).toBe('c-orig')

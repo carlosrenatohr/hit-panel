@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Plus, RefreshCw, Search, SquareCheck, Square, X } from 'lucide-preact'
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Package, Plus, RefreshCw, Search, SquareCheck, Square, X } from 'lucide-preact'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import MonthCalendar, { type CalendarEvent } from './MonthCalendar'
 import InvoiceDetail from './billing/InvoiceDetail'
@@ -14,7 +14,7 @@ import {
   STATUS_ORDER,
   toCSV,
 } from '../lib/format'
-import { createPackage, exportPackages, getProviders, getTagsForPackages, listPackages } from '../lib/insforge'
+import { createPackage, exportPackages, getProviders, getTagsForPackages, listPackages, pricingKindAvailability } from '../lib/insforge'
 import type { AgencyProvider, ListFilters } from '../lib/insforge'
 import { bumpData, useCounterVersion, useDataVersion, useFetchGate } from '../lib/dataVersion'
 import type { Pkg, ShipmentStatus, SessionUser, Tag } from '../lib/types'
@@ -24,9 +24,9 @@ import { DateRangePicker } from './DateRangePicker'
 import { fmtMoney } from '../lib/format'
 import LifecycleOverview, { PickupQuickAction, StatusSelector, TransportTabs, type ServiceFilter } from './shipments/LifecycleOverview'
 import FilterSheet from './shipments/FilterSheet'
-import { COLUMN_DEFS, ColumnPicker, PricingKindIcon, useColumnPrefs } from './ShipmentColumns'
+import { activeInvoiceLink, COLUMN_DEFS, ColumnPicker, isPaidInvoiceLink, PricingKindIcon, ServiceIcon, useColumnPrefs } from './ShipmentColumns'
 import ChargeSummary from './billing/ChargeSummary'
-import { AlertDialog, Button, Card, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill, Tooltip } from './ui'
+import { AlertDialog, Button, Card, ConfirmDialog, DaysBadge, Field, HazmatBadge, IconButton, inputCls, Modal, Spinner, StaleBadge, StatusPill, Tooltip } from './ui'
 import { billingApi, type BulkPreviewOutput } from '../lib/billing'
 
 const PAGE_SIZE = 25
@@ -65,8 +65,74 @@ const SORTS: { col: string; label: string; dir: 'asc' | 'desc' }[] = [
   { col: 'pieces', label: 'Piezas', dir: 'desc' },
 ]
 
-// Condensed page list with ellipses — always shows first, last, and a window around the current
-// page. Keeps the pager a fixed width no matter how many thousands of packages accumulate.
+/** Sort = field + direction as two explicit controls: the old single select
+ *  mixed both axes in its labels, so "asc" vs "desc" was never obvious. */
+function SortControl({
+  col,
+  ascending,
+  onChange,
+  compact = false,
+}: {
+  col: string
+  ascending: boolean
+  onChange: (col: string, ascending: boolean) => void
+  compact?: boolean
+}) {
+  const isRank = col === 'status_rank'
+  return (
+    <div class={`flex items-center gap-2 ${compact ? '' : 'flex-wrap'}`}>
+      {!compact && (
+        <label for="shipments-sort" class="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-gray-400">
+          Ordenar por
+        </label>
+      )}
+      <select
+        id={compact ? 'shipments-sort-m' : 'shipments-sort'}
+        aria-label="Ordenar por"
+        class={compact ? 'max-w-40 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-800 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary' : `${inputCls} w-44`}
+        value={col}
+        onChange={(e) => {
+          const next = (e.target as HTMLSelectElement).value
+          const dir = SORTS.find((s) => s.col === next)?.dir === 'asc'
+          onChange(next, dir)
+        }}
+      >
+        {SORTS.map((s) => (
+          <option key={s.col} value={s.col}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+      <Tooltip
+        text={
+          isRank
+            ? 'Listos para retiro se ordenan por antigüedad de recepción'
+            : ascending
+              ? 'Orden ascendente: menor a mayor'
+              : 'Orden descendente: mayor a menor'
+        }
+      >
+        <button
+          type="button"
+          aria-label={`Cambiar a orden ${ascending ? 'descendente' : 'ascendente'}`}
+          aria-pressed={!ascending}
+          disabled={isRank}
+          onClick={() => onChange(col, !ascending)}
+          class={`inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+            isRank
+              ? 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-300'
+              : 'border-gray-200 bg-white text-gray-700 hover:border-primary/40 hover:text-primary'
+          }`}
+        >
+          {ascending ? <ArrowUp class="h-3.5 w-3.5" aria-hidden="true" /> : <ArrowDown class="h-3.5 w-3.5" aria-hidden="true" />}
+          <span>{ascending ? 'Asc' : 'Desc'}</span>
+        </button>
+      </Tooltip>
+    </div>
+  )
+}
+
+// Condensed page list with ellipses — always shows first, last, and a window around the current// page. Keeps the pager a fixed width no matter how many thousands of packages accumulate.
 function pageWindow(current: number, total: number): (number | '…')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const keep = new Set([1, total, current, current - 1, current + 1])
@@ -139,6 +205,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     filters.to,
     filters.tag?.label,
     filters.tag?.value ?? null,
+    filters.pricingKind,
     rev,
   ])
   const { loading: summaryLoading, begin: beginSummary, done: doneSummary } = useFetchGate(summaryKey)
@@ -181,6 +248,8 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
   const [previewLoading, setPreviewLoading] = useState(false)
   /** Manual creation asks for confirmation with the full summary before the POST. */
   const [createConfirmOpen, setCreateConfirmOpen] = useState(false)
+  /** Closing the form with data typed asks first (no accidental loss). */
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const [preview, setPreview] = useState<{
     pricingKind: 'fixed' | 'weight'
     cardName: string
@@ -405,6 +474,19 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     getProviders(user.agency).then(setProviders).catch(() => {})
   }, [user.agency])
 
+  // The tariff-kind filter only shows when the org actually mixes kinds; a
+  // weight-only agency gets no select that would change nothing.
+  const [mixedKinds, setMixedKinds] = useState(false)
+  useEffect(() => {
+    let alive = true
+    pricingKindAvailability(selectedOrg)
+      .then(({ mixed }) => alive && setMixedKinds(mixed))
+      .catch(() => alive && setMixedKinds(false))
+    return () => {
+      alive = false
+    }
+  }, [selectedOrg, rev])
+
   // Debounce the search box into the applied filters.
   useEffect(() => {
     const t = setTimeout(() => {
@@ -468,6 +550,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       from: filters.from,
       to: filters.to,
       tag: filters.tag,
+      pricingKind: filters.pricingKind,
     }
     // +1 unpredicated read for the "Todos" counter (a status outside STATUS_ORDER would make a
     // plain sum of the per-status counts lie).
@@ -621,6 +704,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
         providerCode: createForm.providerCode || null,
         clientId,
         status: createForm.status,
+        // The operator's pick is the authority: the RPC only resolves a fixed
+        // card when the form says fixed, so a weight package never lands as one.
+        pricingKind: createForm.pricingKind,
         rateCardId: createForm.pricingKind === 'fixed' ? createForm.rateCardId || null : null,
       })
       // ADR-013: create_package es idempotente por tenant y nunca avisa ni
@@ -658,11 +744,41 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
     setRev((v) => v + 1)
   }
 
+  // Anything typed in the form (over the openCreate baseline) would be lost on
+  // close, so the operator gets a reusable confirmation first.
+  const createDirty =
+    createForm.almacenId.trim() !== '' ||
+    createForm.trackingNumber.trim() !== '' ||
+    createForm.client !== null ||
+    createForm.serviceType !== '' ||
+    createForm.weightLb.trim() !== '' ||
+    createForm.pieces !== '1' ||
+    createForm.status !== 'en_almacen' ||
+    createForm.pricingKind !== 'weight' ||
+    createForm.rateCardId !== '' ||
+    createForm.providerCode !== ((providers.find((p) => p.isDefault) ?? providers[0])?.code ?? '')
+
+  /** Close the manual form: dirty forms ask before dropping the data. */
+  function requestCloseCreate() {
+    if (createDirty) {
+      setDiscardConfirmOpen(true)
+      return
+    }
+    setShowCreate(false)
+    setCreateError(null)
+  }
+  function discardCreate() {
+    setDiscardConfirmOpen(false)
+    setShowCreate(false)
+    setCreateError(null)
+  }
+
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   function openCreate() {
     setCreateError(null)
     setCreateConfirmOpen(false)
+    setDiscardConfirmOpen(false)
     setClientRates({ weight: null, fixed: null })
     // Preselect the agency's default provider (junction is_default) — the
     // modal only renders a <select> when the agency has more than one.
@@ -783,36 +899,51 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
               onInput={(e) => setSearchInput((e.target as HTMLInputElement).value)}
             />
           </div>
-          <select class={inputCls} onChange={(e) => patch({ providerId: (e.target as HTMLSelectElement).value || undefined })}>
-            <option value="">Todos los proveedores</option>
-            {providers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {providerLabel(p.code)}
-              </option>
-            ))}
-          </select>
-          {/* Sort lives in the mobile list header below; desktop keeps it here */}
-          <div class="hidden items-center gap-2 lg:flex">
-            <label for="shipments-sort" class="whitespace-nowrap text-xs font-medium text-gray-500">
-              Ordenar por
+          {providers.length > 1 && (
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Proveedor</span>
+              <select
+                class={inputCls}
+                aria-label="Filtrar por proveedor"
+                value={filters.providerId ?? ''}
+                onChange={(e) => patch({ providerId: (e.target as HTMLSelectElement).value || undefined })}
+              >
+                <option value="">Todos</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {providerLabel(p.code)}
+                  </option>
+                ))}
+              </select>
             </label>
-            <select
-              id="shipments-sort"
-              class={`${inputCls} min-w-0 flex-1`}
-              value={`${filters.sortCol}:${filters.ascending ? 'asc' : 'desc'}`}
-              onChange={(e) => {
-                const v = (e.target as HTMLSelectElement).value
-                const [col, dir] = v.split(':')
-                patch({ sortCol: col, ascending: dir === 'asc' })
-              }}
-            >
-              {SORTS.map((s) => (
-                <option key={s.col} value={`${s.col}:${s.dir}`}>
-                  {s.label} {s.col === 'status_rank' ? '🎯' : s.dir === 'asc' ? '↑' : '↓'}
-                </option>
-              ))}
-            </select>
-          </div>
+          )}
+          {mixedKinds && (
+            <label class="flex flex-col gap-1">
+              <span class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Tipo de tarifa</span>
+              <select
+                class={`${inputCls} max-w-40`}
+                aria-label="Filtrar por tipo de tarifa"
+                value={filters.pricingKind ?? ''}
+                onChange={(e) => {
+                  patch({ pricingKind: ((e.target as HTMLSelectElement).value || undefined) as 'weight' | 'fixed' | 'volume' | undefined })
+                  setPage(1)
+                }}
+              >
+                <option value="">Todas</option>
+                <option value="weight">Por peso</option>
+                <option value="fixed">Cuota fija</option>
+                <option value="volume">Por volumen</option>
+              </select>
+            </label>
+          )}
+          {providers.length <= 1 && !mixedKinds && <div class="hidden lg:block" />}
+        </div>
+        <div class="mt-3 flex flex-wrap items-end gap-3">
+          <SortControl
+            col={filters.sortCol ?? 'status_rank'}
+            ascending={filters.ascending ?? true}
+            onChange={(col, ascending) => patch({ sortCol: col, ascending })}
+          />
         </div>
         {filters.tag && (
           <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -864,23 +995,12 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
       {/* Mobile: section header with count + compact sort (desktop keeps them in the filter card) */}
       <div class="flex items-center justify-between gap-3 lg:hidden">
         <h2 class="text-lg font-bold text-secondary">Paquetes ({count})</h2>
-        <select
-          id="shipments-sort-m"
-          aria-label="Ordenar por"
-          class="max-w-44 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-800 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
-          value={`${filters.sortCol}:${filters.ascending ? 'asc' : 'desc'}`}
-          onChange={(e) => {
-            const v = (e.target as HTMLSelectElement).value
-            const [col, dir] = v.split(':')
-            patch({ sortCol: col, ascending: dir === 'asc' })
-          }}
-        >
-          {SORTS.map((s) => (
-            <option key={s.col} value={`${s.col}:${s.dir}`}>
-              {s.label} {s.col === 'status_rank' ? '🎯' : s.dir === 'asc' ? '↑' : '↓'}
-            </option>
-          ))}
-        </select>
+        <SortControl
+          compact
+          col={filters.sortCol ?? 'status_rank'}
+          ascending={filters.ascending ?? true}
+          onChange={(col, ascending) => patch({ sortCol: col, ascending })}
+        />
       </div>
 
       {/* List — cards on mobile, table on desktop */}
@@ -924,9 +1044,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                       {isHazmat(p.referencia_name) && <HazmatBadge />}
                       {p.photo_ref && <span title="Tiene foto">🖼️</span>}
                       {(() => {
-                        const link = p.invoice_packages?.find((ip) => ip.active)
+                        const link = activeInvoiceLink(p)
                         if (!link) return null
-                        const paid = link.invoices?.status === 'PAID'
+                        const paid = isPaidInvoiceLink(link)
                         return (
                           <Tooltip text={paid ? 'Factura pagada en su totalidad' : 'Tiene una factura vinculada'}>
                             <span class={paid ? 'text-emerald-600' : 'text-primary/70'} role="img" aria-label={paid ? 'Factura pagada' : 'Tiene factura'}>
@@ -959,7 +1079,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
         {/* Desktop table */}
         <div class="scroll-thin hidden overflow-x-auto md:block">
-          <table class="w-full min-w-[900px] text-sm">
+          <table class="w-full min-w-[900px] align-middle text-sm">
             <thead>
               <tr class="border-b border-gray-100 bg-gray-50/60 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                 <th class="px-4 py-3">Guía</th>
@@ -1005,9 +1125,9 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
                         </button>
                         {p.almacen_id}
                         {(() => {
-                          const link = p.invoice_packages?.find((ip) => ip.active)
+                          const link = activeInvoiceLink(p)
                           if (!link) return null
-                          const paid = link.invoices?.status === 'PAID'
+                          const paid = isPaidInvoiceLink(link)
                           return (
                             <Tooltip text={paid ? 'Factura pagada en su totalidad' : 'Ver la factura vinculada'}>
                               <button
@@ -1086,7 +1206,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
 
       {/* ── Create Package Modal ── */}
       {showCreate && (
-        <div class="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4" onClick={() => { setShowCreate(false); setCreateError(null) }}>
+        <div class="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4" onClick={requestCloseCreate}>
           <div class="mx-auto my-6 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 class="text-lg font-semibold text-secondary mb-4">Crear paquete manual</h2>
 
@@ -1288,7 +1408,7 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
             </div>
 
             <div class="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError(null) }}>Cancelar</Button>
+              <Button variant="ghost" onClick={requestCloseCreate}>Cancelar</Button>
               <Button variant="primary" onClick={requestCreatePackage} disabled={createLoading || !createForm.almacenId || !createForm.client || !createForm.serviceType || providers.length === 0 || (flexible && createForm.pricingKind === 'fixed' && !createForm.rateCardId)}>
                 {createLoading ? 'Creando…' : 'Crear'}
               </Button>
@@ -1296,6 +1416,17 @@ export default function Shipments({ user, onOpen, clientSeed, unassignedSeed, st
           </div>
         </div>
       )}
+
+      {/* Leaving the manual form with data typed asks first. */}
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        onClose={() => setDiscardConfirmOpen(false)}
+        onConfirm={discardCreate}
+        title="¿Descartar los datos del paquete?"
+        message="Todavía no creaste el paquete. Si salís ahora se pierden la guía, el cliente y el resto de lo que cargaste."
+        confirmLabel="Descartar y salir"
+        variant="warning"
+      />
 
       {/* Confirmation before the POST: the operator reviews exactly what will be
           created (client, guide, tariff and charge) and can still go back. */}

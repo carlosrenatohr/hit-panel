@@ -11,7 +11,7 @@ import {
 import { fmtDateTime, fmtMoney, FREIGHT_LABEL, fmtDate, altCurrencyTotal, waPhone, INVOICE_STATUS_LABEL, INVOICE_STATUS_SOFT, TIER_LABEL } from '../../lib/format'
 import { customerApi } from '../../lib/customer'
 import { configApi, type AgencyInfo, type AgencyProfile, type PaymentCatalogs } from '../../lib/config'
-import { Button, Card, Field, inputCls, Modal, Spinner, Tooltip } from '../ui'
+import { Button, Card, ConfirmDialog, Field, inputCls, Modal, Spinner, Tooltip } from '../ui'
 import { InvoiceDaysBadge } from './badges'
 import InvoicePrint, { type InvoiceBrand } from './InvoicePrint'
 
@@ -64,6 +64,8 @@ export default function InvoiceDetail({
   const [copied, setCopied] = useState(false)
   /** Payment review modal: nothing is posted until the operator confirms. */
   const [payConfirmOpen, setPayConfirmOpen] = useState(false)
+  /** Close/void ask through the shared dialog (no browser confirm). */
+  const [pendingAction, setPendingAction] = useState<'close' | 'void' | null>(null)
   const [brand, setBrand] = useState<InvoiceBrand | null>(null)
   const [catalogs, setCatalogs] = useState<PaymentCatalogs | null>(null)
   const [profile, setProfile] = useState<AgencyProfile | null>(null)
@@ -334,8 +336,20 @@ export default function InvoiceDetail({
                 <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
                   <div><span class="text-gray-400">Total</span><div class="text-lg font-bold text-secondary">{fmtMoney(inv.total, profile?.currency)}</div>{inv && profile && altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd) && <div class="text-[11px] text-gray-400">{altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd)}</div>}</div>
                   <div><span class="text-gray-400">Utilidad</span><div class="font-semibold text-green-700">{fmtMoney(inv.profit, profile?.currency)}{inv.margin != null && <span class="ml-1 text-xs text-gray-400">({Math.round(inv.margin * 100)}%)</span>}</div></div>
-                  <div><span class="text-gray-400">Pagado</span><div class="font-medium">{fmtMoney(inv.paidUsd, profile?.currency)}</div></div>
-                  <div><span class="text-gray-400">Saldo</span><div class="font-medium">{fmtMoney(inv.outstanding, profile?.currency)}</div></div>
+                  <div>
+                    <span class="text-gray-400">Pagado</span>
+                    <div class="font-medium">{fmtMoney(inv.paidUsd, profile?.currency)}</div>
+                    {profile && altCurrencyTotal(inv.paidUsd, profile.currency, profile.exchangeRateNioPerUsd) && (
+                      <div class="text-[11px] text-gray-400">{altCurrencyTotal(inv.paidUsd, profile.currency, profile.exchangeRateNioPerUsd)}</div>
+                    )}
+                  </div>
+                  <div>
+                    <span class="text-gray-400">Saldo</span>
+                    <div class="font-medium">{fmtMoney(inv.outstanding, profile?.currency)}</div>
+                    {profile && altCurrencyTotal(inv.outstanding, profile.currency, profile.exchangeRateNioPerUsd) && (
+                      <div class="text-[11px] text-gray-400">{altCurrencyTotal(inv.outstanding, profile.currency, profile.exchangeRateNioPerUsd)}</div>
+                    )}
+                  </div>
                 </div>
               </Card>
 
@@ -587,15 +601,12 @@ export default function InvoiceDetail({
               {canWrite && inv.status !== 'VOID' && !inv.closedAt && (
                 <div class="flex flex-wrap gap-2">
                   <Tooltip text="Cerrar bloquea líneas, montos y paquetes: la factura deja de editarse y habilita registrar pagos. Solo podrá anularse.">
-                    <Button disabled={busy} onClick={() => {
-                      if (confirm('Al cerrar la factura, sus líneas, montos y paquetes quedarán bloqueados. Después solo podrán registrarse pagos o anularse la factura. ¿La factura está lista para cerrarse?'))
-                        void run(() => billingApi.closeInvoice(id))
-                    }}>
+                    <Button disabled={busy} onClick={() => setPendingAction('close')}>
                       <Lock class="h-4 w-4" /> Cerrar factura
                     </Button>
                   </Tooltip>
                   <Tooltip text="Anular marca la factura como inválida y libera sus paquetes para volver a facturarlos. No se puede deshacer.">
-                    <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura? Se liberarán los paquetes enlazados y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
+                    <Button variant="danger" disabled={busy} onClick={() => setPendingAction('void')}>
                       <Ban class="h-4 w-4" /> Anular factura
                     </Button>
                   </Tooltip>
@@ -603,7 +614,7 @@ export default function InvoiceDetail({
               )}
               {canWrite && inv.status !== 'VOID' && inv.closedAt && (
                 <Tooltip text="Anular una factura cerrada conserva los pagos registrados, libera los paquetes y deja el documento como inválido. No se puede deshacer.">
-                  <Button variant="danger" disabled={busy} onClick={() => { if (confirm('¿Anular esta factura cerrada? Se liberarán los paquetes enlazados, los pagos registrados se conservarán y la factura quedará como inválida. No se puede deshacer.')) void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel')) }}>
+                  <Button variant="danger" disabled={busy} onClick={() => setPendingAction('void')}>
                     <Ban class="h-4 w-4" /> Anular factura
                   </Button>
                 </Tooltip>
@@ -612,6 +623,28 @@ export default function InvoiceDetail({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        onConfirm={() => {
+          const action = pendingAction
+          setPendingAction(null)
+          if (action === 'close') void run(() => billingApi.closeInvoice(id))
+          else if (action === 'void') void run(() => billingApi.voidInvoice(id, 'Anulada desde el panel'))
+        }}
+        variant={pendingAction === 'close' ? 'warning' : 'danger'}
+        title={pendingAction === 'close' ? '¿Cerrar la factura?' : '¿Anular la factura?'}
+        confirmLabel={pendingAction === 'close' ? 'Cerrar factura' : 'Anular factura'}
+        loading={busy}
+        message={
+          pendingAction === 'close'
+            ? 'Al cerrar la factura, sus líneas, montos y paquetes quedarán bloqueados. Después solo podrán registrarse pagos o anularse la factura. ¿La factura está lista para cerrarse?'
+            : inv?.closedAt
+              ? 'Se liberarán los paquetes enlazados, los pagos registrados se conservarán y la factura quedará como inválida. No se puede deshacer.'
+              : 'Se liberarán los paquetes enlazados y la factura quedará como inválida. No se puede deshacer.'
+        }
+      />
 
       {/* Payment review — the post only fires after this confirmation. */}
       <Modal open={payConfirmOpen && inv !== null} onClose={() => (!busy ? setPayConfirmOpen(false) : undefined)} title="Confirmar registro de pago" size="md">
@@ -631,15 +664,30 @@ export default function InvoiceDetail({
               </div>
               <div>
                 <dt class="text-xs text-gray-400">Total</dt>
-                <dd class="text-gray-700">{fmtMoney(inv.total, profile?.currency)}</dd>
+                <dd class="text-gray-700">
+                  {fmtMoney(inv.total, profile?.currency)}
+                  {profile && altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd) && (
+                    <span class="block text-[11px] text-gray-400">{altCurrencyTotal(inv.total, profile.currency, profile.exchangeRateNioPerUsd)}</span>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt class="text-xs text-gray-400">Pagado</dt>
-                <dd class="text-gray-700">{fmtMoney(inv.paidUsd, profile?.currency)}</dd>
+                <dd class="text-gray-700">
+                  {fmtMoney(inv.paidUsd, profile?.currency)}
+                  {profile && altCurrencyTotal(inv.paidUsd, profile.currency, profile.exchangeRateNioPerUsd) && (
+                    <span class="block text-[11px] text-gray-400">{altCurrencyTotal(inv.paidUsd, profile.currency, profile.exchangeRateNioPerUsd)}</span>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt class="text-xs text-gray-400">Saldo pendiente</dt>
-                <dd class="font-medium text-gray-800">{fmtMoney(outstanding, profile?.currency)}</dd>
+                <dd class="font-medium text-gray-800">
+                  {fmtMoney(outstanding, profile?.currency)}
+                  {profile && altCurrencyTotal(outstanding, profile.currency, profile.exchangeRateNioPerUsd) && (
+                    <span class="block text-[11px] font-normal text-gray-400">{altCurrencyTotal(outstanding, profile.currency, profile.exchangeRateNioPerUsd)}</span>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt class="text-xs text-gray-400">Método</dt>
@@ -661,7 +709,10 @@ export default function InvoiceDetail({
                   </div>
                   <div>
                     <dt class="text-xs text-gray-400">Saldo después del pago</dt>
-                    <dd class="text-gray-700">{fmtMoney(remainingAfter, profile?.currency)}</dd>
+                    <dd class="text-gray-700">
+                      {fmtMoney(remainingAfter, profile?.currency)}
+                      {nioRate > 0 && <span class="block text-[11px] text-gray-400">{fmtMoney(round2(remainingAfter * nioRate), 'NIO')}</span>}
+                    </dd>
                   </div>
                 </>
               )}
