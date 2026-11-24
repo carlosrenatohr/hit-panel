@@ -9,6 +9,8 @@ import type { AgencyInfo, AuditLogEntry, ChargeConcept, CurrencyCode, FreightTyp
 import { insforge } from '../lib/insforge'
 import { fmtMoney } from '../lib/format'
 import { Button, AlertDialog, Card, ConfirmDialog, Field, Modal, SectionTitle, Spinner, Toast, Tooltip, inputCls } from './ui'
+import { SortableHeader } from './ui/SortableHeader'
+import { DEFAULT_PAGE_SIZE, Pagination, type PageSize } from './ui/Pagination'
 
 const BRANDING_BUCKET = 'branding'
 
@@ -205,6 +207,38 @@ function CatalogTable({
   const [form, setForm] = useState<{ id?: string; name: string; suggestedPrice: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CatalogItem | null>(null)
   const [busy, setBusy] = useState(false)
+  // Catalogs arrive complete (one small array), so sorting and paging are local:
+  // zero extra requests when the operator re-orders or flips a page.
+  const [sort, setSort] = useState<{ field: 'name' | 'active' | 'suggestedPrice'; ascending: boolean }>({ field: 'name', ascending: true })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
+
+  const sorted = useMemo(() => {
+    const dir = sort.ascending ? 1 : -1
+    return [...items].sort((a, b) => {
+      // «Estado» always reads active-first: ascending never buries the live rows.
+      if (sort.field === 'active') return Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'es')
+      if (sort.field === 'suggestedPrice') {
+        // Empty prices sort last in both directions — they are "no value", not zero.
+        if (a.suggestedPrice == null && b.suggestedPrice == null) return a.name.localeCompare(b.name, 'es')
+        if (a.suggestedPrice == null) return 1
+        if (b.suggestedPrice == null) return -1
+        return (a.suggestedPrice - b.suggestedPrice) * dir || a.name.localeCompare(b.name, 'es')
+      }
+      return a.name.localeCompare(b.name, 'es') * dir
+    })
+  }, [items, sort])
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const visible = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  const applySort = (field: string, ascending: boolean) => {
+    setSort({ field: field as typeof sort.field, ascending })
+    setPage(1)
+  }
+  const sortState = (field: string): 'ascending' | 'descending' | 'none' =>
+    sort.field === field ? (sort.ascending ? 'ascending' : 'descending') : 'none'
 
   async function save() {
     if (!form) return
@@ -264,18 +298,31 @@ function CatalogTable({
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
-              <th class="px-5 py-2">Nombre</th>
-              <th class="px-5 py-2">Estado</th>
+              <th class="px-5 py-2" aria-sort={sortState('name')}>
+                <SortableHeader label="Nombre" field="name" sortCol={sort.field} ascending={sort.ascending} onSort={applySort} />
+              </th>
+              {withSuggestedPrice && (
+                <th class="px-5 py-2 text-right" aria-sort={sortState('suggestedPrice')}>
+                  <SortableHeader label="Valor sugerido" field="suggestedPrice" sortCol={sort.field} ascending={sort.ascending} onSort={applySort} align="end" />
+                </th>
+              )}
+              <th class="px-5 py-2" aria-sort={sortState('active')}>
+                <SortableHeader label="Estado" field="active" sortCol={sort.field} ascending={sort.ascending} onSort={applySort} />
+              </th>
               <th class="px-5 py-2 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((it) => (
+            {visible.map((it) => (
               <tr key={it.id} class="border-b border-gray-50">
                 <td class={`px-5 py-2 ${it.active ? 'font-medium text-gray-800' : 'text-gray-400 line-through'}`}>
                   {it.name}
-                  {withSuggestedPrice && it.suggestedPrice != null && <span class="ml-2 text-xs text-gray-400">sugerido: {it.suggestedPrice.toFixed(2)}</span>}
                 </td>
+                {withSuggestedPrice && (
+                  <td class="px-5 py-2 text-right tabular-nums text-gray-600">
+                    {it.suggestedPrice != null ? it.suggestedPrice.toFixed(2) : <span class="text-gray-300">—</span>}
+                  </td>
+                )}
                 <td class="px-5 py-2">
                   <span class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${it.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {it.active ? 'Activo' : 'Desactivado'}
@@ -298,9 +345,9 @@ function CatalogTable({
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {visible.length === 0 && (
               <tr>
-                <td colspan={3} class="px-5 py-4 text-sm text-gray-400">
+                <td colspan={withSuggestedPrice ? 4 : 3} class="px-5 py-4 text-sm text-gray-400">
                   Sin elementos.
                 </td>
               </tr>
@@ -308,6 +355,14 @@ function CatalogTable({
           </tbody>
         </table>
       </div>
+      <Pagination
+        page={currentPage}
+        count={sorted.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+        noun={sorted.length === 1 ? 'elemento' : 'elementos'}
+      />
 
       <Modal open={form !== null} onClose={() => setForm(null)} title={form?.id ? `Editar ${label}` : `Nuevo ${label}`} size="sm">
         {form && (

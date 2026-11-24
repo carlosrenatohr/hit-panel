@@ -8,6 +8,8 @@ import { Button, IconButton, inputCls } from './ui'
 export interface CustomerColumnDef {
   key: string
   label: string
+  /** Worker sort key for this column (absent → not sortable, e.g. derived weights). */
+  sortField?: 'name' | 'casillero' | 'email' | 'phone' | 'company' | 'taxId'
   render: (c: Customer) => JSX.Element | string
 }
 
@@ -21,11 +23,11 @@ function WeightCell({ weight, count }: { weight?: number; count?: number }) {
 }
 
 export const CUSTOMER_COLUMN_DEFS: CustomerColumnDef[] = [
-  { key: 'casillero', label: 'Casillero', render: (c) => <span class="text-gray-500">{c.casillero || '—'}</span> },
-  { key: 'companyName', label: 'Compañía', render: (c) => <span class="text-gray-500">{c.companyName || '—'}</span> },
-  { key: 'taxId', label: 'Cédula / RUC', render: (c) => <span class="text-gray-500">{c.taxId || '—'}</span> },
-  { key: 'email', label: 'Email', render: (c) => <span class="text-gray-500">{c.email || '—'}</span> },
-  { key: 'phone', label: 'Teléfono', render: (c) => <span class="text-gray-500">{c.phone || '—'}</span> },
+  { key: 'casillero', label: 'Casillero', sortField: 'casillero', render: (c) => <span class="text-gray-500">{c.casillero || '—'}</span> },
+  { key: 'companyName', label: 'Compañía', sortField: 'company', render: (c) => <span class="text-gray-500">{c.companyName || '—'}</span> },
+  { key: 'taxId', label: 'Cédula / RUC', sortField: 'taxId', render: (c) => <span class="text-gray-500">{c.taxId || '—'}</span> },
+  { key: 'email', label: 'Email', sortField: 'email', render: (c) => <span class="text-gray-500">{c.email || '—'}</span> },
+  { key: 'phone', label: 'Teléfono', sortField: 'phone', render: (c) => <span class="text-gray-500">{c.phone || '—'}</span> },
   { key: 'address', label: 'Dirección', render: (c) => <span class="text-gray-500">{c.address || '—'}</span> },
   {
     key: 'maritimo',

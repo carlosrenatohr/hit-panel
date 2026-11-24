@@ -16,7 +16,7 @@ import {
 import { STATUS_ICON } from './shipments/LifecycleOverview'
 import type { Pkg, ShipmentStatus, Tag } from '../lib/types'
 import { Button, DaysBadge, HazmatBadge, IconButton, inputCls, StaleBadge, Tooltip } from './ui'
-import { ArrowDown, ArrowUp, ArrowUpDown, GripVertical, Lock, Package, Plane, Receipt, Search, Ship, SlidersHorizontal, Weight, X } from 'lucide-preact'
+import { GripVertical, Lock, Package, Plane, Receipt, Search, Ship, SlidersHorizontal, Weight, X } from 'lucide-preact'
 
 // Guía is always the first column (it's how a row opens) — everything below is user-configurable.
 export interface ColCtx {
@@ -33,48 +33,6 @@ export interface ColumnDef {
   sortField?: string
   /** `ctx` es opcional para que las previews del picker rendericen sin etiquetas. */
   render: (p: Pkg, ctx?: ColCtx) => JSX.Element | string
-}
-
-/** Header ordenable: un solo campo activo a la vez (el dueño del estado es la lista).
- *  Lucide ArrowUpDown = sin ordenar, ArrowUp = ascendente, ArrowDown = descendente.
- *  El tooltip va abajo porque el header vive dentro de un contenedor con scroll. */
-export function SortableHeader({
-  label,
-  field,
-  sortCol,
-  ascending,
-  onSort,
-}: {
-  label: string
-  field: string
-  sortCol: string
-  ascending: boolean
-  onSort: (field: string, ascending: boolean) => void
-}) {
-  const active = sortCol === field
-  const Icon = active ? (ascending ? ArrowUp : ArrowDown) : ArrowUpDown
-  const nextAscending = active ? !ascending : true
-  const state = active ? (ascending ? 'Orden ascendente' : 'Orden descendente') : 'Sin orden'
-  return (
-    <Tooltip text={`${state} · clic para ${nextAscending ? 'ascendente' : 'descendente'}`} placement="bottom" align="start">
-      <button
-        type="button"
-        onClick={() => onSort(field, nextAscending)}
-        aria-label={`Ordenar por ${label}`}
-        class={`group/sort inline-flex items-center gap-1 uppercase tracking-wide transition-colors ${
-          active ? 'text-secondary' : 'text-gray-500 hover:text-secondary'
-        }`}
-      >
-        <span>{label}</span>
-        <Icon
-          class={`h-3 w-3 shrink-0 transition-colors ${
-            active ? 'text-primary' : 'text-gray-400 group-hover/sort:text-gray-500'
-          }`}
-          aria-hidden="true"
-        />
-      </button>
-    </Tooltip>
-  )
 }
 
 const PRICING_KIND_META = {

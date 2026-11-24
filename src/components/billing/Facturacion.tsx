@@ -5,6 +5,8 @@ import { bumpData, useDataVersion, useFetchGate } from '../../lib/dataVersion'
 import { downloadCSV, fmtDate, fmtUsd, INVOICE_STATUS_LABEL, INVOICE_STATUS_ORDER, INVOICE_STATUS_SOFT, toCSV } from '../../lib/format'
 import type { Role } from '../../lib/types'
 import { Button, Card, ConfirmDialog, IconButton, inputCls, SectionTitle, Spinner } from '../ui'
+import { SortableHeader } from '../ui/SortableHeader'
+import { DEFAULT_PAGE_SIZE, Pagination, type PageSize } from '../ui/Pagination'
 import { DateRangePicker } from '../DateRangePicker'
 import { InvoiceDaysBadge } from './badges'
 import BillingReports from './BillingReports'
@@ -20,25 +22,9 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'excepciones', label: 'Excepciones' },
 ]
 
-const PAGE_SIZE = 25
-
 // Year options: the current year and the two before it — no hardcoded list to
 // bump every January.
 const YEAR_OPTIONS = Array.from({ length: 3 }, (_, i) => new Date().getUTCFullYear() - i)
-
-function pageWindow(current: number, total: number): (number | '…')[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const keep = new Set([1, total, current, current - 1, current + 1])
-  const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b)
-  const out: (number | '…')[] = []
-  let prev = 0
-  for (const p of sorted) {
-    if (p - prev > 1) out.push('…')
-    out.push(p)
-    prev = p
-  }
-  return out
-}
 
 export default function Facturacion({ role }: { role: Role }) {
   const canWrite = role === 'admin' || role === 'billing'
@@ -46,6 +32,7 @@ export default function Facturacion({ role }: { role: Role }) {
   const [searchInput, setSearchInput] = useState('')
   const [filters, setFilters] = useState<InvoiceFilters>({})
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(DEFAULT_PAGE_SIZE)
   const [rows, setRows] = useState<InvoiceListRow[]>([])
   const [count, setCount] = useState(0)
   const [err, setErr] = useState<string | null>(null)
@@ -55,7 +42,7 @@ export default function Facturacion({ role }: { role: Role }) {
   const [rev, setRev] = useState(0)
   const dataRev = useDataVersion('invoices', 'packages')
   // Gate: refetch del bus con la misma query → swap silencioso, sin spinner.
-  const listKey = JSON.stringify([filters, page, rev])
+  const listKey = JSON.stringify([filters, page, pageSize, rev])
   const { loading, begin: beginList, done: doneList } = useFetchGate(listKey)
 
   const [showForm, setShowForm] = useState(false)
@@ -85,6 +72,17 @@ export default function Facturacion({ role }: { role: Role }) {
     setRev((v) => v + 1)
   }
 
+  // Header sorting: one column at a time, owned by the filters the list query
+  // already sends (changing the order returns to page 1, like a filter).
+  const activeSort = filters.sort ?? 'invoice_number'
+  const activeAscending = filters.ascending ?? false
+  const applySort = (field: string, ascending: boolean) => {
+    setFilters((f) => ({ ...f, sort: field as InvoiceFilters['sort'], ascending }))
+    setPage(1)
+  }
+  const sortState = (field: string): 'ascending' | 'descending' | 'none' =>
+    filters.sort === field ? (activeAscending ? 'ascending' : 'descending') : 'none'
+
   // Single fetch pipeline: the effect owns the request, its cleanup cancels the
   // previous in-flight one, so a slow response can never overwrite a newer one.
   useEffect(() => {
@@ -92,7 +90,7 @@ export default function Facturacion({ role }: { role: Role }) {
     let cancelled = false
     setErr(null)
     billingApi
-      .listInvoices({ ...filters, page, pageSize: PAGE_SIZE })
+      .listInvoices({ ...filters, page, pageSize })
       .then((r) => {
         if (cancelled) return
         setRows(r.rows)
@@ -200,7 +198,6 @@ export default function Facturacion({ role }: { role: Role }) {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE))
 
   return (
     <div class="space-y-4">
@@ -307,11 +304,21 @@ export default function Facturacion({ role }: { role: Role }) {
             <table class="w-full text-left text-sm">
               <thead>
                 <tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
-                  <th class="px-4 py-2">Factura</th>
-                  <th class="px-4 py-2">Cliente</th>
-                  <th class="px-4 py-2">Fecha</th>
-                  <th class="px-4 py-2">Estado</th>
-                  <th class="px-4 py-2 text-right">Total</th>
+                  <th class="px-4 py-2" aria-sort={sortState('invoice_number')}>
+                    <SortableHeader label="Factura" field="invoice_number" sortCol={activeSort} ascending={activeAscending} onSort={applySort} />
+                  </th>
+                  <th class="px-4 py-2" aria-sort={sortState('client')}>
+                    <SortableHeader label="Cliente" field="client" sortCol={activeSort} ascending={activeAscending} onSort={applySort} />
+                  </th>
+                  <th class="px-4 py-2" aria-sort={sortState('date')}>
+                    <SortableHeader label="Fecha" field="date" sortCol={activeSort} ascending={activeAscending} onSort={applySort} />
+                  </th>
+                  <th class="px-4 py-2" aria-sort={sortState('status')}>
+                    <SortableHeader label="Estado" field="status" sortCol={activeSort} ascending={activeAscending} onSort={applySort} />
+                  </th>
+                  <th class="px-4 py-2 text-right" aria-sort={sortState('total')}>
+                    <SortableHeader label="Total" field="total" sortCol={activeSort} ascending={activeAscending} onSort={applySort} align="end" />
+                  </th>
                   <th class="px-4 py-2 text-right">Saldo</th>
                   <th class="px-4 py-2 text-right">Acciones</th>
                 </tr>
@@ -345,17 +352,15 @@ export default function Facturacion({ role }: { role: Role }) {
             </table>
           </div>
         )}
-        {totalPages > 1 && (
-          <div class="flex items-center justify-center gap-1 border-t border-gray-100 p-3">
-            {pageWindow(page, totalPages).map((p, i) =>
-              p === '…' ? (
-                <span key={`e${i}`} class="px-2 text-gray-400">…</span>
-              ) : (
-                <button key={p} onClick={() => setPage(p)} class={`h-8 w-8 rounded-lg text-sm ${p === page ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{p}</button>
-              ),
-            )}
-          </div>
-        )}
+        <Pagination
+          page={page}
+          count={count}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+          noun={count === 1 ? 'factura' : 'facturas'}
+          disabled={loading}
+        />
       </Card>
         </div>
       )}

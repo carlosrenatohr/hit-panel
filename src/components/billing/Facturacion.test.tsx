@@ -39,6 +39,33 @@ async function renderAndWait(role: 'admin' | 'billing' | 'viewer') {
   if (role !== 'viewer') await waitFor(() => expect(listInvoices).toHaveBeenCalledTimes(2), { timeout: 2000 })
 }
 
+describe('Facturacion — listado', () => {
+  it('asks for 20 rows by default and shows the range footer', async () => {
+    await renderAndWait('admin')
+    const last = listInvoices.mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(last).toMatchObject({ page: 1, pageSize: 20 })
+    expect(screen.getByText(/Mostrando/)).toHaveTextContent('Mostrando 1–1 de 1 factura')
+  })
+
+  it('sorts server-side from a header and flips the direction on the next click', async () => {
+    await renderAndWait('admin')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Total' }))
+    await waitFor(() => expect(listInvoices.mock.calls.at(-1)![0]).toMatchObject({ sort: 'total', ascending: true, page: 1 }))
+    expect(screen.getByRole('columnheader', { name: /Total/ })).toHaveAttribute('aria-sort', 'ascending')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar por Total' }))
+    await waitFor(() => expect(listInvoices.mock.calls.at(-1)![0]).toMatchObject({ sort: 'total', ascending: false }))
+    expect(screen.getByRole('columnheader', { name: /Total/ })).toHaveAttribute('aria-sort', 'descending')
+  })
+
+  it('changes the page size from the footer and returns to page 1', async () => {
+    await renderAndWait('admin')
+    fireEvent.change(screen.getByLabelText('Filas por página'), { target: { value: '50' } })
+    await waitFor(() => expect(listInvoices.mock.calls.at(-1)![0]).toMatchObject({ page: 1, pageSize: 50 }))
+  })
+})
+
 describe('Facturacion — archivar', () => {
   it('archives the invoice after confirmation and reloads the list', async () => {
     archiveInvoice.mockResolvedValue({ id: 'i1', archived: true })
