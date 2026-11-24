@@ -18,12 +18,14 @@ const invoice = (over: Partial<InvoiceView> = {}): InvoiceView => ({
 
 const getInvoice = vi.hoisted(() => vi.fn())
 const applyPayment = vi.hoisted(() => vi.fn())
+const linkPackage = vi.hoisted(() => vi.fn())
 
 vi.mock('../../lib/billing', () => ({
   billingApi: {
     getInvoice,
     invoiceEvents: vi.fn().mockResolvedValue({ events: [] }),
     applyPayment,
+    linkPackage,
     shareInvoice: vi.fn(),
   },
 }))
@@ -137,5 +139,50 @@ describe('InvoiceDetail › pagos', () => {
     expect((await screen.findAllByText('C$730.00')).length).toBeGreaterThanOrEqual(1)
     expect((await screen.findAllByText('C$401.50')).length).toBeGreaterThanOrEqual(1)
     expect((await screen.findAllByText('C$328.50')).length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('InvoiceDetail › enlazar guías', () => {
+  const draft = () => invoice({ status: 'DRAFT', closedAt: null, closedBy: null, paidUsd: 0, outstanding: 20, packages: [] })
+
+  async function openDraft() {
+    render(<InvoiceDetail id="i1" canWrite onClose={() => {}} />)
+    await screen.findByText('Factura #7')
+    const input = screen.getByPlaceholderText('N.º de guía / almacén') as HTMLInputElement
+    fireEvent.input(input, { target: { value: '214401' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enlazar' }))
+  }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getInvoice.mockResolvedValue(draft())
+    linkPackage.mockResolvedValue(draft())
+  })
+
+  it('asks before linking and spells out the charge the guide will add', async () => {
+    await openDraft()
+
+    const dialog = await screen.findByRole('dialog', { name: '¿Enlazar esta guía?' })
+    expect(within(dialog).getByText('214401')).toBeTruthy()
+    expect(within(dialog).getByText('#7')).toBeTruthy()
+    expect(within(dialog).getByText(/tarifa vigente del cliente/)).toBeTruthy()
+    // Nothing is sent until the operator confirms.
+    expect(linkPackage).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enlazar guía' }))
+    await waitFor(() => expect(linkPackage).toHaveBeenCalledWith('i1', { guia: '214401' }))
+  })
+
+  it('explains a rejected link in a dialog and keeps the draft untouched', async () => {
+    linkPackage.mockRejectedValue(new Error('El paquete 214401 ya está facturado (factura 6001).'))
+    render(<InvoiceDetail id="i1" canWrite onClose={() => {}} />)
+    await screen.findByText('Factura #7')
+    fireEvent.input(screen.getByPlaceholderText('N.º de guía / almacén'), { target: { value: '214401' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Enlazar' }))
+    const confirm = await screen.findByRole('dialog', { name: '¿Enlazar esta guía?' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Enlazar guía' }))
+
+    const failure = await screen.findByRole('dialog', { name: 'No se pudo enlazar la guía' })
+    expect(within(failure).getByText(/ya está facturado \(factura 6001\)/)).toBeTruthy()
+    expect(within(failure).getByText(/No se guardó ningún cambio/)).toBeTruthy()
   })
 })
